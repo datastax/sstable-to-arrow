@@ -1,13 +1,4 @@
-*.o
-.vscode
-main
+.vscode/
+out/
 .DS_Store
-# files built by kaitai struct compiler
-sstable_statistics.cpp
-sstable_statistics.h
-sstable.cpp
-sstable.h
-sstable_index.cpp
-sstable_index.h
-deletion_time.cpp
-deletion_time.h
+main

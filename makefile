@@ -1,54 +1,35 @@
-# linker
-all: vint.o columns_bitmask.o deletion_time.o modified_utf8.o deserialization_helper.o sstable.o sstable_statistics.o sstable_index.o main.o
-	g++ vint.o columns_bitmask.o deletion_time.o modified_utf8.o deserialization_helper.o sstable.o sstable_statistics.o sstable_index.o main.o \
-		-l kaitai_struct_cpp_stl_runtime \
-		-o main
+KAITAI_FILES = deletion_time sstable_index sstable_statistics sstable_summary sstable_data
+util_types = columns_bitmask deserialization_helper modified_utf8 vint
+all_objs = $(KAITAI_FILES) $(util_types) main
 
+all: $(foreach obj,$(all_objs),out/$(obj).o)
+	g++ $(foreach file,$(all_objs),out/$(file).o) -l kaitai_struct_cpp_stl_runtime -o main
 
-# === compilation ===
+out/main.o: src/main.{cpp,h}
+	cp src/main.{cpp,h} out
+	g++ -c out/main.cpp -o out/main.o
 
-# helper types
-vint.o: vint.cpp vint.h
-	g++ -c vint.cpp -o vint.o
+clean:
+	rm out/* *.o
 
-modified_utf8.o: modified_utf8.cpp modified_utf8.h
-	g++ -c modified_utf8.cpp -o modified_utf8.o
+define ksy_to_cpp
+out/$(1).cpp: src/ksy/$(1).ksy
+	/usr/local/bin/kaitai-struct-compiler --opaque-types true --outdir out --target cpp_stl "src/ksy/$(1).ksy"
+out/$(1).o: out/$(1).cpp $(foreach type,$(util_types),out/$(type).h)
+	g++ -c out/$(1).cpp -o out/$(1).o
 
-columns_bitmask.o: columns_bitmask.cpp columns_bitmask.h
-	g++ -c columns_bitmask.cpp -o columns_bitmask.o
+endef
 
-deletion_time.o: deletion_time.cpp deletion_time.h
-	g++ -c deletion_time.cpp -o deletion_time.o
+define util_to_out
+out/$(1).cpp:
+	cp src/util/$(1).cpp out
+out/$(1).h:
+	cp src/util/$(1).h out
+out/$(1).o: out/$(1).{cpp,h}
+	g++ -c out/$(1).cpp -o out/$(1).o
 
-deserialization_helper.o: deserialization_helper.cpp deserialization_helper.h
-	g++ -c deserialization_helper.cpp -o deserialization_helper.o
-	
-# sstable types
-sstable_statistics.o: sstable_statistics.cpp sstable_statistics.h
-	g++ -c sstable_statistics.cpp -o sstable_statistics.o
+endef
 
-sstable.o: deletion_time.cpp deletion_time.h sstable.cpp sstable.h
-	g++ -c sstable.cpp -o sstable.o
+$(eval $(foreach file,$(KAITAI_FILES),$(call ksy_to_cpp,$(file))))
 
-sstable_index.o: deletion_time.cpp deletion_time.h sstable_index.cpp sstable_index.h
-	g++ -c sstable_index.cpp -o sstable_index.o
-
-main.o: main.cpp main.h
-	g++ -c main.cpp -o main.o
-
-# kaitai
-sstable_statistics.cpp: sstable_statistics.ksy
-	/usr/local/bin/kaitai-struct-compiler sstable_statistics.ksy -t cpp_stl --opaque-types true
-
-sstable.cpp: sstable_data.ksy
-	/usr/local/bin/kaitai-struct-compiler sstable_data.ksy -t cpp_stl --opaque-types true
-
-sstable_index.cpp: sstable_index.ksy
-	/usr/local/bin/kaitai-struct-compiler sstable_index.ksy -t cpp_stl --opaque-types true
-
-deletion_time.cpp: deletion_time.ksy
-	/usr/local/bin/kaitai-struct-compiler deletion_time.ksy -t cpp_stl --opaque-types true
-
-
-cleanup:
-	rm *.o main {deletion_time,sstable_index,sstable,sstable_statistics}.{h,cpp}
+$(eval $(foreach type,$(util_types),$(call util_to_out,$(type))))
