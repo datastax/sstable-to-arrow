@@ -2,7 +2,12 @@
 .vscode
 main
 .DS_Store
-sstable_statistics.h
+# files built by kaitai struct compiler
 sstable_statistics.cpp
-sstable.h
+sstable_statistics.h
 sstable.cpp
+sstable.h
+sstable_index.cpp
+sstable_index.h
+deletion_time.cpp
+deletion_time.h
