@@ -1,0 +1,8 @@
+*.o
+.vscode
+main
+.DS_Store
+sstable_statistics.h
+sstable_statistics.cpp
+sstable.h
+sstable.cpp
