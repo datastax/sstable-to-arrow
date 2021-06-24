@@ -7,11 +7,13 @@
 #include <iostream>
 #include <getopt.h>
 #include <unistd.h>
+
 #include "sstable_statistics.h"
-#include "deserialization_helper.h"
 #include "sstable_data.h"
 #include "sstable_index.h"
+
 #include "sstable_to_arrow.h"
+#include "deserialization_helper.h"
 
 sstable_statistics_t *read_statistics(std::string);
 sstable_data_t *read_data(std::string);

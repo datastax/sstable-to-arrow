@@ -1,0 +1,208 @@
+digraph {
+	rankdir=LR;
+	node [shape=plaintext];
+	subgraph cluster__sstable_data {
+		label="SstableData";
+		graph[style=dotted];
+
+		sstable_data__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+			<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+			<TR><TD PORT="partitions_pos">0</TD><TD PORT="partitions_size">...</TD><TD>Partition</TD><TD PORT="partitions_type">partitions</TD></TR>
+			<TR><TD COLSPAN="4" PORT="partitions__repeat">repeat to end of stream</TD></TR>
+		</TABLE>>];
+		subgraph cluster__deletion_time {
+			label="SstableData::DeletionTime";
+			graph[style=dotted];
+
+			deletion_time__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="local_deletion_time_pos">0</TD><TD PORT="local_deletion_time_size">4</TD><TD>u4be</TD><TD PORT="local_deletion_time_type">local_deletion_time</TD></TR>
+				<TR><TD PORT="marked_for_delete_at_pos">4</TD><TD PORT="marked_for_delete_at_size">8</TD><TD>u8be</TD><TD PORT="marked_for_delete_at_type">marked_for_delete_at</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__liveness_info {
+			label="SstableData::LivenessInfo";
+			graph[style=dotted];
+
+			liveness_info__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="delta_timestamp_pos">0</TD><TD PORT="delta_timestamp_size">8</TD><TD>varint</TD><TD PORT="delta_timestamp_type">delta_timestamp</TD></TR>
+				<TR><TD PORT="delta_ttl_pos">8</TD><TD PORT="delta_ttl_size">8</TD><TD>varint</TD><TD PORT="delta_ttl_type">delta_ttl</TD></TR>
+				<TR><TD PORT="primary_key_liveness_deletion_time_pos">16</TD><TD PORT="primary_key_liveness_deletion_time_size">8</TD><TD>varint</TD><TD PORT="primary_key_liveness_deletion_time_type">primary_key_liveness_deletion_time</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__partition_header {
+			label="SstableData::PartitionHeader";
+			graph[style=dotted];
+
+			partition_header__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="key_length_pos">0</TD><TD PORT="key_length_size">2</TD><TD>u2be</TD><TD PORT="key_length_type">key_length</TD></TR>
+				<TR><TD PORT="key_pos">2</TD><TD PORT="key_size">key_length</TD><TD></TD><TD PORT="key_type">key</TD></TR>
+				<TR><TD PORT="deletion_time_pos">...</TD><TD PORT="deletion_time_size">12</TD><TD>DeletionTime</TD><TD PORT="deletion_time_type">deletion_time</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__simple_cell {
+			label="SstableData::SimpleCell";
+			graph[style=dotted];
+
+			simple_cell__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="flags_pos">0</TD><TD PORT="flags_size">1</TD><TD>u1</TD><TD PORT="flags_type">flags</TD></TR>
+				<TR><TD PORT="delta_timestamp_pos">1</TD><TD PORT="delta_timestamp_size">8</TD><TD>varint</TD><TD PORT="delta_timestamp_type">delta_timestamp</TD></TR>
+				<TR><TD PORT="delta_local_deletion_time_pos">9</TD><TD PORT="delta_local_deletion_time_size">8</TD><TD>varint</TD><TD PORT="delta_local_deletion_time_type">delta_local_deletion_time</TD></TR>
+				<TR><TD PORT="delta_ttl_pos">17</TD><TD PORT="delta_ttl_size">8</TD><TD>varint</TD><TD PORT="delta_ttl_type">delta_ttl</TD></TR>
+				<TR><TD PORT="path_pos">25</TD><TD PORT="path_size">...</TD><TD>CellPath</TD><TD PORT="path_type">path</TD></TR>
+				<TR><TD PORT="value_pos">...</TD><TD PORT="value_size">...</TD><TD>CellValue</TD><TD PORT="value_type">value</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__partition {
+			label="SstableData::Partition";
+			graph[style=dotted];
+
+			partition__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="header_pos">0</TD><TD PORT="header_size">...</TD><TD>PartitionHeader</TD><TD PORT="header_type">header</TD></TR>
+				<TR><TD PORT="unfiltereds_pos">...</TD><TD PORT="unfiltereds_size">...</TD><TD>Unfiltered</TD><TD PORT="unfiltereds_type">unfiltereds</TD></TR>
+				<TR><TD COLSPAN="4" PORT="unfiltereds__repeat">repeat until _.flags == 1</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__cell_path {
+			label="SstableData::CellPath";
+			graph[style=dotted];
+
+			cell_path__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">8</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="value_pos">8</TD><TD PORT="value_size">length</TD><TD></TD><TD PORT="value_type">value</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__clustering_block {
+			label="SstableData::ClusteringBlock";
+			graph[style=dotted];
+
+			clustering_block__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="clustering_block_header_pos">0</TD><TD PORT="clustering_block_header_size">8</TD><TD>varint</TD><TD PORT="clustering_block_header_type">clustering_block_header</TD></TR>
+				<TR><TD PORT="clustering_cells_pos">8</TD><TD PORT="clustering_cells_size">...</TD><TD>CellValue</TD><TD PORT="clustering_cells_type">clustering_cells</TD></TR>
+				<TR><TD COLSPAN="4" PORT="clustering_cells__repeat">repeat 512 times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__row {
+			label="SstableData::Row";
+			graph[style=dotted];
+
+			row__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="extended_flags_pos">0</TD><TD PORT="extended_flags_size">1</TD><TD>u1</TD><TD PORT="extended_flags_type">extended_flags</TD></TR>
+				<TR><TD PORT="clustering_blocks_pos">1</TD><TD PORT="clustering_blocks_size">...</TD><TD>ClusteringBlock</TD><TD PORT="clustering_blocks_type">clustering_blocks</TD></TR>
+				<TR><TD COLSPAN="4" PORT="clustering_blocks__repeat">repeat ceil(num_clustering_cells / 32) times</TD></TR>
+				<TR><TD PORT="row_body_size_pos">...</TD><TD PORT="row_body_size_size">8</TD><TD>varint</TD><TD PORT="row_body_size_type">row_body_size</TD></TR>
+				<TR><TD PORT="previous_unfiltered_size_pos">...</TD><TD PORT="previous_unfiltered_size_size">8</TD><TD>varint</TD><TD PORT="previous_unfiltered_size_type">previous_unfiltered_size</TD></TR>
+				<TR><TD PORT="liveness_info_pos">...</TD><TD PORT="liveness_info_size">24</TD><TD>LivenessInfo</TD><TD PORT="liveness_info_type">liveness_info</TD></TR>
+				<TR><TD PORT="deletion_time_pos">...</TD><TD PORT="deletion_time_size">16</TD><TD>DeltaDeletionTime</TD><TD PORT="deletion_time_type">deletion_time</TD></TR>
+				<TR><TD PORT="missing_columns_pos">...</TD><TD PORT="missing_columns_size">8</TD><TD>varint</TD><TD PORT="missing_columns_type">missing_columns</TD></TR>
+				<TR><TD COLSPAN="4" PORT="missing_columns__repeat">repeat n times depending on superset of columns in this Memtable</TD></TR>
+				<TR><TD PORT="cells_pos">...</TD><TD PORT="cells_size">...</TD><TD>switch (is_complex)</TD><TD PORT="cells_type">cells</TD></TR>
+				<TR><TD COLSPAN="4" PORT="cells__repeat">repeat for the number of regular or static columns respectively</TD></TR>
+			</TABLE>>];
+row__seq_cells_switch [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+	<TR><TD BGCOLOR="#F0F2E4">case</TD><TD BGCOLOR="#F0F2E4">type</TD></TR>
+	<TR><TD>yes</TD><TD PORT="case0">ComplexCell</TD></TR>
+	<TR><TD>no</TD><TD PORT="case1">SimpleCell</TD></TR>
+</TABLE>>];
+		}
+		subgraph cluster__delta_deletion_time {
+			label="SstableData::DeltaDeletionTime";
+			graph[style=dotted];
+
+			delta_deletion_time__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="delta_marked_for_delete_at_pos">0</TD><TD PORT="delta_marked_for_delete_at_size">8</TD><TD>varint</TD><TD PORT="delta_marked_for_delete_at_type">delta_marked_for_delete_at</TD></TR>
+				<TR><TD PORT="delta_local_deletion_time_pos">8</TD><TD PORT="delta_local_deletion_time_size">8</TD><TD>varint</TD><TD PORT="delta_local_deletion_time_type">delta_local_deletion_time</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__range_tombstone_marker {
+			label="SstableData::RangeTombstoneMarker";
+			graph[style=dotted];
+
+			range_tombstone_marker__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="kind_pos">0</TD><TD PORT="kind_size">1</TD><TD>u1</TD><TD PORT="kind_type">kind</TD></TR>
+				<TR><TD PORT="bound_values_count_pos">1</TD><TD PORT="bound_values_count_size">2</TD><TD>u2be</TD><TD PORT="bound_values_count_type">bound_values_count</TD></TR>
+				<TR><TD PORT="clustering_blocks_pos">3</TD><TD PORT="clustering_blocks_size">...</TD><TD>ClusteringBlock</TD><TD PORT="clustering_blocks_type">clustering_blocks</TD></TR>
+				<TR><TD COLSPAN="4" PORT="clustering_blocks__repeat">repeat ceil(num_clustering_cells / 32) times</TD></TR>
+				<TR><TD PORT="marker_body_size_pos">...</TD><TD PORT="marker_body_size_size">8</TD><TD>varint</TD><TD PORT="marker_body_size_type">marker_body_size</TD></TR>
+				<TR><TD PORT="previous_unfiltered_size_pos">...</TD><TD PORT="previous_unfiltered_size_size">8</TD><TD>varint</TD><TD PORT="previous_unfiltered_size_type">previous_unfiltered_size</TD></TR>
+				<TR><TD PORT="deletion_time_pos">...</TD><TD PORT="deletion_time_size">16</TD><TD>DeltaDeletionTime</TD><TD PORT="deletion_time_type">deletion_time</TD></TR>
+				<TR><TD PORT="end_deletion_time_pos">...</TD><TD PORT="end_deletion_time_size">16</TD><TD>DeltaDeletionTime</TD><TD PORT="end_deletion_time_type">end_deletion_time</TD></TR>
+				<TR><TD PORT="start_deletion_time_pos">...</TD><TD PORT="start_deletion_time_size">16</TD><TD>DeltaDeletionTime</TD><TD PORT="start_deletion_time_type">start_deletion_time</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__cell_value {
+			label="SstableData::CellValue";
+			graph[style=dotted];
+
+			cell_value__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">8</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="value_pos">8</TD><TD PORT="value_size">length</TD><TD></TD><TD PORT="value_type">value</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__complex_cell {
+			label="SstableData::ComplexCell";
+			graph[style=dotted];
+
+			complex_cell__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="complex_deletion_time_pos">0</TD><TD PORT="complex_deletion_time_size">16</TD><TD>DeltaDeletionTime</TD><TD PORT="complex_deletion_time_type">complex_deletion_time</TD></TR>
+				<TR><TD PORT="items_count_pos">16</TD><TD PORT="items_count_size">8</TD><TD>varint</TD><TD PORT="items_count_type">items_count</TD></TR>
+				<TR><TD PORT="simple_cell_pos">24</TD><TD PORT="simple_cell_size">...</TD><TD>SimpleCell</TD><TD PORT="simple_cell_type">simple_cell</TD></TR>
+				<TR><TD COLSPAN="4" PORT="simple_cell__repeat">repeat items_count times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__unfiltered {
+			label="SstableData::Unfiltered";
+			graph[style=dotted];
+
+			unfiltered__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="flags_pos">0</TD><TD PORT="flags_size">1</TD><TD>u1</TD><TD PORT="flags_type">flags</TD></TR>
+				<TR><TD PORT="body_pos">1</TD><TD PORT="body_size">...</TD><TD>switch (flags)</TD><TD PORT="body_type">body</TD></TR>
+			</TABLE>>];
+unfiltered__seq_body_switch [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+	<TR><TD BGCOLOR="#F0F2E4">case</TD><TD BGCOLOR="#F0F2E4">type</TD></TR>
+	<TR><TD>2</TD><TD PORT="case0">RangeTombstoneMarker</TD></TR>
+	<TR><TD>_</TD><TD PORT="case1">Row</TD></TR>
+</TABLE>>];
+		}
+	}
+	sstable_data__seq:partitions_type -> partition__seq [style=bold];
+	partition_header__seq:key_length_type -> partition_header__seq:key_size [color="#404040"];
+	partition_header__seq:deletion_time_type -> deletion_time__seq [style=bold];
+	simple_cell__seq:path_type -> cell_path__seq [style=bold];
+	simple_cell__seq:value_type -> cell_value__seq [style=bold];
+	partition__seq:header_type -> partition_header__seq [style=bold];
+	partition__seq:unfiltereds_type -> unfiltered__seq [style=bold];
+	unfiltered__seq:flags_type -> partition__seq:unfiltereds__repeat [color="#404040"];
+	cell_path__seq:length_type -> cell_path__seq:value_size [color="#404040"];
+	clustering_block__seq:clustering_cells_type -> cell_value__seq [style=bold];
+	row__seq:clustering_blocks_type -> clustering_block__seq [style=bold];
+	row__seq:liveness_info_type -> liveness_info__seq [style=bold];
+	row__seq:deletion_time_type -> delta_deletion_time__seq [style=bold];
+	row__seq:cells_type -> row__seq_cells_switch [style=bold];
+	row__seq_cells_switch:case0 -> complex_cell__seq [style=bold];
+	row__seq_cells_switch:case1 -> simple_cell__seq [style=bold];
+	range_tombstone_marker__seq:clustering_blocks_type -> clustering_block__seq [style=bold];
+	range_tombstone_marker__seq:deletion_time_type -> delta_deletion_time__seq [style=bold];
+	range_tombstone_marker__seq:end_deletion_time_type -> delta_deletion_time__seq [style=bold];
+	range_tombstone_marker__seq:start_deletion_time_type -> delta_deletion_time__seq [style=bold];
+	cell_value__seq:length_type -> cell_value__seq:value_size [color="#404040"];
+	complex_cell__seq:complex_deletion_time_type -> delta_deletion_time__seq [style=bold];
+	complex_cell__seq:simple_cell_type -> simple_cell__seq [style=bold];
+	complex_cell__seq:items_count_type -> complex_cell__seq:simple_cell__repeat [color="#404040"];
+	unfiltered__seq:body_type -> unfiltered__seq_body_switch [style=bold];
+	unfiltered__seq_body_switch:case0 -> range_tombstone_marker__seq [style=bold];
+	unfiltered__seq_body_switch:case1 -> row__seq [style=bold];
+	unfiltered__seq:flags_type -> unfiltered__seq:body_type [color="#404040"];
+}
