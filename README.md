@@ -10,7 +10,7 @@ A project for parsing SSTables, used by the Apache Cassandra database, via the [
 
 `vis/` contains modified Kaitai Struct files for visualizing the various data formats.
 
-- Remember that compiling to graphviz does not require the structure specification to actually mask the file on disk; it can be independently compiled regardless.
+- Remember that compiling to graphviz does not require the structure specification to actually fit the file on disk; it can be independently compiled regardless.
 
 ## Description
 

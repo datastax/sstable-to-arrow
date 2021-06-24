@@ -1,79 +1,93 @@
 #include "deserialization_helper.h"
 
-int deserialization_helper_t::n_clustering_cells = -1;
-int deserialization_helper_t::n_regular_columns = -1;
-int deserialization_helper_t::n_static_columns = -1;
+#define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
 
-std::vector<std::string> deserialization_helper_t::clustering_types = {};
-std::vector<std::string> deserialization_helper_t::static_types = {};
-std::vector<std::string> deserialization_helper_t::regular_types = {};
+typedef std::vector<std::string> strvec;
+
+// List of Cassandra types with a fixed length
+const std::map<std::string, int> is_fixed_len{
+    {"org.apache.cassandra.db.marshal.BooleanType", 1},
+    {"org.apache.cassandra.db.marshal.ByteType", 1},
+    {"org.apache.cassandra.db.marshal.DoubleType", 8},
+    {"org.apache.cassandra.db.marshal.DateType", 8},
+    {"org.apache.cassandra.db.marshal.EmptyType", 0},
+    {"org.apache.cassandra.db.marshal.FloatType", 4},
+    {"org.apache.cassandra.db.marshal.Int32Type", 4},
+    {"org.apache.cassandra.db.marshal.LexicalUUIDType", 16},
+    {"org.apache.cassandra.db.marshal.LongType", 8},
+    {"org.apache.cassandra.db.marshal.ShortType", 2},
+    {"org.apache.cassandra.db.marshal.TimestampType", 8},
+    {"org.apache.cassandra.db.marshal.TimeUUIDType", 16},
+    {"org.apache.cassandra.db.marshal.UUIDType", 16},
+    // {"org.apache.cassandra.db.marshal.CounterColumnType", 8},
+    // TODO wth does ReversedType do?
+    // https://github.com/apache/cassandra/blob/7486302d3ae4eac334e6669d7d4038b48fa6cce5/src/java/org/apache/cassandra/db/marshal/ReversedType.java#L135
+};
+
+// complex types
+const std::set<std::string> is_multi_cell{
+    "org.apache.cassandra.db.marshal.ListType",
+    "org.apache.cassandra.db.marshal.MapType",
+    "org.apache.cassandra.db.marshal.SetType"};
+
+const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = {
+    std::make_shared<strvec>(),
+    std::make_shared<strvec>(),
+    std::make_shared<strvec>()};
 
 // we don't actually want to read any bytes
-deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks)
+deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) {}
+
+/** Get the number of clustering, static, or regular columns */
+int deserialization_helper_t::get_n_cols(int kind)
 {
+    CHECK_KIND(kind);
+    return colkinds[kind]->size();
+}
+/** Set the number of clustering, static, or regular columns and allocate memory for them */
+void deserialization_helper_t::set_n_cols(int kind, int n)
+{
+    CHECK_KIND(kind);
+    colkinds[kind]->resize(n);
 }
 
-void deserialization_helper_t::set_n_clustering_cells(int n)
+/** Get the data kind stored in this column */
+std::string deserialization_helper_t::get_col_type(int kind, int i)
 {
-    n_clustering_cells = n;
-    clustering_types.resize(n);
+    CHECK_KIND(kind);
+    return (*colkinds[kind])[i];
+}
+void deserialization_helper_t::set_col_type(int kind, int i, std::string val)
+{
+    CHECK_KIND(kind);
+    (*colkinds[kind])[i] = val;
 }
 
-int deserialization_helper_t::get_n_blocks()
-{
-    return ceil((double)n_clustering_cells / 32.);
-}
+int deserialization_helper_t::get_n_clustering_cells(int block) { return std::min(get_n_cols(CLUSTERING) - block * 32, 32); }
+int deserialization_helper_t::get_n_blocks() { return (get_n_cols(CLUSTERING) + 31) / 32; }
 
-int deserialization_helper_t::get_n_clustering_cells()
-{
-    return n_clustering_cells;
-}
+bool deserialization_helper_t::is_complex_inc() { return is_multi_cell.count(get_col_type(curkind, idx++)) != 0; }
 
-int deserialization_helper_t::get_n_clustering_cells(int block)
+int deserialization_helper_t::set_clustering()
 {
-    return std::min(n_clustering_cells - block * 32, 32);
+    idx = 0;
+    curkind = CLUSTERING;
+    return 0;
 }
-
-void deserialization_helper_t::set_n_regular_columns(int n)
+int deserialization_helper_t::set_static()
 {
-    n_regular_columns = n;
-    regular_types.resize(n);
+    idx = 0;
+    curkind = STATIC;
+    return 0;
 }
-
-void deserialization_helper_t::set_n_static_columns(int n)
+int deserialization_helper_t::set_regular()
 {
-    n_static_columns = n;
-    static_types.resize(n);
+    idx = 0;
+    curkind = REGULAR;
+    return 0;
 }
-
-int deserialization_helper_t::get_n_columns()
+int deserialization_helper_t::get_n_cols()
 {
-    return n_regular_columns + n_static_columns;
-}
-
-std::string deserialization_helper_t::get_clustering_type(int i)
-{
-    return clustering_types[i];
-}
-void deserialization_helper_t::set_clustering_type(int i, std::string val)
-{
-    clustering_types[i] = val;
-}
-
-std::string deserialization_helper_t::get_static_type(int i)
-{
-    return static_types[i];
-}
-void deserialization_helper_t::set_static_type(int i, std::string val)
-{
-    static_types[i] = val;
-}
-
-std::string deserialization_helper_t::get_regular_type(int i)
-{
-    return regular_types[i];
-}
-void deserialization_helper_t::set_regular_type(int i, std::string val)
-{
-    regular_types[i] = val;
+    // TODO get columns bitmask into consideration
+    return get_n_cols(curkind);
 }

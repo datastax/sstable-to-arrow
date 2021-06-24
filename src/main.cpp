@@ -95,16 +95,16 @@ sstable_statistics_t *read_statistics(std::string path)
 
     // Set important constants for the serialization helper and initialize vectors to store
     // types of clustering columns
-    deserialization_helper_t::set_n_clustering_cells(body->clustering_key_types()->length()->val());
-    deserialization_helper_t::set_n_static_columns(body->static_columns()->length()->val());
-    deserialization_helper_t::set_n_regular_columns(body->regular_columns()->length()->val());
+    deserialization_helper_t::set_n_cols(deserialization_helper_t::CLUSTERING, body->clustering_key_types()->length()->val());
+    deserialization_helper_t::set_n_cols(deserialization_helper_t::STATIC, body->static_columns()->length()->val());
+    deserialization_helper_t::set_n_cols(deserialization_helper_t::REGULAR, body->regular_columns()->length()->val());
 
     std::cout << "\n=== clustering keys (" << body->clustering_key_types()->length()->val() << ") ===\n";
     i = 0;
     for (auto &type : *body->clustering_key_types()->array())
     {
         std::cout << "type: " << type->body() << "\n";
-        deserialization_helper_t::set_clustering_type(i++, type->body());
+        deserialization_helper_t::set_col_type(deserialization_helper_t::CLUSTERING, i++, type->body());
     }
 
     std::cout << "\n=== static columns (" << body->static_columns()->length()->val() << ") ===\n";
@@ -114,7 +114,7 @@ sstable_statistics_t *read_statistics(std::string path)
         std::cout
             << "name: " << column->name()->body() << "\n"
             << "type: " << column->column_type()->body() << '\n';
-        deserialization_helper_t::set_static_type(i++, column->name()->body());
+        deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->name()->body());
     }
 
     std::cout << "\n=== regular columns (" << body->regular_columns()->length()->val() << ") ===\n";
@@ -124,7 +124,7 @@ sstable_statistics_t *read_statistics(std::string path)
         std::cout
             << "name: " << column->name()->body() << "\n"
             << "type: " << column->column_type()->body() << '\n';
-        deserialization_helper_t::set_regular_type(i++, column->name()->body());
+        deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->name()->body());
     }
 
     return &statistics;
@@ -164,7 +164,8 @@ sstable_data_t *read_data(std::string path)
 
                 for (auto &cell : *row->cells())
                 {
-                    std::cout << "cell value: " << cell->value()->value() << "\n";
+                    sstable_data_t::simple_cell_t *simple_cell = (sstable_data_t::simple_cell_t *)cell.get();
+                    std::cout << "cell value: " << simple_cell->value()->value() << "\n";
                 }
             }
         }

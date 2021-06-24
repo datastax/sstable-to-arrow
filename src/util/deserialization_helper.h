@@ -5,37 +5,40 @@
 #include <cmath>
 #include <vector>
 #include <string>
+#include <map>
+#include <set>
+
+extern const std::map<std::string, int> is_fixed_len;
+extern const std::set<std::string> is_multi_cell;
 
 class deserialization_helper_t
 {
+    int idx;
+    int curkind;
+
 public:
-    static std::vector<std::string> clustering_types;
-    static std::vector<std::string> static_types;
-    static std::vector<std::string> regular_types;
+    static const int CLUSTERING = 0;
+    static const int STATIC = 1;
+    static const int REGULAR = 2;
 
-    static int n_clustering_cells;
-    static int n_regular_columns;
-    static int n_static_columns;
+    static const std::vector<std::shared_ptr<std::vector<std::string>>> colkinds;
 
-    deserialization_helper_t(kaitai::kstream *ks);
-
-    static void set_n_clustering_cells(int n);
-    static int get_n_clustering_cells();
     static int get_n_clustering_cells(int block);
     static int get_n_blocks();
 
-    static void set_n_regular_columns(int n);
-    static void set_n_static_columns(int n);
-    static int get_n_regular_columns();
-    static int get_n_static_columns();
-    static int get_n_columns();
+    static void set_n_cols(int kind, int n);
+    static int get_n_cols(int kind);
 
-    static std::string get_clustering_type(int i);
-    static void set_clustering_type(int i, std::string val);
-    static std::string get_static_type(int i);
-    static void set_static_type(int i, std::string val);
-    static std::string get_regular_type(int i);
-    static void set_regular_type(int i, std::string val);
+    static std::string get_col_type(int kind, int i);
+    static void set_col_type(int kind, int i, std::string val);
+
+    deserialization_helper_t(kaitai::kstream *ks);
+
+    int set_clustering();
+    int set_static();
+    int set_regular();
+    int get_n_cols();
+    bool is_complex_inc();
 };
 
 #endif

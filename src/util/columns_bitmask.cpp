@@ -5,7 +5,7 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks)
     vint_t vint(ks);
     long long encoded = vint.val();
 
-    int superset_count = deserialization_helper_t::get_n_columns();
+    int superset_count = deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR);
 
     if (encoded == 0)
     {

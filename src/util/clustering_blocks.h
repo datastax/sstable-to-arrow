@@ -5,11 +5,8 @@
 #include <algorithm>
 #include <vector>
 #include <string>
-#include <map>
 #include "deserialization_helper.h"
 #include "vint.h"
-
-extern std::map<std::string, int> is_fixed_len;
 
 class clustering_blocks_t
 {

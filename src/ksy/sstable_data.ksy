@@ -114,10 +114,17 @@ types:
           Compare columns in this row to set of all columns in Memtable
           Encodes which columns missing when less than 64 columns; otherwise more complex
 
+      - id: tmp_
+        size: "((_parent.flags & 0x80 == 0) or (extended_flags & 0x01 == 0)) ? _root.deserialization_helper.set_regular.as<u4> : _root.deserialization_helper.set_static.as<u4>"
+
       - id: cells
-        type: simple_cell # TODO depends on if column is simple or complex
+        type:
+          switch-on: _root.deserialization_helper.is_complex_inc.as<b1>
+          cases:
+            true: complex_cell
+            false: simple_cell(false)
         repeat: expr
-        repeat-expr: _root.deserialization_helper.get_n_columns.as<u4>
+        repeat-expr: _root.deserialization_helper.get_n_cols.as<u4>
 
     doc: |
       See UnfilteredSerializer https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L30
@@ -159,6 +166,9 @@ types:
           DeletionTime.localDeletionTime() is encoded as a variable sized integer delta from EncodingStats.minLocalDeletionTime.
 
   simple_cell:
+    params:
+      - id: complex
+        type: b1
     seq:
       - id: flags
         type: u1
@@ -177,7 +187,7 @@ types:
 
       - id: path
         type: cell_path
-        if: false # TODO _parent.items_count
+        if: complex
 
       - id: value
         type: cell_value
@@ -202,17 +212,17 @@ types:
       - id: value
         size: length.val.as<u4> # TODO depends on schema definition
 
-  # complex_cell:
-  #   seq:
-  #     - id: complex_deletion_time
-  #       type: delta_deletion_time
-  #       if: _parent.flags & 0x40 != 0 # HAS_COMPLEX_DELETION set on row
-  #     - id: items_count
-  #       type: vint
-  #     - id: simple_cell
-  #       type: simple_cell
-  #       repeat: expr
-  #       repeat-expr: items_count
+  complex_cell:
+    seq:
+      - id: complex_deletion_time
+        type: delta_deletion_time
+        if: _parent._parent.flags & 0x40 != 0 # HAS_COMPLEX_DELETION set on row
+      - id: items_count
+        type: vint
+      - id: simple_cell
+        type: simple_cell(true)
+        repeat: expr
+        repeat-expr: items_count.val.as<u4>
 
   # ============================== RANGE TOMBSTONE MARKERS ==============================
 

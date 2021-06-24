@@ -110,15 +110,24 @@ arrow::Status vector_to_columnar_table(const sstable_data_t *sstable, std::share
 
             sstable_data_t::row_t *row = (sstable_data_t::row_t *)unfiltered->body();
 
+            int kind = deserialization_helper_t::REGULAR;
+            if (((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0))
+            {
+                kind = deserialization_helper_t::STATIC;
+            }
+
             ARROW_RETURN_NOT_OK(key_builder.Append(partition->header()->key()));
             for (std::string &cell : *row->clustering_blocks()->values())
             {
                 ARROW_RETURN_NOT_OK(teacher_builder.Append(cell));
             }
 
-            for (unique_ptr<sstable_data_t::simple_cell_t> &cell : *row->cells())
+            int i = 0;
+            for (auto &cell : *row->cells())
             {
-                ARROW_RETURN_NOT_OK(level_builder.Append(cell->value()->value()));
+                std::string col_type = deserialization_helper_t::get_col_type(kind, i++);
+                auto simple_cell = (sstable_data_t::simple_cell_t *)cell.get();
+                ARROW_RETURN_NOT_OK(level_builder.Append(simple_cell->value()->value()));
             }
         }
     }
