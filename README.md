@@ -23,3 +23,28 @@ The big picture goal is to allow GPU-accelerated analytic queries natively (or a
 3. At the current stage, to prepare for future parallelization using `CUDA`, we decided to try and read the SSTable files using C++. This introduces the difficult step of reading complex binary files. To solve this, we decided to use the [Kaitai Struct](https://kaitai.io/) library to write declarative format specifications using `YAML` files. This will greatly decrease the cost of maintaining different database formats in the future as it is close to self-documenting. It also has the benefit of working across languages. This is currently in progress as I'm working to add more types and making sure the conversions from Cassandra to Arrow types goes well.
 
 4. The next step will be to actually introduce parallelization using CUDA.
+
+## Getting an SSTable
+
+We can get an SSTable from the Cassandra Docker image. See [the quickstart](https://cassandra.apache.org/quickstart/) for more info.
+
+```bash
+docker network create cassandra
+docker run --rm -d --name cassandra --hostname cassandra --network cassandra cassandra:3.11
+# runs CQL query in ./data.cql
+# you may need to wait for the server to start up before running this
+docker run --rm --network cassandra -v "$(pwd)/data.cql:/scripts/data.cql" -e CQLSH_HOST=cassandra -e CQLSH_PORT=9042 nuvo/docker-cqlsh
+# to open a CQL shell on the container, run:
+# docker run --rm -it --network cassandra nuvo/docker-cqlsh cqlsh cassandra 9042 --cqlversion='3.4.4'
+# go into the container
+docker exec -it cassandra /bin/bash
+# then run `nodetool flush` to copy the table
+# then run `find / -name *-Data.db -type f`
+# it will print out a list of files
+# find the keyspace you wrote to and copy the path
+# exit to your local machine and run
+docker cp cassandra:<PATH_TO_KEYSPACE> ./res
+# clean up
+docker kill cassandra
+docker network rm cassandra
+```
