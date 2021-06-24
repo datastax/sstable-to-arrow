@@ -1,0 +1,113 @@
+digraph {
+	rankdir=LR;
+	node [shape=plaintext];
+	subgraph cluster__sstable_index {
+		label="SstableIndex";
+		graph[style=dotted];
+
+		sstable_index__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+			<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+			<TR><TD PORT="entries_pos">0</TD><TD PORT="entries_size">...</TD><TD>IndexEntry</TD><TD PORT="entries_type">entries</TD></TR>
+			<TR><TD COLSPAN="4" PORT="entries__repeat">repeat to end of stream</TD></TR>
+		</TABLE>>];
+		subgraph cluster__deletion_time {
+			label="SstableIndex::DeletionTime";
+			graph[style=dotted];
+
+			deletion_time__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="local_deletion_time_pos">0</TD><TD PORT="local_deletion_time_size">4</TD><TD>u4be</TD><TD PORT="local_deletion_time_type">local_deletion_time</TD></TR>
+				<TR><TD PORT="marked_for_delete_at_pos">4</TD><TD PORT="marked_for_delete_at_size">8</TD><TD>u8be</TD><TD PORT="marked_for_delete_at_type">marked_for_delete_at</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__clustering_block {
+			label="SstableIndex::ClusteringBlock";
+			graph[style=dotted];
+
+			clustering_block__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="clustering_block_header_pos">0</TD><TD PORT="clustering_block_header_size">1</TD><TD>varint</TD><TD PORT="clustering_block_header_type">clustering_block_header</TD></TR>
+				<TR><TD PORT="clustering_cells_pos">1</TD><TD PORT="clustering_cells_size">...</TD><TD>CellValue</TD><TD PORT="clustering_cells_type">clustering_cells</TD></TR>
+				<TR><TD COLSPAN="4" PORT="clustering_cells__repeat">repeat for each non-null non-empty cell in block</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__clustering_prefix {
+			label="SstableIndex::ClusteringPrefix";
+			graph[style=dotted];
+
+			clustering_prefix__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="kind_pos">0</TD><TD PORT="kind_size">1</TD><TD>u1</TD><TD PORT="kind_type">kind</TD></TR>
+				<TR><TD PORT="size_pos">1</TD><TD PORT="size_size">2</TD><TD>u2be</TD><TD PORT="size_type">size</TD></TR>
+				<TR><TD PORT="clustering_blocks_pos">3</TD><TD PORT="clustering_blocks_size">...</TD><TD>ClusteringBlock</TD><TD PORT="clustering_blocks_type">clustering_blocks</TD></TR>
+				<TR><TD COLSPAN="4" PORT="clustering_blocks__repeat">repeat ceil(num_clustering_cells / 32) times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__cell_value {
+			label="SstableIndex::CellValue";
+			graph[style=dotted];
+
+			cell_value__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">1</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="value_pos">1</TD><TD PORT="value_size">length</TD><TD></TD><TD PORT="value_type">value</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__index_entry {
+			label="SstableIndex::IndexEntry";
+			graph[style=dotted];
+
+			index_entry__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="key_length_pos">0</TD><TD PORT="key_length_size">2</TD><TD>u2be</TD><TD PORT="key_length_type">key_length</TD></TR>
+				<TR><TD PORT="key_pos">2</TD><TD PORT="key_size">key_length</TD><TD></TD><TD PORT="key_type">key</TD></TR>
+				<TR><TD PORT="position_pos">...</TD><TD PORT="position_size">1</TD><TD>varint</TD><TD PORT="position_type">position</TD></TR>
+				<TR><TD PORT="promoted_index_length_pos">...</TD><TD PORT="promoted_index_length_size">1</TD><TD>varint</TD><TD PORT="promoted_index_length_type">promoted_index_length</TD></TR>
+				<TR><TD PORT="promoted_index_pos">...</TD><TD PORT="promoted_index_size">promoted_index_length</TD><TD>PromotedIndex</TD><TD PORT="promoted_index_type">promoted_index</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__promoted_index {
+			label="SstableIndex::PromotedIndex";
+			graph[style=dotted];
+
+			promoted_index__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="partition_header_length_pos">0</TD><TD PORT="partition_header_length_size">1</TD><TD>varint</TD><TD PORT="partition_header_length_type">partition_header_length</TD></TR>
+				<TR><TD PORT="deletion_time_pos">1</TD><TD PORT="deletion_time_size">12</TD><TD>DeletionTime</TD><TD PORT="deletion_time_type">deletion_time</TD></TR>
+				<TR><TD PORT="promoted_index_blocks_count_pos">13</TD><TD PORT="promoted_index_blocks_count_size">1</TD><TD>varint</TD><TD PORT="promoted_index_blocks_count_type">promoted_index_blocks_count</TD></TR>
+				<TR><TD PORT="blocks_pos">14</TD><TD PORT="blocks_size">...</TD><TD>PromotedIndexBlock</TD><TD PORT="blocks_type">blocks</TD></TR>
+				<TR><TD COLSPAN="4" PORT="blocks__repeat">repeat promoted_index_blocks_count times</TD></TR>
+				<TR><TD PORT="offsets_pos">...</TD><TD PORT="offsets_size">4</TD><TD>u4be</TD><TD PORT="offsets_type">offsets</TD></TR>
+				<TR><TD COLSPAN="4" PORT="offsets__repeat">repeat promoted_index_blocks_count times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__promoted_index_block {
+			label="SstableIndex::PromotedIndexBlock";
+			graph[style=dotted];
+
+			promoted_index_block__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="first_name_pos">0</TD><TD PORT="first_name_size">...</TD><TD>ClusteringPrefix</TD><TD PORT="first_name_type">first_name</TD></TR>
+				<TR><TD PORT="last_name_pos">...</TD><TD PORT="last_name_size">...</TD><TD>ClusteringPrefix</TD><TD PORT="last_name_type">last_name</TD></TR>
+				<TR><TD PORT="offset_pos">...</TD><TD PORT="offset_size">1</TD><TD>varint</TD><TD PORT="offset_type">offset</TD></TR>
+				<TR><TD PORT="delta_width_pos">...</TD><TD PORT="delta_width_size">1</TD><TD>varint</TD><TD PORT="delta_width_type">delta_width</TD></TR>
+				<TR><TD PORT="end_open_marker_present_pos">...</TD><TD PORT="end_open_marker_present_size">1</TD><TD>u1</TD><TD PORT="end_open_marker_present_type">end_open_marker_present</TD></TR>
+				<TR><TD PORT="end_open_marker_pos">...</TD><TD PORT="end_open_marker_size">12</TD><TD>DeletionTime</TD><TD PORT="end_open_marker_type">end_open_marker</TD></TR>
+			</TABLE>>];
+		}
+	}
+	sstable_index__seq:entries_type -> index_entry__seq [style=bold];
+	clustering_block__seq:clustering_cells_type -> cell_value__seq [style=bold];
+	clustering_prefix__seq:clustering_blocks_type -> clustering_block__seq [style=bold];
+	cell_value__seq:length_type -> cell_value__seq:value_size [color="#404040"];
+	index_entry__seq:key_length_type -> index_entry__seq:key_size [color="#404040"];
+	index_entry__seq:promoted_index_length_type -> index_entry__seq:promoted_index_size [color="#404040"];
+	index_entry__seq:promoted_index_type -> promoted_index__seq [style=bold];
+	promoted_index__seq:deletion_time_type -> deletion_time__seq [style=bold];
+	promoted_index__seq:blocks_type -> promoted_index_block__seq [style=bold];
+	promoted_index__seq:promoted_index_blocks_count_type -> promoted_index__seq:blocks__repeat [color="#404040"];
+	promoted_index__seq:promoted_index_blocks_count_type -> promoted_index__seq:offsets__repeat [color="#404040"];
+	promoted_index_block__seq:first_name_type -> clustering_prefix__seq [style=bold];
+	promoted_index_block__seq:last_name_type -> clustering_prefix__seq [style=bold];
+	promoted_index_block__seq:end_open_marker_type -> deletion_time__seq [style=bold];
+}

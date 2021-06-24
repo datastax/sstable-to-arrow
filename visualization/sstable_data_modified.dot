@@ -85,7 +85,7 @@ digraph {
 				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
 				<TR><TD PORT="clustering_block_header_pos">0</TD><TD PORT="clustering_block_header_size">8</TD><TD>varint</TD><TD PORT="clustering_block_header_type">clustering_block_header</TD></TR>
 				<TR><TD PORT="clustering_cells_pos">8</TD><TD PORT="clustering_cells_size">...</TD><TD>CellValue</TD><TD PORT="clustering_cells_type">clustering_cells</TD></TR>
-				<TR><TD COLSPAN="4" PORT="clustering_cells__repeat">repeat 512 times</TD></TR>
+				<TR><TD COLSPAN="4" PORT="clustering_cells__repeat">repeat for each non-null non-empty cell in block</TD></TR>
 			</TABLE>>];
 		}
 		subgraph cluster__row {
@@ -172,8 +172,9 @@ row__seq_cells_switch [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
 			</TABLE>>];
 unfiltered__seq_body_switch [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
 	<TR><TD BGCOLOR="#F0F2E4">case</TD><TD BGCOLOR="#F0F2E4">type</TD></TR>
-	<TR><TD>2</TD><TD PORT="case0">RangeTombstoneMarker</TD></TR>
-	<TR><TD>_</TD><TD PORT="case1">Row</TD></TR>
+	<TR><TD>0x01</TD><TD PORT="case0">EndOfPartition</TD></TR>
+	<TR><TD>0x02</TD><TD PORT="case0">RangeTombstoneMarker</TD></TR>
+	<TR><TD>default</TD><TD PORT="case1">Row</TD></TR>
 </TABLE>>];
 		}
 	}

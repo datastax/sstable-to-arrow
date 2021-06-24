@@ -1,5 +1,8 @@
 # Kaitai Struct declaration for SSTable
 # See https://thelastpickle.com/blog/2016/03/04/introductiont-to-the-apache-cassandra-3-storage-engine.html
+
+# s8 = vint
+
 meta:
   id: sstable_data
   endian: be

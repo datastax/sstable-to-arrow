@@ -1,0 +1,299 @@
+digraph {
+	rankdir=LR;
+	node [shape=plaintext];
+	subgraph cluster__sstable_statistics {
+		label="SstableStatistics";
+		graph[style=dotted];
+
+		sstable_statistics__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+			<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+			<TR><TD PORT="toc_pos">0</TD><TD PORT="toc_size">...</TD><TD>Toc</TD><TD PORT="toc_type">toc</TD></TR>
+		</TABLE>>];
+		subgraph cluster__name {
+			label="SstableStatistics::Name";
+			graph[style=dotted];
+
+			name__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">1</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">1</TD><TD PORT="array_size">length</TD><TD></TD><TD PORT="array_type">array</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__serialization_header {
+			label="SstableStatistics::SerializationHeader";
+			graph[style=dotted];
+
+			serialization_header__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="min_timestamp_pos">0</TD><TD PORT="min_timestamp_size">1</TD><TD>varint</TD><TD PORT="min_timestamp_type">min_timestamp</TD></TR>
+				<TR><TD PORT="min_local_deletion_time_pos">1</TD><TD PORT="min_local_deletion_time_size">1</TD><TD>varint</TD><TD PORT="min_local_deletion_time_type">min_local_deletion_time</TD></TR>
+				<TR><TD PORT="min_ttl_pos">2</TD><TD PORT="min_ttl_size">1</TD><TD>varint</TD><TD PORT="min_ttl_type">min_ttl</TD></TR>
+				<TR><TD PORT="partition_key_type_pos">3</TD><TD PORT="partition_key_type_size">...</TD><TD>StringType</TD><TD PORT="partition_key_type_type">partition_key_type</TD></TR>
+				<TR><TD PORT="clustering_key_types_pos">...</TD><TD PORT="clustering_key_types_size">...</TD><TD>ClusteringKeyTypes</TD><TD PORT="clustering_key_types_type">clustering_key_types</TD></TR>
+				<TR><TD PORT="static_columns_pos">...</TD><TD PORT="static_columns_size">...</TD><TD>Columns</TD><TD PORT="static_columns_type">static_columns</TD></TR>
+				<TR><TD PORT="regular_columns_pos">...</TD><TD PORT="regular_columns_size">...</TD><TD>Columns</TD><TD PORT="regular_columns_type">regular_columns</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__statistics {
+			label="SstableStatistics::Statistics";
+			graph[style=dotted];
+
+			statistics__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="partition_sizes_pos">0</TD><TD PORT="partition_sizes_size">...</TD><TD>EstimatedHistogram</TD><TD PORT="partition_sizes_type">partition_sizes</TD></TR>
+				<TR><TD PORT="column_counts_pos">...</TD><TD PORT="column_counts_size">...</TD><TD>EstimatedHistogram</TD><TD PORT="column_counts_type">column_counts</TD></TR>
+				<TR><TD PORT="commit_log_upper_bound_pos">...</TD><TD PORT="commit_log_upper_bound_size">12</TD><TD>CommitLogPosition</TD><TD PORT="commit_log_upper_bound_type">commit_log_upper_bound</TD></TR>
+				<TR><TD PORT="min_timestamp_pos">...</TD><TD PORT="min_timestamp_size">8</TD><TD>u8be</TD><TD PORT="min_timestamp_type">min_timestamp</TD></TR>
+				<TR><TD PORT="max_timestamp_pos">...</TD><TD PORT="max_timestamp_size">8</TD><TD>u8be</TD><TD PORT="max_timestamp_type">max_timestamp</TD></TR>
+				<TR><TD PORT="min_local_deletion_time_pos">...</TD><TD PORT="min_local_deletion_time_size">4</TD><TD>u4be</TD><TD PORT="min_local_deletion_time_type">min_local_deletion_time</TD></TR>
+				<TR><TD PORT="max_local_deletion_time_pos">...</TD><TD PORT="max_local_deletion_time_size">4</TD><TD>u4be</TD><TD PORT="max_local_deletion_time_type">max_local_deletion_time</TD></TR>
+				<TR><TD PORT="min_ttl_pos">...</TD><TD PORT="min_ttl_size">4</TD><TD>u4be</TD><TD PORT="min_ttl_type">min_ttl</TD></TR>
+				<TR><TD PORT="max_ttl_pos">...</TD><TD PORT="max_ttl_size">4</TD><TD>u4be</TD><TD PORT="max_ttl_type">max_ttl</TD></TR>
+				<TR><TD PORT="compression_rate_pos">...</TD><TD PORT="compression_rate_size">8</TD><TD>f8be</TD><TD PORT="compression_rate_type">compression_rate</TD></TR>
+				<TR><TD PORT="tombstones_pos">...</TD><TD PORT="tombstones_size">...</TD><TD>StreamingHistogram</TD><TD PORT="tombstones_type">tombstones</TD></TR>
+				<TR><TD PORT="level_pos">...</TD><TD PORT="level_size">4</TD><TD>u4be</TD><TD PORT="level_type">level</TD></TR>
+				<TR><TD PORT="repaired_at_pos">...</TD><TD PORT="repaired_at_size">8</TD><TD>u8be</TD><TD PORT="repaired_at_type">repaired_at</TD></TR>
+				<TR><TD PORT="min_clustering_key_pos">...</TD><TD PORT="min_clustering_key_size">...</TD><TD>ClusteringBound</TD><TD PORT="min_clustering_key_type">min_clustering_key</TD></TR>
+				<TR><TD PORT="max_clustering_key_pos">...</TD><TD PORT="max_clustering_key_size">...</TD><TD>ClusteringBound</TD><TD PORT="max_clustering_key_type">max_clustering_key</TD></TR>
+				<TR><TD PORT="has_legacy_counters_pos">...</TD><TD PORT="has_legacy_counters_size">1</TD><TD>u1</TD><TD PORT="has_legacy_counters_type">has_legacy_counters</TD></TR>
+				<TR><TD PORT="number_of_columns_pos">...</TD><TD PORT="number_of_columns_size">8</TD><TD>u8be</TD><TD PORT="number_of_columns_type">number_of_columns</TD></TR>
+				<TR><TD PORT="number_of_rows_pos">...</TD><TD PORT="number_of_rows_size">8</TD><TD>u8be</TD><TD PORT="number_of_rows_type">number_of_rows</TD></TR>
+				<TR><TD PORT="commit_log_lower_bound_pos">...</TD><TD PORT="commit_log_lower_bound_size">12</TD><TD>CommitLogPosition</TD><TD PORT="commit_log_lower_bound_type">commit_log_lower_bound</TD></TR>
+				<TR><TD PORT="commit_log_intervals_pos">...</TD><TD PORT="commit_log_intervals_size">...</TD><TD>CommitLogIntervals</TD><TD PORT="commit_log_intervals_type">commit_log_intervals</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__validation_metadata {
+			label="SstableStatistics::ValidationMetadata";
+			graph[style=dotted];
+
+			validation_metadata__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="partitioner_name_pos">0</TD><TD PORT="partitioner_name_size">0</TD><TD>ModifiedUtf8</TD><TD PORT="partitioner_name_type">partitioner_name</TD></TR>
+				<TR><TD PORT="bloom_filter_fp_chance_pos">0</TD><TD PORT="bloom_filter_fp_chance_size">8</TD><TD>f8be</TD><TD PORT="bloom_filter_fp_chance_type">bloom_filter_fp_chance</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__estimated_histogram {
+			label="SstableStatistics::EstimatedHistogram";
+			graph[style=dotted];
+
+			estimated_histogram__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>u4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">4</TD><TD PORT="array_size">16</TD><TD>Bucket</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__bucket_array {
+			label="SstableStatistics::BucketArray";
+			graph[style=dotted];
+
+			bucket_array__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>u4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">4</TD><TD PORT="array_size">16</TD><TD>Bucket</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__clustering_column {
+			label="SstableStatistics::ClusteringColumn";
+			graph[style=dotted];
+
+			clustering_column__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">2</TD><TD>u2be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">2</TD><TD PORT="array_size">1</TD><TD></TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__clustering_bound {
+			label="SstableStatistics::ClusteringBound";
+			graph[style=dotted];
+
+			clustering_bound__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>s4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">4</TD><TD PORT="array_size">...</TD><TD>ClusteringColumn</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__commit_log_intervals {
+			label="SstableStatistics::CommitLogIntervals";
+			graph[style=dotted];
+
+			commit_log_intervals__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>u4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">4</TD><TD PORT="array_size">24</TD><TD>CommitLogInterval</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__compaction_metadata {
+			label="SstableStatistics::CompactionMetadata";
+			graph[style=dotted];
+
+			compaction_metadata__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>u4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">4</TD><TD PORT="array_size">length</TD><TD></TD><TD PORT="array_type">array</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__columns {
+			label="SstableStatistics::Columns";
+			graph[style=dotted];
+
+			columns__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">1</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">1</TD><TD PORT="array_size">...</TD><TD>Column</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__commit_log_position {
+			label="SstableStatistics::CommitLogPosition";
+			graph[style=dotted];
+
+			commit_log_position__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="segment_id_pos">0</TD><TD PORT="segment_id_size">8</TD><TD>u8be</TD><TD PORT="segment_id_type">segment_id</TD></TR>
+				<TR><TD PORT="position_in_segment_pos">8</TD><TD PORT="position_in_segment_size">4</TD><TD>u4be</TD><TD PORT="position_in_segment_type">position_in_segment</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__streaming_histogram {
+			label="SstableStatistics::StreamingHistogram";
+			graph[style=dotted];
+
+			streaming_histogram__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="bucket_number_limit_pos">0</TD><TD PORT="bucket_number_limit_size">4</TD><TD>u4be</TD><TD PORT="bucket_number_limit_type">bucket_number_limit</TD></TR>
+				<TR><TD PORT="buckets_pos">4</TD><TD PORT="buckets_size">...</TD><TD>BucketArray</TD><TD PORT="buckets_type">buckets</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__commit_log_interval {
+			label="SstableStatistics::CommitLogInterval";
+			graph[style=dotted];
+
+			commit_log_interval__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="start_pos">0</TD><TD PORT="start_size">12</TD><TD>CommitLogPosition</TD><TD PORT="start_type">start</TD></TR>
+				<TR><TD PORT="end_pos">12</TD><TD PORT="end_size">12</TD><TD>CommitLogPosition</TD><TD PORT="end_type">end</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__bucket {
+			label="SstableStatistics::Bucket";
+			graph[style=dotted];
+
+			bucket__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="prev_bucket_offset_pos">0</TD><TD PORT="prev_bucket_offset_size">8</TD><TD>u8be</TD><TD PORT="prev_bucket_offset_type">prev_bucket_offset</TD></TR>
+				<TR><TD PORT="value_pos">8</TD><TD PORT="value_size">8</TD><TD>u8be</TD><TD PORT="value_type">value</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__string_type {
+			label="SstableStatistics::StringType";
+			graph[style=dotted];
+
+			string_type__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">1</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="body_pos">1</TD><TD PORT="body_size">length</TD><TD></TD><TD PORT="body_type">body</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__column {
+			label="SstableStatistics::Column";
+			graph[style=dotted];
+
+			column__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="name_pos">0</TD><TD PORT="name_size">...</TD><TD>Name</TD><TD PORT="name_type">name</TD></TR>
+				<TR><TD PORT="column_type_pos">...</TD><TD PORT="column_type_size">...</TD><TD>StringType</TD><TD PORT="column_type_type">column_type</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__toc {
+			label="SstableStatistics::Toc";
+			graph[style=dotted];
+
+			toc__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>u4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">4</TD><TD PORT="array_size">8</TD><TD>TocEntry</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__clustering_key_types {
+			label="SstableStatistics::ClusteringKeyTypes";
+			graph[style=dotted];
+
+			clustering_key_types__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">1</TD><TD>varint</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="array_pos">1</TD><TD PORT="array_size">...</TD><TD>StringType</TD><TD PORT="array_type">array</TD></TR>
+				<TR><TD COLSPAN="4" PORT="array__repeat">repeat length times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__toc_entry {
+			label="SstableStatistics::TocEntry";
+			graph[style=dotted];
+
+			toc_entry__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="type_pos">0</TD><TD PORT="type_size">4</TD><TD>u4be</TD><TD PORT="type_type">type</TD></TR>
+				<TR><TD PORT="offset_pos">4</TD><TD PORT="offset_size">4</TD><TD>u4be</TD><TD PORT="offset_type">offset</TD></TR>
+			</TABLE>>];
+			toc_entry__inst__body [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="body_pos">offset</TD><TD PORT="body_size">...</TD><TD>switch (type)</TD><TD PORT="body_type">body</TD></TR>
+			</TABLE>>];
+toc_entry__inst__body_body_switch [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+	<TR><TD BGCOLOR="#F0F2E4">case</TD><TD BGCOLOR="#F0F2E4">type</TD></TR>
+	<TR><TD>0</TD><TD PORT="case0">ValidationMetadata</TD></TR>
+	<TR><TD>1</TD><TD PORT="case1">CompactionMetadata</TD></TR>
+	<TR><TD>2</TD><TD PORT="case2">Statistics</TD></TR>
+	<TR><TD>3</TD><TD PORT="case3">SerializationHeader</TD></TR>
+</TABLE>>];
+		}
+	}
+	sstable_statistics__seq:toc_type -> toc__seq [style=bold];
+	name__seq:length_type -> name__seq:array_size [color="#404040"];
+	serialization_header__seq:partition_key_type_type -> string_type__seq [style=bold];
+	serialization_header__seq:clustering_key_types_type -> clustering_key_types__seq [style=bold];
+	serialization_header__seq:static_columns_type -> columns__seq [style=bold];
+	serialization_header__seq:regular_columns_type -> columns__seq [style=bold];
+	statistics__seq:partition_sizes_type -> estimated_histogram__seq [style=bold];
+	statistics__seq:column_counts_type -> estimated_histogram__seq [style=bold];
+	statistics__seq:commit_log_upper_bound_type -> commit_log_position__seq [style=bold];
+	statistics__seq:tombstones_type -> streaming_histogram__seq [style=bold];
+	statistics__seq:min_clustering_key_type -> clustering_bound__seq [style=bold];
+	statistics__seq:max_clustering_key_type -> clustering_bound__seq [style=bold];
+	statistics__seq:commit_log_lower_bound_type -> commit_log_position__seq [style=bold];
+	statistics__seq:commit_log_intervals_type -> commit_log_intervals__seq [style=bold];
+	validation_metadata__seq:partitioner_name_type -> modified_utf8__seq [style=bold];
+	estimated_histogram__seq:array_type -> bucket__seq [style=bold];
+	estimated_histogram__seq:length_type -> estimated_histogram__seq:array__repeat [color="#404040"];
+	bucket_array__seq:array_type -> bucket__seq [style=bold];
+	bucket_array__seq:length_type -> bucket_array__seq:array__repeat [color="#404040"];
+	clustering_column__seq:length_type -> clustering_column__seq:array__repeat [color="#404040"];
+	clustering_bound__seq:array_type -> clustering_column__seq [style=bold];
+	clustering_bound__seq:length_type -> clustering_bound__seq:array__repeat [color="#404040"];
+	commit_log_intervals__seq:array_type -> commit_log_interval__seq [style=bold];
+	commit_log_intervals__seq:length_type -> commit_log_intervals__seq:array__repeat [color="#404040"];
+	compaction_metadata__seq:length_type -> compaction_metadata__seq:array_size [color="#404040"];
+	columns__seq:array_type -> column__seq [style=bold];
+	columns__seq:length_type -> columns__seq:array__repeat [color="#404040"];
+	streaming_histogram__seq:buckets_type -> bucket_array__seq [style=bold];
+	commit_log_interval__seq:start_type -> commit_log_position__seq [style=bold];
+	commit_log_interval__seq:end_type -> commit_log_position__seq [style=bold];
+	string_type__seq:length_type -> string_type__seq:body_size [color="#404040"];
+	column__seq:name_type -> name__seq [style=bold];
+	column__seq:column_type_type -> string_type__seq [style=bold];
+	toc__seq:array_type -> toc_entry__seq [style=bold];
+	toc__seq:length_type -> toc__seq:array__repeat [color="#404040"];
+	clustering_key_types__seq:array_type -> string_type__seq [style=bold];
+	clustering_key_types__seq:length_type -> clustering_key_types__seq:array__repeat [color="#404040"];
+	toc_entry__seq:offset_type -> toc_entry__inst__body:body_pos [color="#404040"];
+	toc_entry__inst__body:body_type -> toc_entry__inst__body_body_switch [style=bold];
+	toc_entry__inst__body_body_switch:case0 -> validation_metadata__seq [style=bold];
+	toc_entry__inst__body_body_switch:case1 -> compaction_metadata__seq [style=bold];
+	toc_entry__inst__body_body_switch:case2 -> statistics__seq [style=bold];
+	toc_entry__inst__body_body_switch:case3 -> serialization_header__seq [style=bold];
+	toc_entry__seq:type_type -> toc_entry__inst__body:body_type [color="#404040"];
+}

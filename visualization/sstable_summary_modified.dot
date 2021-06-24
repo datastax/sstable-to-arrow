@@ -1,0 +1,73 @@
+digraph {
+	rankdir=LR;
+	node [shape=plaintext];
+	subgraph cluster__sstable_summary {
+		label="SstableSummary";
+		graph[style=dotted];
+
+		sstable_summary__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+			<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+			<TR><TD PORT="header_pos">0</TD><TD PORT="header_size">24</TD><TD>SummaryHeader</TD><TD PORT="header_type">header</TD></TR>
+			<TR><TD PORT="summary_entries_pos">24</TD><TD PORT="summary_entries_size">...</TD><TD>SummaryEntriesBlock</TD><TD PORT="summary_entries_type">summary_entries</TD></TR>
+			<TR><TD PORT="first_pos">...</TD><TD PORT="first_size">...</TD><TD>SerializedKey</TD><TD PORT="first_type">first</TD></TR>
+			<TR><TD PORT="last_pos">...</TD><TD PORT="last_size">...</TD><TD>SerializedKey</TD><TD PORT="last_type">last</TD></TR>
+		</TABLE>>];
+		subgraph cluster__summary_header {
+			label="SstableSummary::SummaryHeader";
+			graph[style=dotted];
+
+			summary_header__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="min_index_interval_pos">0</TD><TD PORT="min_index_interval_size">4</TD><TD>u4be</TD><TD PORT="min_index_interval_type">min_index_interval</TD></TR>
+				<TR><TD PORT="entries_count_pos">4</TD><TD PORT="entries_count_size">4</TD><TD>u4be</TD><TD PORT="entries_count_type">entries_count</TD></TR>
+				<TR><TD PORT="summary_entries_size_pos">8</TD><TD PORT="summary_entries_size_size">8</TD><TD>u8be</TD><TD PORT="summary_entries_size_type">summary_entries_size</TD></TR>
+				<TR><TD PORT="sampling_level_pos">16</TD><TD PORT="sampling_level_size">4</TD><TD>u4be</TD><TD PORT="sampling_level_type">sampling_level</TD></TR>
+				<TR><TD PORT="size_at_full_sampling_pos">20</TD><TD PORT="size_at_full_sampling_size">4</TD><TD>u4be</TD><TD PORT="size_at_full_sampling_type">size_at_full_sampling</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__summary_entries_block {
+			label="SstableSummary::SummaryEntriesBlock";
+			graph[style=dotted];
+
+			summary_entries_block__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="offsets_pos">0</TD><TD PORT="offsets_size">4</TD><TD>u4be</TD><TD PORT="offsets_type">offsets</TD></TR>
+				<TR><TD COLSPAN="4" PORT="offsets__repeat">repeat _parent.header.entries_count times</TD></TR>
+				<TR><TD PORT="entries_pos">...</TD><TD PORT="entries_size">...</TD><TD>SummaryEntry</TD><TD PORT="entries_type">entries</TD></TR>
+				<TR><TD COLSPAN="4" PORT="entries__repeat">repeat _parent.header.entries_count times</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__summary_entry {
+			label="SstableSummary::SummaryEntry";
+			graph[style=dotted];
+
+			summary_entry__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="key_pos">0</TD><TD PORT="key_size">calculate from offsets</TD><TD></TD><TD PORT="key_type">key</TD></TR>
+				<TR><TD PORT="position_pos">...</TD><TD PORT="position_size">8</TD><TD>u8be</TD><TD PORT="position_type">position</TD></TR>
+			</TABLE>>];
+		}
+		subgraph cluster__serialized_key {
+			label="SstableSummary::SerializedKey";
+			graph[style=dotted];
+
+			serialized_key__seq [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+				<TR><TD BGCOLOR="#E0FFE0">pos</TD><TD BGCOLOR="#E0FFE0">size</TD><TD BGCOLOR="#E0FFE0">type</TD><TD BGCOLOR="#E0FFE0">id</TD></TR>
+				<TR><TD PORT="length_pos">0</TD><TD PORT="length_size">4</TD><TD>u4be</TD><TD PORT="length_type">length</TD></TR>
+				<TR><TD PORT="key_pos">4</TD><TD PORT="key_size">length</TD><TD></TD><TD PORT="key_type">key</TD></TR>
+			</TABLE>>];
+		}
+	}
+	sstable_summary__seq:header_type -> summary_header__seq [style=bold];
+	sstable_summary__seq:summary_entries_type -> summary_entries_block__seq [style=bold];
+	sstable_summary__seq:first_type -> serialized_key__seq [style=bold];
+	sstable_summary__seq:last_type -> serialized_key__seq [style=bold];
+	summary_header__seq:entries_count_type -> summary_entries_block__seq:offsets__repeat [color="#404040"];
+	summary_entries_block__seq:entries_type -> summary_entry__seq [style=bold];
+	summary_header__seq:entries_count_type -> summary_entries_block__seq:entries__repeat [color="#404040"];
+	summary_header__seq:entries_count_type -> summary_entry__seq:key_size [color="#404040"];
+	summary_header__seq:summary_entries_size_type -> summary_entry__seq:key_size [color="#404040"];
+	summary_entries_block__seq:offsets_type -> summary_entry__seq:key_size [color="#404040"];
+	summary_entries_block__seq:offsets_type -> summary_entry__seq:key_size [color="#404040"];
+	serialized_key__seq:length_type -> serialized_key__seq:key_size [color="#404040"];
+}

@@ -35,17 +35,14 @@ types:
         repeat: expr
         repeat-expr: _parent.header.entries_count
       - id: entries
-        type: summary_entry(_index)
+        type: summary_entry
         repeat: expr
         repeat-expr: _parent.header.entries_count
 
   summary_entry:
-    params:
-      - id: index
-        type: u4
     seq:
       - id: key
-        size: "(index == _root.header.entries_count - 1 ? _root.header.summary_entries_size :  _parent.offsets[index + 1]) - _parent.offsets[index] - 8"
+        size: "(_index == _root.header.entries_count - 1 ? _root.header.summary_entries_size :  _parent.offsets[_index + 1]) - _parent.offsets[_index] - 8"
       - id: position
         type: u8
 
