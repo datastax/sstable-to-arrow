@@ -18,6 +18,12 @@ types:
         type: toc_entry
         repeat: expr
         repeat-expr: length
+    doc: |
+      Contains metadata about the table.
+      0: validation_metadata
+      1: compaction_metadata
+      2: statistics
+      3: serialization_header
 
   toc_entry:
     seq:

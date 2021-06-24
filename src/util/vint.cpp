@@ -10,8 +10,9 @@ vint_t::vint_t(kaitai::kstream *ks)
     }
 
     // magic formulae from cassandra
-    // -24 since we only want the last byte
+    // -24 since we only want the number of leading zeros in the last byte
     int size = __builtin_clz(~first_byte) - 24;
+    // get the value of the remaining part of it
     val_ = first_byte & (0xff >> size);
 
     for (int i = 0; i < size; i++)

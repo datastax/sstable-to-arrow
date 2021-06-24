@@ -48,24 +48,24 @@ types:
 
   unfiltered:
     seq:
-        # enum class row_flags {
-        #     // Signal the end of the partition. Nothing follows a <flags> field with that flag.
-        #     END_OF_PARTITION = 0x01,
-        #     // Whether the encoded unfiltered is a marker or a row. All following flags apply only to rows.
-        #     IS_MARKER = 0x02,
-        #     // Whether the encoded row has a timestamp (i.e. its liveness_info is not empty).
-        #     HAS_TIMESTAMP = 0x04,
-        #     // Whether the encoded row has some expiration info (i.e. if its liveness_info contains TTL and local_deletion).
-        #     HAS_TTL = 0x08,
-        #     // Whether the encoded row has some deletion info.
-        #     HAS_DELETION = 0x10,
-        #     // Whether the encoded row has all of the columns from the header present.
-        #     HAS_ALL_COLUMNS = 0x20,
-        #     // Whether the encoded row has some complex deletion for at least one of its complex columns.
-        #     HAS_COMPLEX_DELETION = 0x40,
-        #     // If present, another byte is read containing the "extended flags" below.
-        #     EXTENSION_FLAG = 0x80
-        # };
+      # enum class row_flags {
+      #     // Signal the end of the partition. Nothing follows a <flags> field with that flag.
+      #     END_OF_PARTITION = 0x01,
+      #     // Whether the encoded unfiltered is a marker or a row. All following flags apply only to rows.
+      #     IS_MARKER = 0x02,
+      #     // Whether the encoded row has a timestamp (i.e. its liveness_info is not empty).
+      #     HAS_TIMESTAMP = 0x04,
+      #     // Whether the encoded row has some expiration info (i.e. if its liveness_info contains TTL and local_deletion).
+      #     HAS_TTL = 0x08,
+      #     // Whether the encoded row has some deletion info.
+      #     HAS_DELETION = 0x10,
+      #     // Whether the encoded row has all of the columns from the header present.
+      #     HAS_ALL_COLUMNS = 0x20,
+      #     // Whether the encoded row has some complex deletion for at least one of its complex columns.
+      #     HAS_COMPLEX_DELETION = 0x40,
+      #     // If present, another byte is read containing the "extended flags" below.
+      #     EXTENSION_FLAG = 0x80
+      # };
       - id: flags
         type: u1
       - id: body
@@ -78,10 +78,6 @@ types:
     doc: |
       Either a Row or a RangeTombstoneMarker
 
-  empty:
-    doc: |
-      Intentionally blank.
-
   row:
     seq:
       - id: extended_flags # optional
@@ -92,14 +88,8 @@ types:
           Always set for a static row or if there is a "shadowable" deletion
 
       - id: clustering_blocks # optional
-        type: clustering_block
-        repeat: expr
-        repeat-expr: _root.deserialization_helper.get_n_blocks.as<u4>
-        if: (_parent.flags & 0x80 == 0) or (extended_flags & 0x01 == 0) # no extended_flags or IS_STATIC flag is not set
-        doc: |
-          Only in non-static rows (does not appear if row is static)
-          See https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/Clustering.java#L141
-          Which leads to https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L293
+        type: clustering_blocks
+        if: (_parent.flags & 0x80 == 0) or (extended_flags & 0x01 == 0) # if row is not static
 
       - id: row_body_size
         type: vint
@@ -117,7 +107,7 @@ types:
         type: delta_deletion_time
         if: _parent.flags & 0x10 != 0 # HAS_DELETION set
 
-      - id: columns_bitmask # optional
+      - id: columns_bitmask
         type: columns_bitmask
         if: _parent.flags & 0x20 == 0 # HAS_ALL_COLUMNS not set
         doc: |
@@ -125,7 +115,7 @@ types:
           Encodes which columns missing when less than 64 columns; otherwise more complex
 
       - id: cells
-        type: simple_cell # depends on if column is simple or complex
+        type: simple_cell # TODO depends on if column is simple or complex
         repeat: expr
         repeat-expr: _root.deserialization_helper.get_n_columns.as<u4>
 
@@ -134,20 +124,6 @@ types:
       See line 125 for the actual implementation
       Can be static (no ClusteringPrefix) or non-static (has ClusteringPrefix)
       Static is always written first
-
-  clustering_block:
-    seq:
-      - id: clustering_block_header
-        type: vint
-        doc: |
-          Contains two bits per cell to encode if it is null, empty, or otherwise
-      - id: clustering_cells
-        type: simple_cell
-        repeat: expr
-        repeat-expr: _root.deserialization_helper.get_n_clustering_cells.as<u4> # TODO currently only works if less than 32 cells total
-        doc: |
-          Handles blocks of 32 cells
-          See ClusteringPrefix.Serializer.deserializeValuesWithoutSize https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L338
 
   liveness_info:
     seq:
@@ -247,16 +223,16 @@ types:
       - id: bound_values_count
         type: u2
       - id: clustering_blocks
-        type: clustering_block
-        repeat: expr
-        repeat-expr: _root.deserialization_helper.get_n_blocks.as<u4>
+        type: clustering_blocks
       - id: marker_body_size
         type: vint
       - id: previous_unfiltered_size
         type: vint
+
       - id: deletion_time
         type: delta_deletion_time
         if: kind == 0 or kind == 1 or kind == 6 or kind == 7
+
       - id: end_deletion_time
         type: delta_deletion_time
         if: kind == 2 or kind == 5
@@ -267,34 +243,6 @@ types:
       See https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/RangeTombstone.java#L207
       for RangeTombstoneBound deserialization
 
-  range_tombstone_body:
-    seq:
-      - id: range_tombstone_bound_clustering_block
-        type: clustering_block
-
-      - id: row_body_size
-        type: vint
-      - id: previous_row_body_size
-        type: vint
-
-      - id: boundary_end_deletion_marked_for_deletion_at # optional
-        type: vint
-        doc: |
-          delta
-      - id: boundary_end_deletion_local_deletion_time # optional
-        type: vint
-        doc: |
-          delta
-      - id: boundary_start_deletion_marked_for_deletion_at # optional
-        type: vint
-        doc: |
-          delta
-      - id: boundary_start_deletion_local_deletion_time # optional
-        type: vint
-        doc: |
-          delta
-
-    doc: |
       See https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L338
 
       See https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L220

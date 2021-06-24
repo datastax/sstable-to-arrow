@@ -1,29 +1,62 @@
 #include "main.h"
 
-typedef sstable_statistics_t::toc_entry_t *entry_ptr;
-typedef std::vector<sstable_statistics_t::column_t *> column_vector;
-typedef std::vector<sstable_statistics_t::string_type_t *> string_vector;
-typedef std::vector<sstable_index_t::index_entry_t *> entry_vector;
+using std::shared_ptr;
+using std::unique_ptr;
+using std::vector;
 
-int main()
+int main(int argc, char *argv[])
 {
+    // int opt;
+    // char flags = 0x00;
+    // while ((opt = getopt(argc, argv, ":s:d:")) != -1)
+    // {
+    //     switch (opt)
+    //     {
+    //     case 's':
+    //         flags |= 0x01;
+    //         break;
+
+    //     default:
+    //         break;
+    //     }
+    // }
+
+    // if (optind >= argc)
+    // {
+    //     std::cout << "Please specify the path to the db directory containing the .db files\n";
+    //     return 1;
+    // }
+
+    // if (access(argv[optind], F_OK) != 0)
+    // {
+    //     std::cout << "Database directory does not exist, please double-check your file path\n";
+    // }
+
+    // std::string dbpath(argv[optind]);
+
     // specify these paths relative to project
     // need to run this to initialize helper
-    read_statistics("data5/store/shopping_cart-c7c15ff0d39c11eb969ed7ee8570c286/md-1-big-Statistics.db");
+    read_statistics("res/school/classes-3a387eb0d3e311eb95b1cf2bb105377c/md-1-big-Statistics.db");
     // read_index("data3/store/shopping_cart-af4e4060d36911ebb9469116fc548b6b/md-1-big-Index.db");
-    read_data("data5/store/shopping_cart-c7c15ff0d39c11eb969ed7ee8570c286/md-1-big-Data.db");
+    sstable_data_t *sstable = read_data("res/school/classes-3a387eb0d3e311eb95b1cf2bb105377c/md-1-big-Data.db");
+
+    // std::shared_ptr<arrow::Table> table;
+    // std::shared_ptr<arrow::Schema> schema;
+    // EXIT_ON_FAILURE(vector_to_columnar_table(sstable, &schema, &table));
+
+    // send_data(schema, table);
+
     return 0;
 }
 
-void read_index(std::string path)
+sstable_index_t *read_index(std::string path)
 {
     std::ifstream ifs(path, std::ifstream::binary);
     kaitai::kstream ks(&ifs);
-    sstable_index_t table_index(&ks);
-    entry_vector *vec = table_index.entries();
-    for (entry_vector::iterator it = vec->begin(); it != vec->end(); ++it)
+    static sstable_index_t index(&ks);
+
+    for (unique_ptr<sstable_index_t::index_entry_t> &entry : *index.entries())
     {
-        sstable_index_t::index_entry_t *entry = *it;
         std::cout
             << "key: " << entry->key() << "\n"
             << "position: " << entry->position()->val() << "\n";
@@ -36,47 +69,106 @@ void read_index(std::string path)
         // << "position: " << entry->promoted_index() << "\n"
         // << "position: " << entry->position() << "\n";
     }
+
+    return &index;
 }
 
-void read_statistics(std::string path)
+sstable_statistics_t *read_statistics(std::string path)
 {
+    std::cout << "\n\n===== READING STATISTICS =====\n";
+
     std::ifstream ifs(path, std::ifstream::binary);
     kaitai::kstream ks(&ifs);
-    sstable_statistics_t statistics(&ks);
-    entry_ptr ptr = (*statistics.toc()->array())[3];
-    ks.seek(ptr->offset());
-    sstable_statistics_t::serialization_header_t body(&ks);
+    static sstable_statistics_t statistics(&ks);
 
-    std::cout << "partition key type: " << body.partition_key_type()->body() << "\n";
+    auto &ptr = (*statistics.toc()->array())[3];
+    sstable_statistics_t::serialization_header_t *body = (sstable_statistics_t::serialization_header_t *)ptr->body();
 
-    std::cout << "========== clustering keys ========== " << body.clustering_key_types()->length()->val() << "\n";
-    string_vector *clustering_key_types = body.clustering_key_types()->array();
-    for (string_vector::iterator it = clustering_key_types->begin(); it != clustering_key_types->end(); ++it)
+    std::cout << "\npartition key type: " << body->partition_key_type()->body() << "\n";
+
+    std::cout
+        << "min ttl: " << body->min_ttl()->val() << '\n'
+        << "min timestamp: " << body->min_timestamp()->val() << '\n'
+        << "min local deletion time: " << body->min_local_deletion_time()->val() << '\n';
+
+    int i;
+
+    // Set important constants for the serialization helper and initialize vectors to store
+    // types of clustering columns
+    deserialization_helper_t::set_n_clustering_cells(body->clustering_key_types()->length()->val());
+    deserialization_helper_t::set_n_static_columns(body->static_columns()->length()->val());
+    deserialization_helper_t::set_n_regular_columns(body->regular_columns()->length()->val());
+
+    std::cout << "\n=== clustering keys (" << body->clustering_key_types()->length()->val() << ") ===\n";
+    i = 0;
+    for (auto &type : *body->clustering_key_types()->array())
     {
-        std::cout << "clustering keys: " << (*it)->body() << "\n";
+        std::cout << "type: " << type->body() << "\n";
+        deserialization_helper_t::set_clustering_type(i++, type->body());
     }
-    deserialization_helper_t::set_n_clustering_cells(body.clustering_key_types()->length()->val());
 
-    std::cout << "=== static columns ===\n";
-    column_vector *static_columns = body.static_columns()->array();
-    for (column_vector::iterator it = static_columns->begin(); it != static_columns->end(); ++it)
+    std::cout << "\n=== static columns (" << body->static_columns()->length()->val() << ") ===\n";
+    i = 0;
+    for (auto &column : *body->static_columns()->array())
     {
-        std::cout << "name, type = " << (*it)->name()->body() << ", " << (*it)->column_type()->body() << '\n';
+        std::cout
+            << "name: " << column->name()->body() << "\n"
+            << "type: " << column->column_type()->body() << '\n';
+        deserialization_helper_t::set_static_type(i++, column->name()->body());
     }
-    deserialization_helper_t::set_n_static_columns(body.static_columns()->length()->val());
 
-    std::cout << "=== regular columns ===\n";
-    column_vector *regular_columns = body.regular_columns()->array();
-    for (column_vector::iterator it = regular_columns->begin(); it != regular_columns->end(); ++it)
+    std::cout << "\n=== regular columns (" << body->regular_columns()->length()->val() << ") ===\n";
+    i = 0;
+    for (auto &column : *body->regular_columns()->array())
     {
-        std::cout << "name, type = " << (*it)->name()->body() << ", " << (*it)->column_type()->body() << '\n';
+        std::cout
+            << "name: " << column->name()->body() << "\n"
+            << "type: " << column->column_type()->body() << '\n';
+        deserialization_helper_t::set_regular_type(i++, column->name()->body());
     }
-    deserialization_helper_t::set_n_regular_columns(body.regular_columns()->length()->val());
+
+    return &statistics;
 }
 
-void read_data(std::string path)
+sstable_data_t *read_data(std::string path)
 {
+    std::cout << "\n\n===== READING DATA =====\n";
+
     std::ifstream ifs(path, std::ifstream::binary);
     kaitai::kstream ks(&ifs);
-    sstable_data_t sstable(&ks);
+    static sstable_data_t sstable(&ks);
+
+    for (auto &partition : *sstable.partitions())
+    {
+        std::cout << "\n========== partition ==========\nkey: " << partition->header()->key() << '\n';
+
+        for (auto &unfiltered : *partition->unfiltereds())
+        {
+            if ((unfiltered->flags() & 0x01) != 0)
+                break;
+
+            // u->body()->_io()
+            if ((unfiltered->flags() & 0x02) != 0) // range tombstone marker
+            {
+                std::cout << "range tombstone marker\n";
+                sstable_data_t::range_tombstone_marker_t *marker = (sstable_data_t::range_tombstone_marker_t *)unfiltered->body();
+            }
+            else
+            {
+                std::cout << "\n=== row ===\n";
+                sstable_data_t::row_t *row = (sstable_data_t::row_t *)unfiltered->body();
+                for (auto &cell : *row->clustering_blocks()->values())
+                {
+                    std::cout << "clustering cell: " << cell << '\n';
+                }
+
+                for (auto &cell : *row->cells())
+                {
+                    std::cout << "cell value: " << cell->value()->value() << "\n";
+                }
+            }
+        }
+    }
+
+    return &sstable;
 }

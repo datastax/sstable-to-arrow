@@ -67,16 +67,7 @@ types:
         type: u2
         if: kind != 4
       - id: clustering_blocks
-        type: clustering_block
-        repeat: expr
-        repeat-expr: 1
-  
-  clustering_block:
-    seq:
-      - id: clustering_block_header
-        type: u1
-      - id: simple_cell
-        type: simple_cell
+        type: clustering_blocks
   
   simple_cell:
     seq:
