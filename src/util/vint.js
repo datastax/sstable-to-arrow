@@ -26,3 +26,8 @@ class Vint {
     }
 }
 this.Vint = Vint;
+
+class DeserializationHelper {
+    constructor(_io) {}
+}
+this.DeserializationHelper = DeserializationHelper;

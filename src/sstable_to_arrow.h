@@ -16,6 +16,6 @@
     } while (0);
 
 arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std::shared_ptr<arrow::Table> &table);
-arrow::Status vector_to_columnar_table(const sstable_data_t *sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
+arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
 
 #endif

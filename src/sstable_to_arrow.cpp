@@ -20,7 +20,7 @@
 using arrow::StringBuilder;
 using std::unique_ptr;
 
-const int PORT = 65432;
+const int PORT = 9143;
 
 arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std::shared_ptr<arrow::Table> &table)
 {
@@ -91,7 +91,7 @@ arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std:
     return arrow::Status::OK();
 }
 
-arrow::Status vector_to_columnar_table(const sstable_data_t *sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
+arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
 {
     arrow::MemoryPool *pool = arrow::default_memory_pool();
 

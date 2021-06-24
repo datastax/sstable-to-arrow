@@ -15,8 +15,8 @@
 #include "sstable_to_arrow.h"
 #include "deserialization_helper.h"
 
-sstable_statistics_t *read_statistics(std::string);
-sstable_data_t *read_data(std::string);
-sstable_index_t *read_index(std::string);
+void read_statistics(std::string path, std::shared_ptr<sstable_statistics_t> *sstable_statistics);
+void read_data(std::string path, std::shared_ptr<sstable_data_t> *sstable);
+void read_index(std::string path, std::shared_ptr<sstable_index_t> *index);
 
 #endif
