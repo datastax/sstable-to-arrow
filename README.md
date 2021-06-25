@@ -5,7 +5,7 @@ A project for parsing SSTables, used by the Apache Cassandra database, via the [
 `src/` contains the source files to run the code.
 
 - `src/ksy/` contains the Kaitai Struct declarations for the various SSTable classes.
-- `src/util` contains different "opaque types" used by the Kaitai Struct classes.
+- `src/util` contains different "opaque types" (types defined outside of kaitai) used by the Kaitai Struct classes.
 - `main.cpp` is the main driver for this codebase.
 
 `vis/` contains modified Kaitai Struct files for visualizing the various data formats.
@@ -56,3 +56,12 @@ docker network rm cassandra
 ```
 
 3. Compile with `make` and run.
+
+## Visualizations
+
+The visualizations are currently quite rudimentary due to limitations of kaitai exporting to graphviz. It doesn't support kaitai opaque types and also doesn't show conditional fields. The current `visualization/*_modified.dot` files are edited by hand, and the `visualization/*.ksy` files are not meant to parse actual files but rather just to generate boilerplate graphviz code for the diagrams.
+
+## TODO
+
+- test for different types
+- make sure tombstone markers are implemented correctly

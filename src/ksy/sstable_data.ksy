@@ -149,26 +149,22 @@ types:
       - id: delta_ttl
         type: vint
         if: (_parent._parent.flags) & 0x08 != 0 # HAS_TTL flag on `unfiltered`
-        doc: |
-          ExpiringLivenessInfo.ttl() is encoded as a variable sized integer delta from EncodingStats.minTTL
+        doc: delta from EncodingStats.minTTL
 
       - id: primary_key_liveness_deletion_time
         type: vint
         if: (_parent._parent.flags) & 0x08 != 0 # HAS_TTL flag on `unfiltered`
-        doc: |
-          ExpiringLivenessInfo.localExpirationTime() is encoded as a variable sized integer delta from EncodingStats.minLocalDeletionTime
+        doc: delta from EncodingStats.minLocalDeletionTime
 
   delta_deletion_time:
     seq:
       - id: delta_marked_for_delete_at
         type: vint
-        doc: |
-          DeletionTime.markedForDeleteAt() is encoded as a variable sized integer delta from EncodingStats.minTimestamp
+        doc: delta from EncodingStats.minTimestamp
 
       - id: delta_local_deletion_time
         type: vint
-        doc: |
-          DeletionTime.localDeletionTime() is encoded as a variable sized integer delta from EncodingStats.minLocalDeletionTime.
+        doc: delta from EncodingStats.minLocalDeletionTime.
 
   simple_cell:
     params:
@@ -233,7 +229,6 @@ types:
         size: _root.deserialization_helper.inc.as<u4>
 
   # ============================== RANGE TOMBSTONE MARKERS ==============================
-
 
   range_tombstone_marker:
     seq:

@@ -30,10 +30,14 @@ const std::set<std::string> is_multi_cell{
     "org.apache.cassandra.db.marshal.MapType",
     "org.apache.cassandra.db.marshal.SetType"};
 
+// =============== DEFINE STATIC FIELDS ===============
+
 const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = {
     std::make_shared<strvec>(),
     std::make_shared<strvec>(),
     std::make_shared<strvec>()};
+
+// =============== METHOD DECLARATIONS ===============
 
 // we don't actually want to read any bytes
 deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) : kaitai::kstruct(ks) {}
