@@ -8,7 +8,7 @@ int main(int argc, char *argv[])
 {
     assert(argc == 3); // path to statistics and path to sstable
 
-    // TODO check files exist
+    // TODO assert files exist
 
     std::shared_ptr<sstable_statistics_t> statistics;
     read_statistics(argv[1], &statistics);

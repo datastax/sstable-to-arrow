@@ -4,7 +4,7 @@ driver_files = sstable_to_arrow main
 all_objs = $(util_types) $(kaitai_types) $(driver_files)
 
 main: out $(foreach obj,$(all_objs),out/$(obj).o)
-	g++ -std=c++11 $(foreach file,$(all_objs),out/$(file).o) -l kaitai_struct_cpp_stl_runtime -l arrow -o main
+	g++ -std=c++11 $(foreach file,$(all_objs),out/$(file).o) -lkaitai_struct_cpp_stl_runtime -larrow -o main
 
 out:
 	mkdir -p out

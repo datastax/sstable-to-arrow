@@ -9,7 +9,6 @@
 #include <arrow/api.h>
 #include <arrow/ipc/api.h>
 #include <arrow/io/api.h>
-#include <arrow/filesystem/api.h>
 
 #include "clustering_blocks.h"
 #include "sstable_data.h"

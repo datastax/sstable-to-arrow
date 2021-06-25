@@ -68,6 +68,8 @@ int deserialization_helper_t::get_n_blocks() { return (get_n_cols(CLUSTERING) + 
 
 bool deserialization_helper_t::is_complex() { return is_multi_cell.count(get_col_type(curkind, idx)) != 0; }
 
+// ===== utility functions called via hacking with type casting in the sstable_data.ksy file =====
+
 int deserialization_helper_t::inc()
 {
     idx++;
@@ -96,7 +98,6 @@ int deserialization_helper_t::get_n_cols()
     // TODO get columns bitmask into consideration
     return get_n_cols(curkind);
 }
-
 int deserialization_helper_t::get_col_size()
 {
     std::string coltype = get_col_type(curkind, idx);

@@ -24,9 +24,11 @@ The big picture goal is to allow GPU-accelerated analytic queries natively (or a
 
 4. The next step will be to actually introduce parallelization using CUDA.
 
-## Getting an SSTable
+## Getting started
 
-We can get an SSTable from the Cassandra Docker image. See [the quickstart](https://cassandra.apache.org/quickstart/) for more info.
+1. This project depends on [Kaitai Struct](`https://kaitai.io/#download`), the [Kaitai Struct C++/STL runtime library](https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime), and [Apache Arrow for C++](http://arrow.apache.org/docs/cpp/cmake.html). (Note: if you are manually building Arrow and using other Arrow features like the filesystem interface `arrow::fs`, make sure to check [if you need to include any optional components](http://arrow.apache.org/docs/developers/cpp/building.html#optional-components).)
+
+2. Get an SSTable. If you don't have one on hand, you can create one using CQL and the Cassandra Docker image. See [the quickstart](https://cassandra.apache.org/quickstart/) for more info.
 
 ```bash
 docker network create cassandra
@@ -42,9 +44,11 @@ docker exec -it cassandra /bin/bash
 # then run `find / -name *-Data.db -type f`
 # it will print out a list of files
 # find the keyspace you wrote to and copy the path
-# exit to your local machine and run
-docker cp cassandra:<PATH_TO_KEYSPACE> ./res
+# then exit to your local machine and run (replacing the path with the path to your keyspace)
+docker cp cassandra:/path/to/your/keyspace ./res
 # clean up
 docker kill cassandra
 docker network rm cassandra
 ```
+
+3. Compile with `make` and run.

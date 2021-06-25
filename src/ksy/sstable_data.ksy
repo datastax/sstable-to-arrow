@@ -1,5 +1,13 @@
 # Kaitai Struct declaration for SSTable
 # See https://thelastpickle.com/blog/2016/03/04/introductiont-to-the-apache-cassandra-3-storage-engine.html
+
+# note that this file uses a bit of hacking using `deserialization_helper` to access data about the schema,
+# which gets loaded from `sstable_statistics.ksy`
+# kaitai doesn't like if we try to access properties of an opaque type (one that's
+# manually implemented outside of kaitai) unless we cast it, so we make the imperative `deserialization_helper` functions
+# return 0 and set that to the size of a kaitai field with the id tmp_, tmp1_, etc.
+# these fields are used only for getting the parser to work properly and do not contain any data
+
 meta:
   id: sstable_data
   endian: be
@@ -24,25 +32,22 @@ types:
       - id: header
         type: partition_header
 
-      # 0/1 static row, always goes first
+      # optional static row always goes before regular rows, but it's very similar to
+      # a regular row so we still do the parsing for it in the `row` type
 
       - id: unfiltereds # either row or range_tombstone_marker
         type: unfiltered
         repeat: until
         repeat-until: _.flags == 0x01 # end of partition
-        doc: |
-          Usually something that extends Unfiltered, which has Kind enum of either ROW or RANGE_TOMBSTONE_MARKER
+        doc: Usually something that extends Unfiltered, i.e. either a Row or RangeTombstoneMarker
 
   partition_header:
     seq:
       - id: key_length
         type: u2
-
       - id: key
         size: key_length
-        doc: |
-          Concatenated bytes of partition key columns
-
+        doc: Concatenated bytes of partition key columns
       - id: deletion_time
         type: deletion_time
 
@@ -74,22 +79,22 @@ types:
           cases:
             0x02: range_tombstone_marker
             _: row
-        if: flags != 0x01
+        if: (flags & 0x01) != 0
     doc: |
       Either a Row or a RangeTombstoneMarker
 
   row:
     seq:
-      - id: extended_flags # optional
+      - id: extended_flags
         type: u1
-        if: _parent.flags & 0x80 != 0 # EXTENSION_FLAG from https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L77
+        if: (_parent.flags & 0x80) != 0 # EXTENSION_FLAG from https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L77
         doc: |
           Included if the EXTENSION_FLAG is set in the flags
           Always set for a static row or if there is a "shadowable" deletion
 
-      - id: clustering_blocks # optional
+      - id: clustering_blocks
         type: clustering_blocks
-        if: (_parent.flags & 0x80 == 0) or (extended_flags & 0x01 == 0) # if row is not static
+        if: ((_parent.flags & 0x80) == 0) or ((extended_flags & 0x01) == 0) # if row is not static
 
       - id: row_body_size
         type: vint
@@ -101,15 +106,15 @@ types:
 
       - id: liveness_info
         type: liveness_info
-        if: _parent.flags & 0x04 != 0 # HAS_TIMESTAMP set
+        if: (_parent.flags & 0x04) != 0 # HAS_TIMESTAMP set
 
       - id: deletion_time
         type: delta_deletion_time
-        if: _parent.flags & 0x10 != 0 # HAS_DELETION set
+        if: (_parent.flags & 0x10) != 0 # HAS_DELETION set
 
       - id: columns_bitmask
         type: columns_bitmask
-        if: _parent.flags & 0x20 == 0 # HAS_ALL_COLUMNS not set
+        if: (_parent.flags & 0x20) == 0 # HAS_ALL_COLUMNS not set
         doc: |
           Compare columns in this row to set of all columns in Memtable
           Encodes which columns missing when less than 64 columns; otherwise more complex
@@ -122,7 +127,7 @@ types:
           switch-on: _root.deserialization_helper.is_complex.as<b1>
           cases:
             true: complex_cell
-            false: simple_cell(false)
+            false: simple_cell(false) # "false" means "not a child of a complex cell"
         repeat: expr
         repeat-expr: _root.deserialization_helper.get_n_cols.as<u4>
 
@@ -141,26 +146,26 @@ types:
           vs a live row where content cells are empty (no live content cells, but this primary key liveness info is NOT empty)
           If this is not empty, stores LivenessInfo.timestamp as delta from EncodingStats.minTimestamp
 
-      - id: delta_ttl # optional
+      - id: delta_ttl
         type: vint
-        if: _parent._parent.flags & 0x08 != 0 # HAS_TTL flag on `unfiltered`
+        if: (_parent._parent.flags) & 0x08 != 0 # HAS_TTL flag on `unfiltered`
         doc: |
           ExpiringLivenessInfo.ttl() is encoded as a variable sized integer delta from EncodingStats.minTTL
 
-      - id: primary_key_liveness_deletion_time # optional
+      - id: primary_key_liveness_deletion_time
         type: vint
-        if: _parent._parent.flags & 0x08 != 0 # HAS_TTL flag on `unfiltered`
+        if: (_parent._parent.flags) & 0x08 != 0 # HAS_TTL flag on `unfiltered`
         doc: |
           ExpiringLivenessInfo.localExpirationTime() is encoded as a variable sized integer delta from EncodingStats.minLocalDeletionTime
 
   delta_deletion_time:
     seq:
-      - id: delta_marked_for_delete_at # optional
+      - id: delta_marked_for_delete_at
         type: vint
         doc: |
           DeletionTime.markedForDeleteAt() is encoded as a variable sized integer delta from EncodingStats.minTimestamp
 
-      - id: delta_local_deletion_time # optional
+      - id: delta_local_deletion_time
         type: vint
         doc: |
           DeletionTime.localDeletionTime() is encoded as a variable sized integer delta from EncodingStats.minLocalDeletionTime.
@@ -175,15 +180,15 @@ types:
 
       - id: delta_timestamp
         type: vint
-        if: flags & 0x08 == 0 # USE_ROW_TIMESTAMP_MASK flag is off
+        if: (flags & 0x08) == 0 # USE_ROW_TIMESTAMP_MASK flag is off
 
       - id: delta_local_deletion_time
         type: vint
-        if: (flags & 0x10 == 0) and ((flags & 0x01 != 0) or (flags & 0x02 != 0)) # if the cell does NOT use row TTL, and (the cell is deleted or it is expiring)
+        if: ((flags & 0x10) == 0) and (((flags & 0x01) != 0) or ((flags & 0x02) != 0)) # if the cell does NOT use row TTL, and (the cell is deleted or it is expiring)
 
       - id: delta_ttl
         type: vint
-        if: (flags & 0x10 == 0) and (flags & 0x02 != 0) # if cell does not use row TTL, and it is expiring
+        if: ((flags & 0x10) == 0) and ((flags & 0x02) != 0) # if cell does not use row TTL, and it is expiring
 
       - id: path
         type: cell_path
@@ -191,7 +196,7 @@ types:
 
       - id: value
         type: cell_value
-        if: flags & 0x04 == 0 # only if does not have empty value
+        if: (flags & 0x04) == 0 # only if does not have empty value
 
       - id: tmp_
         if: not complex
@@ -217,11 +222,11 @@ types:
     seq:
       - id: complex_deletion_time
         type: delta_deletion_time
-        if: _parent._parent.flags & 0x40 != 0 # HAS_COMPLEX_DELETION set on row
+        if: (_parent._parent.flags & 0x40) != 0 # HAS_COMPLEX_DELETION set on row
       - id: items_count
         type: vint
       - id: simple_cell
-        type: simple_cell(true)
+        type: simple_cell(true) # "true" means "is a child of a complex cell"
         repeat: expr
         repeat-expr: items_count.val.as<u4>
       - id: tmp_
@@ -229,10 +234,27 @@ types:
 
   # ============================== RANGE TOMBSTONE MARKERS ==============================
 
+
   range_tombstone_marker:
     seq:
       - id: kind # stored as ordinal
         type: u1
+        doc: |
+          The kind of clustering prefix this is
+          See https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L56
+          Specifies the index of the kind in the following enum:
+          ```java
+          public enum Kind {
+            EXCL_END_BOUND              (0, -1),
+            INCL_START_BOUND            (0, -1),
+            EXCL_END_INCL_START_BOUNDARY(0, -1),
+            STATIC_CLUSTERING           (1, -1),
+            CLUSTERING                  (2,  0),
+            INCL_END_EXCL_START_BOUNDARY(3,  1),
+            INCL_END_BOUND              (3,  1),
+            EXCL_START_BOUND            (3,  1);
+          }
+          ```
       - id: bound_values_count
         type: u2
       - id: clustering_blocks

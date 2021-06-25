@@ -46,14 +46,6 @@ arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std:
     ARROW_RETURN_NOT_OK(maybe_ostream);
     auto ostream = *maybe_ostream;
 
-    // auto maybe_file = arrow::io::FileOutputStream::Open("data.bin");
-    // if (!maybe_file.ok())
-    // {
-    //     perror("couldn't open filesystem");
-    //     exit(1);
-    // }
-    // auto file = *maybe_file;
-
     std::cout << "making stream writer\n";
     auto maybe_writer = arrow::ipc::MakeStreamWriter(ostream, schema);
     ARROW_RETURN_NOT_OK(maybe_writer);
