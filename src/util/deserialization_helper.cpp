@@ -30,7 +30,7 @@ const std::set<std::string> is_multi_cell{
     "org.apache.cassandra.db.marshal.MapType",
     "org.apache.cassandra.db.marshal.SetType"};
 
-const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = {
+const std::vector< std::shared_ptr< strvec > > deserialization_helper_t::colkinds = {
     std::make_shared<strvec>(),
     std::make_shared<strvec>(),
     std::make_shared<strvec>()};

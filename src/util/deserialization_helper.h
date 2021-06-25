@@ -4,7 +4,9 @@
 #include <kaitai/kaitaistream.h>
 #include <cmath>
 #include <vector>
+#include <memory>
 #include <string>
+#include <assert.h>
 #include <map>
 #include <set>
 
