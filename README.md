@@ -16,13 +16,17 @@ A project for parsing SSTables, used by the Apache Cassandra database, via the [
 
 The big picture goal is to allow GPU-accelerated analytic queries natively (or as close to it as possible) on the Cassandra database. This would enable our clients to do more analysis using the data and open the path to future developments.
 
-1. Currently, the only easy way to do this is to load the database using the C* driver (most likely in Python), and then convert it to a `pandas` DataFrame for calculations. Then we can convert the `pd.DataFrame` to a `cudf.DataFrame` for GPU acceleration.
+1. Currently, the only easy way to do this is to load the database using the Cassandra driver (most likely in Python), and then convert it to a `pandas` DataFrame for calculations. Then we can convert the `pd.DataFrame` to a `cudf.DataFrame` for GPU acceleration.
 
-2. To get past any abstractions in the driver, our next approach used the Cassandra server source code (both OSS and DSE) to read the SSTable files directly in Java. Then, we used the [Apache Arrow Java API](http://arrow.apache.org/docs/java/index.html) to convert the partitions into a series of Arrow `RecordBatch`es. We can then pass these record batches through a `VectorSchemaRoot` to write them in the Arrow streaming format to a network socket output stream. On the client side in Python, we can then read the data using `pyarrow` into a `pyarrow.Table`, which converts to a `cudf.DataFrame` with little overhead.
+2. We can marginally optimize the above by converting the data from the driver into an Arrow Table instead of a pandas DataFrame. We can then turn the Table into a `cudf.DataFrame` with minimal (zero?) overhead.
 
-3. At the current stage, to prepare for future parallelization using `CUDA`, we decided to try and read the SSTable files using C++. This introduces the difficult step of reading complex binary files. To solve this, we decided to use the [Kaitai Struct](https://kaitai.io/) library to write declarative format specifications using `YAML` files. This will greatly decrease the cost of maintaining different database formats in the future as it is close to self-documenting. It also has the benefit of working across languages. This is currently in progress as I'm working to add more types and making sure the conversions from Cassandra to Arrow types goes well.
+3. To avoid using the driver and putting load on the Cassandra database, our next approach uses the Cassandra server source code (both OSS and DSE) to read the SSTable files. Then, we can use the [Apache Arrow Java API](http://arrow.apache.org/docs/java/index.html) to convert the partitions into a series of Arrow `RecordBatch`es (essentially tables). We can then write these batches using the Arrow streaming format to a network socket output stream. On the client side in Python, we can then read the data using `pyarrow` into a `pyarrow.Table`, which converts to a `cudf.DataFrame` as above.
 
-4. The next step will be to actually introduce parallelization using CUDA.
+4. At the current stage (this project), to prepare for future parallelization using `CUDA` and to avoid the overhead of using JVM and spinning up Cassandra, we decided to try and read the SSTable files with our own implementation using C++. To read the complex SSTable binary files, we decided to use the [Kaitai Struct](https://kaitai.io/) library to write declarative format specifications using `.ksy` (essentially `YAML`) files. This will greatly decrease the cost of maintaining different database formats in the future and help with migration issues as it is easier to document. It also has the benefit of working across languages, including being able to compile to graphviz for some cool visualizations:
+
+    ![flowchart of Data.db file](visualization/results/data.png)
+
+5. The next step will be to actually introduce GPU parallelization using CUDA. (TODO)
 
 ## Getting started
 
