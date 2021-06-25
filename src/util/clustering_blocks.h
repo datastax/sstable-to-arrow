@@ -1,6 +1,7 @@
 #ifndef CLUSTERING_BLOCKS_H_
 #define CLUSTERING_BLOCKS_H_
 
+#include <kaitai/kaitaistruct.h>
 #include <kaitai/kaitaistream.h>
 #include <algorithm>
 #include <vector>
@@ -8,7 +9,7 @@
 #include "deserialization_helper.h"
 #include "vint.h"
 
-class clustering_blocks_t
+class clustering_blocks_t : public kaitai::kstruct
 {
     std::vector<std::string> values_;
 

@@ -1,6 +1,6 @@
 #include "columns_bitmask.h"
 
-columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks)
+columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     vint_t vint(ks);
     long long encoded = vint.val();

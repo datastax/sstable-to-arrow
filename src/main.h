@@ -11,7 +11,6 @@
 #include "sstable_statistics.h"
 #include "sstable_data.h"
 #include "sstable_index.h"
-
 #include "sstable_to_arrow.h"
 #include "deserialization_helper.h"
 

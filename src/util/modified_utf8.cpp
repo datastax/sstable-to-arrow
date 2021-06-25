@@ -2,7 +2,7 @@
 
 // see https://docs.oracle.com/javase/7/docs/api/java/io/DataInput.html#modified-utf-8
 
-modified_utf8_t::modified_utf8_t(kaitai::kstream *ks)
+modified_utf8_t::modified_utf8_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     char c, p = 0xff;
     while (true)

@@ -6,6 +6,9 @@ all_objs = $(util_types) $(kaitai_types) $(driver_files)
 main: out $(foreach obj,$(all_objs),out/$(obj).o)
 	g++ -std=c++11 $(foreach file,$(all_objs),out/$(file).o) -lkaitai_struct_cpp_stl_runtime -larrow -o main
 
+debug: out $(foreach obj,$(all_objs),out/$(obj).debug.o)
+	g++ -std=c++11 $(foreach file,$(all_objs),out/$(file).debug.o) -lkaitai_struct_cpp_stl_runtime -larrow -o main -g
+
 out:
 	mkdir -p out
 
@@ -17,6 +20,10 @@ out/$(1).o: src/$(1).cpp src/$(1).h
 	cp src/$(1).cpp src/$(1).h out
 	g++ -std=c++11 -c out/$(1).cpp -o out/$(1).o
 
+out/$(1).debug.o: src/$(1).cpp src/$(1).h
+	cp src/$(1).cpp src/$(1).h out
+	g++ -std=c++11 -c out/$(1).cpp -o out/$(1).debug.o -g
+
 endef
 
 define ksy_to_cpp
@@ -24,6 +31,8 @@ out/$(1).cpp: src/ksy/$(1).ksy
 	kaitai-struct-compiler --opaque-types true --outdir out --target cpp_stl --cpp-standard 11 "src/ksy/$(1).ksy"
 out/$(1).o: out/$(1).cpp $(foreach type,$(util_types),out/$(type).h)
 	g++ -std=c++11 -c out/$(1).cpp -o out/$(1).o
+out/$(1).debug.o: out/$(1).cpp $(foreach type,$(util_types),out/$(type).h)
+	g++ -std=c++11 -c out/$(1).cpp -o out/$(1).debug.o -g
 
 endef
 
@@ -34,6 +43,8 @@ out/$(1).h:
 	cp src/util/$(1).h out
 out/$(1).o: out/$(1).cpp out/$(1).h
 	g++ -std=c++11 -c out/$(1).cpp -o out/$(1).o
+out/$(1).debug.o: out/$(1).cpp out/$(1).h
+	g++ -std=c++11 -c out/$(1).cpp -o out/$(1).debug.o -g
 
 endef
 

@@ -79,7 +79,7 @@ types:
           cases:
             0x02: range_tombstone_marker
             _: row
-        if: (flags & 0x01) != 0
+        if: (flags & 0x01) == 0
     doc: |
       Either a Row or a RangeTombstoneMarker
 

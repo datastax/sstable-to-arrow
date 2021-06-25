@@ -43,13 +43,13 @@ docker run --rm --network cassandra -v "$(pwd)/data.cql:/scripts/data.cql" -e CQ
 # to open a CQL shell on the container, run:
 # docker run --rm -it --network cassandra nuvo/docker-cqlsh cqlsh cassandra 9042 --cqlversion='3.4.4'
 # go into the container
-docker exec -it cassandra /bin/bash
+docker exec -t cassandra /opt/cassandra/bin/nodetool flush
 # then run `nodetool flush` to copy the table
 # then run `find / -name *-Data.db -type f`
 # it will print out a list of files
 # find the keyspace you wrote to and copy the path
 # then exit to your local machine and run (replacing the path with the path to your keyspace)
-docker cp cassandra:/path/to/your/keyspace ./res
+docker cp cassandra:/var/lib/cassandra/data/<KEYSPACE> ./res
 # clean up
 docker kill cassandra
 docker network rm cassandra

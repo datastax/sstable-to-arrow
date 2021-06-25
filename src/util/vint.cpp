@@ -1,6 +1,6 @@
 #include "vint.h"
 
-vint_t::vint_t(kaitai::kstream *ks)
+vint_t::vint_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     char first_byte = ks->read_bytes(1)[0];
     if (first_byte >= 0)

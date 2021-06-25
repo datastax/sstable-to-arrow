@@ -1,9 +1,10 @@
 #ifndef VINT_H_
 #define VINT_H_
 
+#include <kaitai/kaitaistruct.h>
 #include <kaitai/kaitaistream.h>
 
-class vint_t
+class vint_t : public kaitai::kstruct
 {
     long long val_;
 

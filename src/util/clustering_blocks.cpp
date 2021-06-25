@@ -5,7 +5,7 @@ const int CLUSTERING = deserialization_helper_t::CLUSTERING;
 /**
  * See https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L351
  */
-clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks)
+clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     int offset = 0;
     int size = deserialization_helper_t::get_n_cols(CLUSTERING);

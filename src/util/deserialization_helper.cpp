@@ -36,7 +36,7 @@ const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = 
     std::make_shared<strvec>()};
 
 // we don't actually want to read any bytes
-deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks_) : ks(ks_) {}
+deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) : kaitai::kstruct(ks) {}
 
 /** Get the number of clustering, static, or regular columns */
 int deserialization_helper_t::get_n_cols(int kind)
@@ -103,5 +103,5 @@ int deserialization_helper_t::get_col_size()
     std::string coltype = get_col_type(curkind, idx);
     if (is_fixed_len.count(coltype) > 0)
         return is_fixed_len.find(coltype)->second;
-    return vint_t(ks).val();
+    return vint_t(_io()).val();
 }

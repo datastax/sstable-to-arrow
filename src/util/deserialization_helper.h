@@ -1,6 +1,7 @@
 #ifndef DESERIALIZATION_HELPER_H_
 #define DESERIALIZATION_HELPER_H_
 
+#include <kaitai/kaitaistruct.h>
 #include <kaitai/kaitaistream.h>
 #include <cmath>
 #include <vector>
@@ -14,11 +15,10 @@
 extern const std::map<std::string, int> is_fixed_len;
 extern const std::set<std::string> is_multi_cell;
 
-class deserialization_helper_t
+class deserialization_helper_t : public kaitai::kstruct
 {
     int idx;
     int curkind;
-    kaitai::kstream *ks;
 
 public:
     static const int CLUSTERING = 0;
