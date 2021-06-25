@@ -1,4 +1,4 @@
-kaitai_types = deletion_time sstable_index sstable_statistics sstable_summary sstable_data
+kaitai_types = basic_types deletion_time sstable_index sstable_statistics sstable_summary sstable_data
 util_types = vint deserialization_helper clustering_blocks columns_bitmask modified_utf8
 driver_files = sstable_to_arrow main
 all_objs = $(util_types) $(kaitai_types) $(driver_files)

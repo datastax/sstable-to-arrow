@@ -106,18 +106,20 @@ void create_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, cons
     }
 }
 
-arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, const void *val, arrow::MemoryPool *pool)
+arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, const std::string bytes, arrow::MemoryPool *pool)
 {
     std::cout << "appending: " << i << ", " << (*types)[i] << "\n";
     if ((*types)[i] == "org.apache.cassandra.db.marshal.FloatType")
     {
         auto builder = (arrow::FloatBuilder *)(*arr)[i].get();
-        ARROW_RETURN_NOT_OK(builder->Append(*(float *)val));
+        kaitai::kstream ks(bytes);
+        basic_types_t::f4_t val(&ks);
+        ARROW_RETURN_NOT_OK(builder->Append(val.f4()));
     }
     else if ((*types)[i] == "org.apache.cassandra.db.marshal.AsciiType")
     {
         auto builder = (arrow::StringBuilder *)(*arr)[i].get();
-        ARROW_RETURN_NOT_OK(builder->Append(*(std::string *)val));
+        ARROW_RETURN_NOT_OK(builder->Append(bytes));
     }
     else
     {
@@ -155,7 +157,6 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     create_builder(types, names, arr, body->partition_key_type()->body(), "partition key", pool);
 
     std::cout << "saving clustering keys\n";
-
     for (auto &col : *body->clustering_key_types()->array())
         create_builder(types, names, arr, col->body(), "clustering key", pool);
 
@@ -182,19 +183,16 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
                 kind = deserialization_helper_t::STATIC;
             }
 
-            const std::string &val = partition->header()->key();
-            ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, &val, pool));
+            ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, partition->header()->key(), pool));
             for (auto &cell : *row->clustering_blocks()->values())
             {
-                const std::string &val = cell;
-                ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, &val, pool));
+                ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, cell, pool));
             }
 
             for (auto &cell : *row->cells())
             {
                 auto simple_cell = (sstable_data_t::simple_cell_t *)cell.get();
-                const std::string &val = simple_cell->value()->value();
-                ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, &val, pool));
+                ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, simple_cell->value()->value(), pool));
             }
         }
     }

@@ -14,6 +14,7 @@
 #include "clustering_blocks.h"
 #include "sstable_data.h"
 #include "sstable_statistics.h"
+#include "basic_types.h"
 
 #define EXIT_ON_FAILURE(expr)                            \
     do                                                   \
