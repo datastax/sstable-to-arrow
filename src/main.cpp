@@ -18,14 +18,16 @@ int main(int argc, char *argv[])
     std::shared_ptr<arrow::Table> table;
     std::shared_ptr<arrow::Schema> schema;
     EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
-    send_data(schema, table);
-
+    arrow::Status status = send_data(schema, table);
+    if (!status.ok())
+        return 1;
     return 0;
 }
 
-void read_index(std::string path, std::shared_ptr<sstable_index_t> *index)
+void read_index(const std::string &path, std::shared_ptr<sstable_index_t> *index)
 {
-    std::ifstream ifs(path, std::ifstream::binary);
+    std::ifstream ifs;
+    open_stream(path, &ifs);
     kaitai::kstream ks(&ifs);
     *index = std::make_shared<sstable_index_t>(&ks);
 
@@ -42,11 +44,10 @@ void read_index(std::string path, std::shared_ptr<sstable_index_t> *index)
     }
 }
 
-void read_statistics(std::string path, std::shared_ptr<sstable_statistics_t> *statistics)
+void read_statistics(const std::string &path, std::shared_ptr<sstable_statistics_t> *statistics)
 {
-    std::cout << "\n\n===== READING STATISTICS =====\n";
-
-    std::ifstream ifs(path, std::ifstream::binary);
+    std::ifstream ifs;
+    open_stream(path, &ifs);
     kaitai::kstream ks(&ifs);
     *statistics = std::make_shared<sstable_statistics_t>(&ks);
 
@@ -97,11 +98,10 @@ void read_statistics(std::string path, std::shared_ptr<sstable_statistics_t> *st
     }
 }
 
-void read_data(std::string path, std::shared_ptr<sstable_data_t> *sstable)
+void read_data(const std::string &path, std::shared_ptr<sstable_data_t> *sstable)
 {
-    std::cout << "\n\n===== READING DATA =====\n";
-
-    std::ifstream ifs(path, std::ifstream::binary);
+    std::ifstream ifs;
+    open_stream(path, &ifs);
     kaitai::kstream ks(&ifs);
     *sstable = std::make_shared<sstable_data_t>(&ks);
 
@@ -135,5 +135,16 @@ void read_data(std::string path, std::shared_ptr<sstable_data_t> *sstable)
                 }
             }
         }
+    }
+}
+
+void open_stream(const std::string &path, std::ifstream *ifs)
+{
+    std::cout << "opening " << path << '\n';
+    *ifs = std::ifstream(path, std::ifstream::binary);
+    if (!ifs->is_open())
+    {
+        perror("could not open file");
+        exit(1);
     }
 }
