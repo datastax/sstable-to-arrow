@@ -90,9 +90,11 @@ void create_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, cons
     names->push_back(name);
     if (cqltype == "org.apache.cassandra.db.marshal.FloatType")
     {
-        std::cout << "making float builder\n";
         arr->push_back(std::make_shared<arrow::FloatBuilder>(pool));
-        std::cout << "done making float builder\n";
+    }
+    else if (cqltype == "org.apache.cassandra.db.marshal.Int32Type")
+    {
+        arr->push_back(std::make_shared<arrow::UInt32Builder>(pool));
     }
     else if (cqltype == "org.apache.cassandra.db.marshal.AsciiType")
     {
@@ -100,7 +102,7 @@ void create_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, cons
     }
     else
     {
-        perror("unrecognized type:");
+        perror("unrecognized type:\n");
         perror(cqltype.c_str());
         exit(1);
     }
@@ -116,6 +118,13 @@ arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, con
         basic_types_t::f4_t val(&ks);
         ARROW_RETURN_NOT_OK(builder->Append(val.f4()));
     }
+    else if ((*types)[i] == "org.apache.cassandra.db.marshal.Int32Type")
+    {
+        auto builder = (arrow::UInt32Builder *)(*arr)[i].get();
+        kaitai::kstream ks(bytes);
+        basic_types_t::u4_t val(&ks);
+        ARROW_RETURN_NOT_OK(builder->Append(val.u4()));
+    }
     else if ((*types)[i] == "org.apache.cassandra.db.marshal.AsciiType")
     {
         auto builder = (arrow::StringBuilder *)(*arr)[i].get();
@@ -123,7 +132,7 @@ arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, con
     }
     else
     {
-        perror("unrecognized type:");
+        perror("unrecognized type:\n");
         perror((*types)[i].c_str());
         exit(1);
     }
@@ -134,6 +143,8 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string t)
 {
     if (t == "org.apache.cassandra.db.marshal.FloatType")
         return arrow::float32();
+    else if (t == "org.apache.cassandra.db.marshal.Int32Type")
+        return arrow::uint32();
     else if (t == "org.apache.cassandra.db.marshal.AsciiType")
         return arrow::utf8();
     perror("unrecognized type:");

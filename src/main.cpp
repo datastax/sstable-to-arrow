@@ -114,7 +114,6 @@ void read_data(std::string path, std::shared_ptr<sstable_data_t> *sstable)
             if ((unfiltered->flags() & 0x01) != 0)
                 break;
 
-            // u->body()->_io()
             if ((unfiltered->flags() & 0x02) != 0) // range tombstone marker
             {
                 std::cout << "range tombstone marker\n";
