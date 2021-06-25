@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
 
     std::shared_ptr<arrow::Table> table;
     std::shared_ptr<arrow::Schema> schema;
-    EXIT_ON_FAILURE(vector_to_columnar_table(sstable, &schema, &table));
+    EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
     send_data(schema, table);
 
     return 0;
@@ -83,7 +83,7 @@ void read_statistics(std::string path, std::shared_ptr<sstable_statistics_t> *st
         std::cout
             << "name: " << column->name()->body() << "\n"
             << "type: " << column->column_type()->body() << '\n';
-        deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->name()->body());
+        deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->column_type()->body());
     }
 
     std::cout << "\n=== regular columns (" << body->regular_columns()->length()->val() << ") ===\n";
@@ -93,7 +93,7 @@ void read_statistics(std::string path, std::shared_ptr<sstable_statistics_t> *st
         std::cout
             << "name: " << column->name()->body() << "\n"
             << "type: " << column->column_type()->body() << '\n';
-        deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->name()->body());
+        deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->column_type()->body());
     }
 }
 

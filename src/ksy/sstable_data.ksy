@@ -119,7 +119,7 @@ types:
 
       - id: cells
         type:
-          switch-on: _root.deserialization_helper.is_complex_inc.as<b1>
+          switch-on: _root.deserialization_helper.is_complex.as<b1>
           cases:
             true: complex_cell
             false: simple_cell(false)
@@ -193,6 +193,10 @@ types:
         type: cell_value
         if: flags & 0x04 == 0 # only if does not have empty value
 
+      - id: tmp_
+        if: not complex
+        size: _root.deserialization_helper.inc.as<u4>
+
     doc: |
       See https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/BufferCell.java#L209
       for serialization info
@@ -206,11 +210,8 @@ types:
 
   cell_value:
     seq:
-      - id: length
-        type: vint
-        if: true # TODO depends on schema definition
       - id: value
-        size: length.val.as<u4> # TODO depends on schema definition
+        size: _root.deserialization_helper.get_col_size.as<u8> # TODO depends on schema definition
 
   complex_cell:
     seq:
@@ -223,6 +224,8 @@ types:
         type: simple_cell(true)
         repeat: expr
         repeat-expr: items_count.val.as<u4>
+      - id: tmp_
+        size: _root.deserialization_helper.inc.as<u4>
 
   # ============================== RANGE TOMBSTONE MARKERS ==============================
 

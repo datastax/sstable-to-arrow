@@ -30,13 +30,13 @@ const std::set<std::string> is_multi_cell{
     "org.apache.cassandra.db.marshal.MapType",
     "org.apache.cassandra.db.marshal.SetType"};
 
-const std::vector< std::shared_ptr< strvec > > deserialization_helper_t::colkinds = {
+const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = {
     std::make_shared<strvec>(),
     std::make_shared<strvec>(),
     std::make_shared<strvec>()};
 
 // we don't actually want to read any bytes
-deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) {}
+deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks_) : ks(ks_) {}
 
 /** Get the number of clustering, static, or regular columns */
 int deserialization_helper_t::get_n_cols(int kind)
@@ -66,8 +66,13 @@ void deserialization_helper_t::set_col_type(int kind, int i, std::string val)
 int deserialization_helper_t::get_n_clustering_cells(int block) { return std::min(get_n_cols(CLUSTERING) - block * 32, 32); }
 int deserialization_helper_t::get_n_blocks() { return (get_n_cols(CLUSTERING) + 31) / 32; }
 
-bool deserialization_helper_t::is_complex_inc() { return is_multi_cell.count(get_col_type(curkind, idx++)) != 0; }
+bool deserialization_helper_t::is_complex() { return is_multi_cell.count(get_col_type(curkind, idx)) != 0; }
 
+int deserialization_helper_t::inc()
+{
+    idx++;
+    return 0;
+}
 int deserialization_helper_t::set_clustering()
 {
     idx = 0;
@@ -90,4 +95,12 @@ int deserialization_helper_t::get_n_cols()
 {
     // TODO get columns bitmask into consideration
     return get_n_cols(curkind);
+}
+
+int deserialization_helper_t::get_col_size()
+{
+    std::string coltype = get_col_type(curkind, idx);
+    if (is_fixed_len.count(coltype) > 0)
+        return is_fixed_len.find(coltype)->second;
+    return vint_t(ks).val();
 }

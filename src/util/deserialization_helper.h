@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <map>
 #include <set>
+#include "vint.h"
 
 extern const std::map<std::string, int> is_fixed_len;
 extern const std::set<std::string> is_multi_cell;
@@ -17,6 +18,7 @@ class deserialization_helper_t
 {
     int idx;
     int curkind;
+    kaitai::kstream *ks;
 
 public:
     static const int CLUSTERING = 0;
@@ -40,7 +42,9 @@ public:
     int set_static();
     int set_regular();
     int get_n_cols();
-    bool is_complex_inc();
+    bool is_complex();
+    int get_col_size();
+    int inc();
 };
 
 #endif

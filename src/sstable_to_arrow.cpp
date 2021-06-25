@@ -1,24 +1,13 @@
 // See http://arrow.apache.org/docs/cpp/examples/row_columnar_conversion.html
 
 #include "sstable_to_arrow.h"
-#include <iostream>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arrow/ipc/api.h>
-#include <arrow/io/api.h>
-#include <arrow/filesystem/api.h>
-#include <sstream>
-#include "clustering_blocks.h"
+
 #define FAIL_ON_STATUS(x, msg) \
     if ((x) < 0)               \
     {                          \
         perror((msg));         \
         exit(1);               \
     }
-
-using arrow::StringBuilder;
-using std::unique_ptr;
 
 const int PORT = 9143;
 
@@ -91,17 +80,93 @@ arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std:
     return arrow::Status::OK();
 }
 
-arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
+typedef const std::shared_ptr<std::vector<std::string>> str_arr_t;
+typedef const std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> builder_arr_t;
+
+void create_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, const std::string cqltype, const std::string name, arrow::MemoryPool *pool)
+{
+    std::cout << cqltype << ", " << name << "\n";
+    types->push_back(cqltype);
+    names->push_back(name);
+    if (cqltype == "org.apache.cassandra.db.marshal.FloatType")
+    {
+        std::cout << "making float builder\n";
+        arr->push_back(std::make_shared<arrow::FloatBuilder>(pool));
+        std::cout << "done making float builder\n";
+    }
+    else if (cqltype == "org.apache.cassandra.db.marshal.AsciiType")
+    {
+        arr->push_back(std::make_shared<arrow::StringBuilder>(pool));
+    }
+    else
+    {
+        perror("unrecognized type:");
+        perror(cqltype.c_str());
+        exit(1);
+    }
+}
+
+arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, const void *val, arrow::MemoryPool *pool)
+{
+    std::cout << "appending: " << i << ", " << (*types)[i] << "\n";
+    if ((*types)[i] == "org.apache.cassandra.db.marshal.FloatType")
+    {
+        auto builder = (arrow::FloatBuilder *)(*arr)[i].get();
+        ARROW_RETURN_NOT_OK(builder->Append(*(float *)val));
+    }
+    else if ((*types)[i] == "org.apache.cassandra.db.marshal.AsciiType")
+    {
+        auto builder = (arrow::StringBuilder *)(*arr)[i].get();
+        ARROW_RETURN_NOT_OK(builder->Append(*(std::string *)val));
+    }
+    else
+    {
+        perror("unrecognized type:");
+        perror((*types)[i].c_str());
+        exit(1);
+    }
+    return arrow::Status::OK();
+}
+
+std::shared_ptr<arrow::DataType> get_arrow_type(const std::string t)
+{
+    if (t == "org.apache.cassandra.db.marshal.FloatType")
+        return arrow::float32();
+    else if (t == "org.apache.cassandra.db.marshal.AsciiType")
+        return arrow::utf8();
+    perror("unrecognized type:");
+    perror(t.c_str());
+    exit(1);
+    return nullptr;
+}
+
+arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
 {
     arrow::MemoryPool *pool = arrow::default_memory_pool();
 
-    StringBuilder key_builder(pool);
-    StringBuilder teacher_builder(pool);
-    StringBuilder level_builder(pool);
+    auto &ptr = (*statistics->toc()->array())[3];
+    auto body = (sstable_statistics_t::serialization_header_t *)ptr->body();
 
-    for (unique_ptr<sstable_data_t::partition_t> &partition : *sstable->partitions())
+    str_arr_t types = std::make_shared<std::vector<std::string>>();
+    str_arr_t names = std::make_shared<std::vector<std::string>>();
+    builder_arr_t arr = std::make_shared<std::vector<std::shared_ptr<arrow::ArrayBuilder>>>();
+
+    std::cout << "saving partition key\n";
+    create_builder(types, names, arr, body->partition_key_type()->body(), "partition key", pool);
+
+    std::cout << "saving clustering keys\n";
+
+    for (auto &col : *body->clustering_key_types()->array())
+        create_builder(types, names, arr, col->body(), "clustering key", pool);
+
+    // TODO handle static columns
+    std::cout << "saving regular columns\n";
+    for (auto &col : *body->regular_columns()->array())
+        create_builder(types, names, arr, col->column_type()->body(), col->name()->body(), pool);
+
+    for (std::unique_ptr<sstable_data_t::partition_t> &partition : *sstable->partitions())
     {
-        for (unique_ptr<sstable_data_t::unfiltered_t> &unfiltered : *partition->unfiltereds())
+        for (std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered : *partition->unfiltereds())
         {
             if ((unfiltered->flags() & 0x01) != 0)
                 break;
@@ -110,42 +175,46 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_data_t> sstable, 
 
             sstable_data_t::row_t *row = (sstable_data_t::row_t *)unfiltered->body();
 
+            int idx = 0;
             int kind = deserialization_helper_t::REGULAR;
             if (((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0))
             {
                 kind = deserialization_helper_t::STATIC;
             }
 
-            ARROW_RETURN_NOT_OK(key_builder.Append(partition->header()->key()));
-            for (std::string &cell : *row->clustering_blocks()->values())
+            const std::string &val = partition->header()->key();
+            ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, &val, pool));
+            for (auto &cell : *row->clustering_blocks()->values())
             {
-                ARROW_RETURN_NOT_OK(teacher_builder.Append(cell));
+                const std::string &val = cell;
+                ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, &val, pool));
             }
 
-            int i = 0;
             for (auto &cell : *row->cells())
             {
-                std::string col_type = deserialization_helper_t::get_col_type(kind, i++);
                 auto simple_cell = (sstable_data_t::simple_cell_t *)cell.get();
-                ARROW_RETURN_NOT_OK(level_builder.Append(simple_cell->value()->value()));
+                const std::string &val = simple_cell->value()->value();
+                ARROW_RETURN_NOT_OK(append_to_builder(types, arr, idx++, &val, pool));
             }
         }
     }
 
-    std::shared_ptr<arrow::Array> key_array;
-    ARROW_RETURN_NOT_OK(key_builder.Finish(&key_array));
-    std::shared_ptr<arrow::Array> teacher_array;
-    ARROW_RETURN_NOT_OK(teacher_builder.Finish(&teacher_array));
-    std::shared_ptr<arrow::Array> level_array;
-    ARROW_RETURN_NOT_OK(level_builder.Finish(&level_array));
+    int n = arr->size();
+    std::cout << n << '\n';
+    std::vector<std::shared_ptr<arrow::Array>> finished_arrays;
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
 
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector = {arrow::field("key", arrow::utf8()),
-                                                                arrow::field("teacher", arrow::utf8()),
-                                                                arrow::field("level", arrow::utf8())};
+    for (int i = 0; i < n; ++i)
+    {
+        std::shared_ptr<arrow::Array> arrptr;
+        ARROW_RETURN_NOT_OK((*arr)[i]->Finish(&arrptr));
+        finished_arrays.push_back(arrptr);
+        schema_vector.push_back(arrow::field((*names)[i], get_arrow_type((*types)[i])));
+    }
 
     *schema = std::make_shared<arrow::Schema>(schema_vector);
 
-    *table = arrow::Table::Make(*schema, {key_array, teacher_array, level_array});
+    *table = arrow::Table::Make(*schema, finished_arrays);
 
     return arrow::Status::OK();
 }
