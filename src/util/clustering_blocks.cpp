@@ -16,21 +16,22 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
         int limit = std::min(size, offset + 32);
         while (offset < limit)
         {
-            std::string type_info = deserialization_helper_t::get_col_type(CLUSTERING, offset);
+            std::string cql_type = deserialization_helper_t::get_col_type(CLUSTERING, offset);
+            auto type_ptr = type_info.find(cql_type);
+
             if (is_null(header, offset))
                 values_[offset] = nullptr; // this is probably unsafe but idk a better way
             else if (is_empty(header, offset))
                 values_[offset] = ks->read_bytes(0);
-            else if (is_fixed_len.count(type_info) != 0) // the type has variable length
+            else if (type_ptr == type_info.end())
             {
-                auto it = is_fixed_len.find(type_info);
-                if (it == is_fixed_len.end())
-                {
-                    std::string err = "Invalid type: " + type_info;
-                    perror(err.c_str());
-                    exit(1);
-                }
-                values_[offset] = ks->read_bytes(it->second);
+                std::string err = "Invalid or unsupported type: " + cql_type;
+                perror(err.c_str());
+                exit(1);
+            }
+            else if (type_ptr->second.fixed_len != 0)
+            {
+                values_[offset] = ks->read_bytes(type_ptr->second.fixed_len);
             }
             else
             {

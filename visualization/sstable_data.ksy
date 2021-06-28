@@ -134,7 +134,7 @@ types:
         type:
           switch-on: _root.replace # is complex
           cases:
-            1: complex_cell # TODO depends on if column is simple or complex
+            1: complex_cell
             0: simple_cell
         repeat: expr
         repeat-expr: _root.replace
@@ -197,7 +197,7 @@ types:
 
       - id: path
         type: cell_path
-        if: 1024 != 0 # TODO _parent.items_count
+        if: 1024 != 0
 
       - id: value
         type: cell_value
@@ -218,9 +218,9 @@ types:
     seq:
       - id: length
         type: s8
-        if: _root.replace != 0 # TODO depends on schema definition
+        if: _root.replace != 0
       - id: value
-        size: length # TODO depends on schema definition
+        size: length
 
   complex_cell:
     seq:

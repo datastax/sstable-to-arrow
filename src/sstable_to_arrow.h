@@ -9,7 +9,9 @@
 #include <arrow/api.h>
 #include <arrow/ipc/api.h>
 #include <arrow/io/api.h>
+#include <arrow/stl.h>
 
+#include "deserialization_helper.h"
 #include "clustering_blocks.h"
 #include "sstable_data.h"
 #include "sstable_statistics.h"

@@ -211,8 +211,10 @@ types:
 
   cell_value:
     seq:
+        # TODO maybe process this differently directly into arrow instead of processing it after?
+        # doesn't change order of complexity, maybe constant factor optimization
       - id: value
-        size: _root.deserialization_helper.get_col_size.as<u8> # TODO depends on schema definition
+        size: _root.deserialization_helper.get_col_size.as<u8>
 
   complex_cell:
     seq:

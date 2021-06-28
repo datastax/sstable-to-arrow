@@ -1,160 +1,36 @@
--- Create a keyspace
-CREATE KEYSPACE IF NOT EXISTS datasets WITH REPLICATION = { 'class': 'SimpleStrategy',
-'replication_factor': '1' };
--- Create a table
-CREATE TABLE IF NOT EXISTS datasets.iris (
-    sepal_length float PRIMARY KEY,
-    sepal_width float,
-    target int
+CREATE KEYSPACE IF NOT EXISTS hello WITH REPLICATION = { 'class': 'SimpleStrategy', 'replication_factor': '1' };
+
+CREATE TABLE IF NOT EXISTS hello.foo (
+    asciival ascii PRIMARY KEY,
+    bigintval bigint,
+    blobval blob,
+    booleanval boolean,
+--    counterval counter,
+    dateval date,
+    decimalval decimal,
+    doubleval double,
+    durationval duration,
+    floatval float,
+--    frozenval frozen,
+    inetval inet,
+    intval int,
+--    listval list,
+--    mapval map,
+--    setval set,
+    smallintval smallint,
+    textval text,
+    timeval time,
+    timestampval timestamp,
+    timeuuidval timeuuid,
+    tinyintval tinyint,
+--    tupleval tuple,
+    uuidval uuid,
+    varcharval varchar,
+    varintval varint
 ) WITH compression = { 'enabled': 'false' };
--- Insert some data (iris dataset)
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.5, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.9, 3.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.7, 3.2, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.6, 3.1, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.6, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.4, 3.9, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.6, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.4, 2.9, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.9, 3.1, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.4, 3.7, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.8, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.8, 3.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.3, 3.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 4.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 4.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.4, 3.9, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.5, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 3.8, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.8, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.4, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.7, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.6, 3.6, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.3, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.8, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.2, 3.5, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.2, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.7, 3.2, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.8, 3.1, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.4, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.2, 4.1, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 4.2, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.9, 3.1, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.2, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 3.5, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.9, 3.6, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.4, 3.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.4, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.5, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.5, 2.3, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.4, 3.2, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.5, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.8, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.8, 3.0, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 3.8, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.6, 3.2, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.3, 3.7, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 3.3, 0);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.0, 3.2, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 3.2, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.9, 3.1, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 2.3, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.5, 2.8, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 2.8, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 3.3, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.9, 2.4, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.6, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.2, 2.7, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 2.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.9, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.0, 2.2, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.1, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.6, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.1, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.6, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 2.7, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.2, 2.2, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.6, 2.5, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.9, 3.2, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.1, 2.8, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 2.5, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.1, 2.8, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.6, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.8, 2.8, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.0, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 2.6, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 2.4, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 2.4, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 2.7, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.0, 2.7, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.4, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.0, 3.4, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.1, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 2.3, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.6, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 2.5, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.5, 2.6, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.1, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 2.6, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.0, 2.3, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.6, 2.7, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 3.0, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.2, 2.9, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.1, 2.5, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 2.8, 1);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 3.3, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 2.7, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.1, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 2.9, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.5, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.6, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (4.9, 2.5, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.3, 2.9, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 2.5, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.2, 3.6, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.5, 3.2, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 2.7, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.8, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.7, 2.5, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 3.2, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.5, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.7, 3.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.7, 2.6, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.0, 2.2, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.9, 3.2, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.6, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.7, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 2.7, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.3, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.2, 3.2, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.2, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.1, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.2, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.4, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.9, 3.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 2.8, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.1, 2.6, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (7.7, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 3.4, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.4, 3.1, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.0, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.9, 3.1, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.1, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.9, 3.1, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.8, 2.7, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.8, 3.2, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.3, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.7, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.3, 2.5, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.5, 3.0, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (6.2, 3.4, 2);
-INSERT INTO datasets.iris (sepal_length, sepal_width, target) VALUES (5.9, 3.0, 2);
+
+insert into hello.foo (
+    asciival , bigintval , blobval , booleanval , dateval , decimalval , doubleval , durationval , floatval , inetval , intval , smallintval , textval , timestampval , timeuuidval , timeval , tinyintval , uuidval , varcharval , varintval
+) VALUES (
+    'foo', 2048, intAsBlob(4096), false, '2021-06-25', 2.718281828, 3.14159265, 12h30m50ms, 6.28, '127.0.0.1', 420, 50, 'barbarbarbar', '2021-06-25T23:40:05.718Z', now(), '23:39:52' , 24, 4e944ad2-d60f-11eb-b8bc-0242ac130003, 'varcharvalvarcharval', 7801234567
+);

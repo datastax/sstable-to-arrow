@@ -12,18 +12,23 @@
 #include <set>
 #include "vint.h"
 
-extern const std::map<std::string, int> is_fixed_len;
+struct cassandra_type
+{
+    std::string cql_name;
+    size_t fixed_len;
+};
+extern const std::map<std::string, struct cassandra_type> type_info;
 extern const std::set<std::string> is_multi_cell;
 
 class deserialization_helper_t : public kaitai::kstruct
 {
-    int idx;
-    int curkind;
-
 public:
     static const int CLUSTERING = 0;
     static const int STATIC = 1;
     static const int REGULAR = 2;
+
+    static int idx;
+    static int curkind;
 
     static const std::vector<std::shared_ptr<std::vector<std::string>>> colkinds;
 
@@ -38,7 +43,6 @@ public:
 
     deserialization_helper_t(kaitai::kstream *ks);
 
-    int set_clustering();
     int set_static();
     int set_regular();
     int get_n_cols();

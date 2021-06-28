@@ -4,16 +4,81 @@ using std::shared_ptr;
 using std::unique_ptr;
 using std::vector;
 
+const char fpath_separator =
+#ifdef _WIN32
+    '\\';
+#else
+    '/';
+#endif
+
+const std::map<std::string, std::string> sstable_files = {
+    {"data", "Data.db"},
+    {"statistics", "Statistics.db"},
+    {"index", "Index.db"}};
+
+bool ends_with(std::string s, std::string end)
+{
+    if (end.size() > s.size())
+        return false;
+    return std::equal(end.rbegin(), end.rend(), s.rbegin());
+}
+
+void get_file_paths(const std::string path, std::map<std::string, std::string> &file_paths)
+{
+    DIR *table_dir = opendir(path.c_str());
+    struct dirent *dent;
+    while ((dent = readdir(table_dir)) != nullptr)
+    {
+        const std::string fname = dent->d_name;
+        for (auto it = sstable_files.begin(); it != sstable_files.end(); ++it)
+            if (ends_with(fname, it->second))
+                file_paths[it->first] = path + fpath_separator + fname;
+    }
+}
+
 int main(int argc, char *argv[])
 {
-    assert(argc == 3); // path to statistics and path to sstable
-
-    // TODO assert files exist
-
-    std::shared_ptr<sstable_statistics_t> statistics;
-    read_statistics(argv[1], &statistics);
+    std::shared_ptr<sstable_index_t> index;
     std::shared_ptr<sstable_data_t> sstable;
-    read_data(argv[2], &sstable);
+    std::shared_ptr<sstable_statistics_t> statistics;
+    std::shared_ptr<sstable_summary_t> summary;
+
+    int opt;
+    while ((opt = getopt(argc, argv, ":t:m:i:")) != -1)
+    {
+        switch (opt)
+        {
+        case 'm':
+            read_summary(optarg, &summary);
+            return 0;
+        case 't':
+            std::cout << "reading statistics\n";
+            read_statistics(optarg, &statistics);
+            return 0;
+        case 'i':
+            read_index(optarg, &index);
+            return 0;
+        default:
+            break;
+        }
+    }
+
+    if (argc < 2)
+    {
+        perror("must specify path to table directory");
+        return 1;
+    }
+
+    const std::string table_dir = argv[1];
+    std::map<std::string, std::string> file_paths;
+    get_file_paths(table_dir, file_paths);
+
+    for (auto it = sstable_files.begin(); it != sstable_files.end(); ++it)
+        assert(file_paths.find(it->first) != file_paths.end());
+
+    read_statistics(file_paths["statistics"], &statistics);
+    read_data(file_paths["data"], &sstable);
+    read_index(file_paths["index"], &index);
 
     std::shared_ptr<arrow::Table> table;
     std::shared_ptr<arrow::Schema> schema;
@@ -81,9 +146,7 @@ void read_statistics(const std::string &path, std::shared_ptr<sstable_statistics
     i = 0;
     for (auto &column : *body->static_columns()->array())
     {
-        std::cout
-            << "name: " << column->name()->body() << "\n"
-            << "type: " << column->column_type()->body() << '\n';
+        std::cout << column->name()->body() << "\t| " << column->column_type()->body() << '\n';
         deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->column_type()->body());
     }
 
@@ -91,9 +154,7 @@ void read_statistics(const std::string &path, std::shared_ptr<sstable_statistics
     i = 0;
     for (auto &column : *body->regular_columns()->array())
     {
-        std::cout
-            << "name: " << column->name()->body() << "\n"
-            << "type: " << column->column_type()->body() << '\n';
+        std::cout << column->name()->body() << "\t| " << column->column_type()->body() << '\n';
         deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->column_type()->body());
     }
 }
@@ -138,9 +199,18 @@ void read_data(const std::string &path, std::shared_ptr<sstable_data_t> *sstable
     }
 }
 
+// TODO
+void read_summary(const std::string &path, std::shared_ptr<sstable_summary_t> *summary)
+{
+    std::ifstream ifs;
+    open_stream(path, &ifs);
+    kaitai::kstream ks(&ifs);
+    *summary = std::make_shared<sstable_summary_t>(&ks);
+}
+
 void open_stream(const std::string &path, std::ifstream *ifs)
 {
-    std::cout << "opening " << path << '\n';
+    std::cout << "\n===== opening " << path << " =====\n";
     *ifs = std::ifstream(path, std::ifstream::binary);
     if (!ifs->is_open())
     {

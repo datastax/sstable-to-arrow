@@ -1,27 +1,50 @@
+/**
+ * Note that we use "kind" to refer to one of "clustering", "static", or "regular",
+ * while we use "type" to refer to the actual data type stored inside a cell,
+ * e.g. org.apache.cassandra.db.marshal.DateType.
+ */
+
 #include "deserialization_helper.h"
 
 #define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
 
 typedef std::vector<std::string> strvec;
 
-// List of Cassandra types with a fixed length
-const std::map<std::string, int> is_fixed_len{
-    {"org.apache.cassandra.db.marshal.BooleanType", 1},
-    {"org.apache.cassandra.db.marshal.ByteType", 1},
-    {"org.apache.cassandra.db.marshal.DoubleType", 8},
-    {"org.apache.cassandra.db.marshal.DateType", 8},
-    {"org.apache.cassandra.db.marshal.EmptyType", 0},
-    {"org.apache.cassandra.db.marshal.FloatType", 4},
-    {"org.apache.cassandra.db.marshal.Int32Type", 4},
-    {"org.apache.cassandra.db.marshal.LexicalUUIDType", 16},
-    {"org.apache.cassandra.db.marshal.LongType", 8},
-    {"org.apache.cassandra.db.marshal.ShortType", 2},
-    {"org.apache.cassandra.db.marshal.TimestampType", 8},
-    {"org.apache.cassandra.db.marshal.TimeUUIDType", 16},
-    {"org.apache.cassandra.db.marshal.UUIDType", 16},
-    // {"org.apache.cassandra.db.marshal.CounterColumnType", 8},
-    // TODO wth does ReversedType do?
-    // https://github.com/apache/cassandra/blob/7486302d3ae4eac334e6669d7d4038b48fa6cce5/src/java/org/apache/cassandra/db/marshal/ReversedType.java#L135
+const std::map<std::string, struct cassandra_type> type_info{
+    {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0}},     // ascii
+    {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1}}, // boolean
+    {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 1}},    // tinyint
+    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0}},      // blob
+    // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
+    // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
+    // {"org.apache.cassandra.db.marshal.DateType", {"", 8}},             // old version of TimestampType
+    // {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0}},   // decimal
+    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8}},     // double
+    // {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0}}, // duration
+    // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
+    // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
+    {"org.apache.cassandra.db.marshal.FloatType", {"float", 4}}, // float
+    // {"org.apache.cassandra.db.marshal.FrozenType", { "", 0 }},
+    // {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 0}}, // inet
+    {"org.apache.cassandra.db.marshal.Int32Type", {"int", 4}},        // int
+    // {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0}},   // varint
+    // {"org.apache.cassandra.db.marshal.LexicalUUIDType", { "", 16 }},
+    // TODO ListType
+    {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8}}, // bigint
+    // TODO MapType
+    // {"org.apache.cassandra.db.marshal.PartitionerDefinedOrder", { "", 0 }}, // not for user-defined
+    // https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/ReversedType.java
+    // {"org.apache.cassandra.db.marshal.ReversedType", { "", 0 }}, // size of descendant
+    // TODO SetType
+    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 2}},      // smallint
+    // {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 0}},     // date
+    // {"org.apache.cassandra.db.marshal.TimeType", {"time", 0}},           // time
+    // {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16}},  // timeuuid
+    // {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8}}, // timestamp
+    // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
+    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0}},  // text, varchar
+    // {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16}}, // uuid
+    // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
 
 // complex types
@@ -32,6 +55,9 @@ const std::set<std::string> is_multi_cell{
 
 // =============== DEFINE STATIC FIELDS ===============
 
+int deserialization_helper_t::idx = 0;
+int deserialization_helper_t::curkind = 0;
+
 const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = {
     std::make_shared<strvec>(),
     std::make_shared<strvec>(),
@@ -39,7 +65,7 @@ const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = 
 
 // =============== METHOD DECLARATIONS ===============
 
-// we don't actually want to read any bytes
+// we don't actually want to read any bytes from the file
 deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) : kaitai::kstruct(ks) {}
 
 /** Get the number of clustering, static, or regular columns */
@@ -48,64 +74,91 @@ int deserialization_helper_t::get_n_cols(int kind)
     CHECK_KIND(kind);
     return colkinds[kind]->size();
 }
-/** Set the number of clustering, static, or regular columns and allocate memory for them */
+/** Set the number of clustering, static, or regular columns (and allocate memory if setting) */
 void deserialization_helper_t::set_n_cols(int kind, int n)
 {
     CHECK_KIND(kind);
     colkinds[kind]->resize(n);
 }
 
-/** Get the data kind stored in this column */
+/** Get the data type stored in this column */
 std::string deserialization_helper_t::get_col_type(int kind, int i)
 {
     CHECK_KIND(kind);
     return (*colkinds[kind])[i];
 }
+/** Set the data type stored in this column */
 void deserialization_helper_t::set_col_type(int kind, int i, std::string val)
 {
     CHECK_KIND(kind);
     (*colkinds[kind])[i] = val;
 }
 
-int deserialization_helper_t::get_n_clustering_cells(int block) { return std::min(get_n_cols(CLUSTERING) - block * 32, 32); }
-int deserialization_helper_t::get_n_blocks() { return (get_n_cols(CLUSTERING) + 31) / 32; }
+/**
+ * In each row, clustering cells are split up into blocks of 32
+ * @returns how many columns are in the `block`-th clustering block
+ */
+int deserialization_helper_t::get_n_clustering_cells(int block)
+{
+    return std::min(get_n_cols(CLUSTERING) - block * 32, 32);
+}
+/**
+ * Gets the number of clustering blocks total. Each one is a group of 32 clustering cells
+ * Equivalent to (int)ceil((double)number_of_clustering_cells / 32.) but I avoid working with floats
+ */
+int deserialization_helper_t::get_n_blocks()
+{
+    return (get_n_cols(CLUSTERING) + 31) / 32;
+}
 
-bool deserialization_helper_t::is_complex() { return is_multi_cell.count(get_col_type(curkind, idx)) != 0; }
+/**
+ * Checks if the currently selected cell is complex (usually a collection like a list, map, set, etc)
+ */
+bool deserialization_helper_t::is_complex()
+{
+    return is_multi_cell.count(get_col_type(curkind, idx)) != 0;
+}
 
-// ===== utility functions called via hacking with type casting in the sstable_data.ksy file =====
+/** =============== utility functions for the sstable_data.ksy file ===============
+ * These are for when we need to evaluate certain portions imperatively due to
+ * restrictions with Kaitai Struct
+ */
 
+// Increment the index of this helper (hover over the next cell)
 int deserialization_helper_t::inc()
 {
     idx++;
     return 0;
 }
-int deserialization_helper_t::set_clustering()
-{
-    idx = 0;
-    curkind = CLUSTERING;
-    return 0;
-}
+// Indicate that we are processing a static row
 int deserialization_helper_t::set_static()
 {
     idx = 0;
     curkind = STATIC;
     return 0;
 }
+// Indicate that we are processing a regular row
 int deserialization_helper_t::set_regular()
 {
     idx = 0;
     curkind = REGULAR;
     return 0;
 }
+// get the number of columns stored in this sstable (aka the "superset" of columns)
+// might not be the actual number of cells stored in this row
+// see columns_bitmask.cpp
 int deserialization_helper_t::get_n_cols()
 {
-    // TODO get columns bitmask into consideration
     return get_n_cols(curkind);
 }
+// Get the size of the cell value in bytes
 int deserialization_helper_t::get_col_size()
 {
     std::string coltype = get_col_type(curkind, idx);
-    if (is_fixed_len.count(coltype) > 0)
-        return is_fixed_len.find(coltype)->second;
+    // check if this data type has a fixed length
+    auto it = type_info.find(coltype);
+    if (it != type_info.end() && it->second.fixed_len != 0)
+        return it->second.fixed_len;
+    // otherwise read the length as a varint
     return vint_t(_io()).val();
 }
