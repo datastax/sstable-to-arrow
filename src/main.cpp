@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    const std::string table_dir = argv[1];
+    const std::string table_dir = argv[optind];
     std::map<std::string, std::string> file_paths;
     get_file_paths(table_dir, file_paths);
 
