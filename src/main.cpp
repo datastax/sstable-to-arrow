@@ -11,10 +11,15 @@ const char fpath_separator =
     '/';
 #endif
 
-const std::map<std::string, std::string> sstable_files = {
-    {"data", "Data.db"},
-    {"statistics", "Statistics.db"},
-    {"index", "Index.db"}};
+struct sstable_files_t
+{
+    std::string data;
+    std::string statistics;
+    std::string index;
+    std::string summary;
+};
+
+std::map<int, struct sstable_files_t> sstables;
 
 bool ends_with(std::string s, std::string end)
 {
@@ -23,16 +28,38 @@ bool ends_with(std::string s, std::string end)
     return std::equal(end.rbegin(), end.rend(), s.rbegin());
 }
 
-void get_file_paths(const std::string path, std::map<std::string, std::string> &file_paths)
+void get_file_paths(const std::string path)
 {
     DIR *table_dir = opendir(path.c_str());
     struct dirent *dent;
     while ((dent = readdir(table_dir)) != nullptr)
     {
-        const std::string fname = dent->d_name;
-        for (auto it = sstable_files.begin(); it != sstable_files.end(); ++it)
-            if (ends_with(fname, it->second))
-                file_paths[it->first] = path + fpath_separator + fname;
+        char fmt[5];
+        int num;
+        char ftype_[10];
+        std::string fname = dent->d_name;
+        if (fname == "." || fname == "..")
+            continue;
+
+        if (sscanf(dent->d_name, "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
+        {
+            std::cout << "Error reading formatted filename\n";
+            continue;
+        }
+        std::string ftype = ftype_;
+        std::string full_path = path + fpath_separator + dent->d_name;
+
+        if (sstables.count(num) == 0)
+            sstables.insert({num, sstable_files_t()});
+
+        if (ftype == "Data")
+            sstables[num].data = full_path;
+        else if (ftype == "Statistics")
+            sstables[num].statistics = full_path;
+        else if (ftype == "Index")
+            sstables[num].index = full_path;
+        else if (ftype == "Summary")
+            sstables[num].summary = full_path;
     }
 }
 
@@ -76,25 +103,27 @@ int main(int argc, char *argv[])
     }
 
     const std::string table_dir = argv[optind];
-    std::map<std::string, std::string> file_paths;
-    get_file_paths(table_dir, file_paths);
+    get_file_paths(table_dir);
 
-    for (auto it = sstable_files.begin(); it != sstable_files.end(); ++it)
-        assert(file_paths.find(it->first) != file_paths.end());
-
-    read_statistics(file_paths["statistics"], &statistics);
-    read_data(file_paths["data"], &sstable);
-    read_index(file_paths["index"], &index);
-
-    if ((flags & NO_NETWORK_FLAG) == 0)
+    for (auto it = sstables.begin(); it != sstables.end(); ++it)
     {
-        std::shared_ptr<arrow::Table> table;
-        std::shared_ptr<arrow::Schema> schema;
-        EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
-        arrow::Status status = send_data(schema, table);
-        if (!status.ok())
-            return 1;
+        std::cout << "\n\n===== Reading SSTable #" << it->first << " =====\n";
+
+        read_statistics(it->second.statistics, &statistics);
+        read_data(it->second.data, &sstable);
+        read_index(it->second.index, &index);
+
+        if ((flags & NO_NETWORK_FLAG) == 0)
+        {
+            std::shared_ptr<arrow::Table> table;
+            std::shared_ptr<arrow::Schema> schema;
+            EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
+            arrow::Status status = send_data(schema, table);
+            if (!status.ok())
+                return 1;
+        }
     }
+
     return 0;
 }
 

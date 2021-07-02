@@ -107,8 +107,11 @@ void create_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, cons
     //     arr->push_back(std::make_shared<arrow::Decimal128Builder>(pool));
     else if (cassandra_type == "org.apache.cassandra.db.marshal.DoubleType") // double
         arr->push_back(std::make_shared<arrow::DoubleBuilder>(pool));
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.DurationType") // duration
-    //     arr->push_back(std::make_shared<arrow::FixedSizeListBuilder>(pool));
+    else if (cassandra_type == "org.apache.cassandra.db.marshal.DurationType") // duration
+    {
+        auto val_builder = std::make_shared<arrow::Int64Builder>(pool);
+        arr->push_back(std::make_shared<arrow::FixedSizeListBuilder>(pool, val_builder, 3));
+    }
     else if (cassandra_type == "org.apache.cassandra.db.marshal.FloatType") // float
         arr->push_back(std::make_shared<arrow::FloatBuilder>(pool));
     else if (cassandra_type == "org.apache.cassandra.db.marshal.InetAddressType") // inet
@@ -175,53 +178,82 @@ arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, con
     std::string cql_type = (*types)[i];
     std::cout << "appending: " << i << ", " << cql_type << "\n";
 
-#define APPEND_VIA_TYPE(c_type, size)                                       \
-    do                                                                      \
-    {                                                                       \
-        auto builder = (arrow::stl::CBuilderType<c_type> *)(*arr)[i].get(); \
-        c_type val;                                                         \
-        memcpy(&val, bytes.c_str(), size);                                  \
-        ARROW_RETURN_NOT_OK(builder->Append(val));                          \
-    } while (false)
+    auto builder_ptr = (*arr)[i].get();
 
-    if (cql_type == "org.apache.cassandra.db.marshal.AsciiType" || cql_type == "org.apache.cassandra.db.marshal.BytesType" || cql_type == "org.apache.cassandra.db.marshal.UTF8Type") // ascii or blob or varchar or text
+    // for ascii or blob or varchar or text, we just return the bytes directly
+    if (cql_type == "org.apache.cassandra.db.marshal.AsciiType" ||
+        cql_type == "org.apache.cassandra.db.marshal.BytesType" ||
+        cql_type == "org.apache.cassandra.db.marshal.UTF8Type")
     {
-        auto builder = (arrow::StringBuilder *)(*arr)[i].get();
+        auto builder = (arrow::StringBuilder *)builder_ptr;
         ARROW_RETURN_NOT_OK(builder->Append(bytes));
+        return arrow::Status::OK();
     }
-    else if (cql_type == "org.apache.cassandra.db.marshal.BooleanType") // boolean
-        APPEND_VIA_TYPE(bool, 1);
-    else if (cql_type == "org.apache.cassandra.db.marshal.ByteType") // tinyint
-        APPEND_VIA_TYPE(int8_t, 1);
-    // else if (cql_type == "org.apache.cassandra.db.marshal.DecimalType") // decimal
-    // {
-    //     auto builder = (arrow::Decimal128Builder *)(*arr)[i].get();
 
-    // }
+    // for all other types, we parse the data using kaitai, which might end up
+    // being a performance bottleneck
+    // TODO look into potential uses of memcpy for optimization
+    kaitai::kstream ks(bytes);
+
+    if (cql_type == "org.apache.cassandra.db.marshal.BooleanType") // boolean
+    {
+        auto builder = (arrow::BooleanBuilder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_u1()));
+    }
+    else if (cql_type == "org.apache.cassandra.db.marshal.ByteType") // tinyint
+    {
+        auto builder = (arrow::Int8Builder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s1()));
+    }
+    else if (cql_type == "org.apache.cassandra.db.marshal.DecimalType") // decimal
+    {
+        auto builder = (arrow::Decimal256Builder *)builder_ptr;
+        // TODO not accurate
+        builder->Append(bytes);
+    }
     else if (cql_type == "org.apache.cassandra.db.marshal.DoubleType") // double
-        APPEND_VIA_TYPE(double, 8);
-    // else if (cql_type == "org.apache.cassandra.db.marshal.DurationType") // duration
-    // {
-    // }
+    {
+        auto builder = (arrow::DoubleBuilder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_f8be()));
+    }
+    else if (cql_type == "org.apache.cassandra.db.marshal.DurationType") // duration
+    {
+        auto builder = (arrow::FixedSizeListBuilder *)builder_ptr;
+        auto value_builder = (arrow::Int64Builder *)builder->value_builder();
+        int months = ks.read_s4be();
+        int days = ks.read_s4be();
+        int nanoseconds = ks.read_s8be();
+        ARROW_RETURN_NOT_OK(builder->Append());
+        ARROW_RETURN_NOT_OK(value_builder->Append(months));
+        ARROW_RETURN_NOT_OK(value_builder->Append(days));
+        ARROW_RETURN_NOT_OK(value_builder->Append(nanoseconds));
+    }
     else if (cql_type == "org.apache.cassandra.db.marshal.FloatType") // float
-        APPEND_VIA_TYPE(float, 4);
+    {
+        auto builder = (arrow::FloatBuilder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_f4be()));
+    }
     // else if (cql_type == "org.apache.cassandra.db.marshal.InetAddressType") // inet
     // {
     // }
     else if (cql_type == "org.apache.cassandra.db.marshal.Int32Type") // int
-        APPEND_VIA_TYPE(int32_t, 4);
+    {
+        auto builder = (arrow::Int32Builder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s4be()));
+    }
     // else if (cql_type == "org.apache.cassandra.db.marshal.IntegerType") // varint
     // {
     // }
     else if (cql_type == "org.apache.cassandra.db.marshal.LongType") // bigint
     {
-        auto builder = (arrow::Int64Builder *)(*arr)[i].get();
-        long long val;
-        memcpy(&val, bytes.c_str(), 8);
-        ARROW_RETURN_NOT_OK(builder->Append(val));
+        auto builder = (arrow::Int64Builder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s8be()));
     }
     else if (cql_type == "org.apache.cassandra.db.marshal.ShortType") // smallint
-        APPEND_VIA_TYPE(short, 2);
+    {
+        auto builder = (arrow::Int16Builder *)builder_ptr;
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s2be()));
+    }
     // else if (cql_type == "org.apache.cassandra.db.marshal.SimpleDateType") // date
     // {
     // }
@@ -244,8 +276,6 @@ arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, con
         perror(cql_type.c_str());
         exit(1);
     }
-
-#undef APPEND_VIA_TYPE
 
     return arrow::Status::OK();
 }

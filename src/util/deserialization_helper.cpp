@@ -5,6 +5,7 @@
  */
 
 #include "deserialization_helper.h"
+#include <iostream>
 
 #define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
 
@@ -18,16 +19,16 @@ const std::map<std::string, struct cassandra_type> type_info{
     // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
     // {"org.apache.cassandra.db.marshal.DateType", {"", 8}},             // old version of TimestampType
-    // {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0}},   // decimal
-    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8}},     // double
-    // {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0}}, // duration
+    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0}},    // decimal
+    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8}},      // double
+    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 16}}, // duration
     // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
     {"org.apache.cassandra.db.marshal.FloatType", {"float", 4}}, // float
     // {"org.apache.cassandra.db.marshal.FrozenType", { "", 0 }},
-    // {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 0}}, // inet
+    {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 4}}, // inet
     {"org.apache.cassandra.db.marshal.Int32Type", {"int", 4}},        // int
-    // {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0}},   // varint
+    {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0}},   // varint
     // {"org.apache.cassandra.db.marshal.LexicalUUIDType", { "", 16 }},
     // TODO ListType
     {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8}}, // bigint
@@ -36,14 +37,14 @@ const std::map<std::string, struct cassandra_type> type_info{
     // https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/ReversedType.java
     // {"org.apache.cassandra.db.marshal.ReversedType", { "", 0 }}, // size of descendant
     // TODO SetType
-    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 2}},      // smallint
-    // {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 0}},     // date
-    // {"org.apache.cassandra.db.marshal.TimeType", {"time", 0}},           // time
-    // {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16}},  // timeuuid
-    // {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8}}, // timestamp
+    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 2}},  // smallint
+    {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 4}}, // date, represented as 32-bit unsigned
+    {"org.apache.cassandra.db.marshal.TimeType", {"time", 8}},           // time
+    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16}}, // timeuuid
+    {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8}}, // timestamp
     // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0}},  // text, varchar
-    // {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16}}, // uuid
+    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0}}, // text, varchar
+    {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16}}, // uuid
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
 
@@ -133,6 +134,7 @@ int deserialization_helper_t::inc()
 // Indicate that we are processing a static row
 int deserialization_helper_t::set_static()
 {
+    std::cout << "begin processing static row\n";
     idx = 0;
     curkind = STATIC;
     return 0;
@@ -140,6 +142,7 @@ int deserialization_helper_t::set_static()
 // Indicate that we are processing a regular row
 int deserialization_helper_t::set_regular()
 {
+    std::cout << "begin processing regular row\n";
     idx = 0;
     curkind = REGULAR;
     return 0;
@@ -155,10 +158,20 @@ int deserialization_helper_t::get_n_cols()
 int deserialization_helper_t::get_col_size()
 {
     std::string coltype = get_col_type(curkind, idx);
+    std::cout << "getting col size of " << coltype << "\n";
     // check if this data type has a fixed length
     auto it = type_info.find(coltype);
-    if (it != type_info.end() && it->second.fixed_len != 0)
-        return it->second.fixed_len;
+    if (it == type_info.end())
+    {
+        perror(("unrecognized type: " + coltype).c_str());
+        exit(1);
+    }
+    long long len;
+    if (it->second.fixed_len != 0)
+        len = it->second.fixed_len;
     // otherwise read the length as a varint
-    return vint_t(_io()).val();
+    else
+        len = vint_t(_io()).val();
+    std::cout << "length: " << len << '\n';
+    return len;
 }
