@@ -1,6 +1,16 @@
 .vscode/
-out/
-.DS_Store
-main
-tmp/
-*.bin
+build/
+sstable_to_arrow
+
+# cmake stuff
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
