@@ -36,6 +36,8 @@ void get_file_paths(const std::string path, std::map<std::string, std::string> &
     }
 }
 
+const int NO_NETWORK_FLAG = 0x01;
+
 int main(int argc, char *argv[])
 {
     std::shared_ptr<sstable_index_t> index;
@@ -43,8 +45,9 @@ int main(int argc, char *argv[])
     std::shared_ptr<sstable_statistics_t> statistics;
     std::shared_ptr<sstable_summary_t> summary;
 
+    int flags = 0;
     int opt;
-    while ((opt = getopt(argc, argv, ":t:m:i:")) != -1)
+    while ((opt = getopt(argc, argv, ":t:m:i:n")) != -1)
     {
         switch (opt)
         {
@@ -58,6 +61,9 @@ int main(int argc, char *argv[])
         case 'i':
             read_index(optarg, &index);
             return 0;
+        case 'n': // turn off sending via network
+            flags |= NO_NETWORK_FLAG;
+            break;
         default:
             break;
         }
@@ -80,12 +86,15 @@ int main(int argc, char *argv[])
     read_data(file_paths["data"], &sstable);
     read_index(file_paths["index"], &index);
 
-    std::shared_ptr<arrow::Table> table;
-    std::shared_ptr<arrow::Schema> schema;
-    EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
-    arrow::Status status = send_data(schema, table);
-    if (!status.ok())
-        return 1;
+    if ((flags & NO_NETWORK_FLAG) == 0)
+    {
+        std::shared_ptr<arrow::Table> table;
+        std::shared_ptr<arrow::Schema> schema;
+        EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
+        arrow::Status status = send_data(schema, table);
+        if (!status.ok())
+            return 1;
+    }
     return 0;
 }
 

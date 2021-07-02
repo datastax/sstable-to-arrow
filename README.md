@@ -31,6 +31,7 @@ The big picture goal is to allow GPU-accelerated analytic queries natively (or a
 ## Getting started
 
 1. This project depends on [Kaitai Struct](`https://kaitai.io/#download`), the [Kaitai Struct C++/STL runtime library](https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime), and [Apache Arrow for C++](http://arrow.apache.org/docs/cpp/cmake.html). (Note: if you are manually building Arrow and using other Arrow features like the filesystem interface `arrow::fs`, make sure to check [if you need to include any optional components](http://arrow.apache.org/docs/developers/cpp/building.html#optional-components).)
+    * This requires `-DARROW_COMPUTE=ON` (and `-DARROW_CUDA=ON` in the future).
 
 2. Get an SSTable. If you don't have one on hand, you can create one using CQL and the Cassandra Docker image. See [the quickstart](https://cassandra.apache.org/quickstart/) for more info.
 
@@ -65,3 +66,7 @@ The visualizations are currently quite rudimentary due to limitations of kaitai 
 
 - test for different types
 - make sure tombstone markers are implemented correctly
+- build via cmake? to make things easier
+- deduplication?
+- timing / load testing
+- Collect stats

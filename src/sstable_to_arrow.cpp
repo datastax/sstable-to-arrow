@@ -132,7 +132,7 @@ void create_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, cons
     else if (cassandra_type == "org.apache.cassandra.db.marshal.UTF8Type") // text, varchar
         arr->push_back(std::make_shared<arrow::StringBuilder>(pool));
     // else if (cassandra_type == "org.apache.cassandra.db.marshal.UUIDType") // uuid
-    //     arr->push_back(std::make_shared<arrow::FixedSizeBinaryBuilder>(pool));
+    //     arr->push_back(std::make_shared<arrow::StructBuilder>(pool));
 
     // TODO other types
     // else if (cassandra_type == "org.apache.cassandra.db.marshal.CollectionType")
@@ -214,7 +214,12 @@ arrow::Status append_to_builder(str_arr_t &types, builder_arr_t &arr, int i, con
     // {
     // }
     else if (cql_type == "org.apache.cassandra.db.marshal.LongType") // bigint
-        APPEND_VIA_TYPE(long long, 8);
+    {
+        auto builder = (arrow::Int64Builder *)(*arr)[i].get();
+        long long val;
+        memcpy(&val, bytes.c_str(), 8);
+        ARROW_RETURN_NOT_OK(builder->Append(val));
+    }
     else if (cql_type == "org.apache.cassandra.db.marshal.ShortType") // smallint
         APPEND_VIA_TYPE(short, 2);
     // else if (cql_type == "org.apache.cassandra.db.marshal.SimpleDateType") // date
