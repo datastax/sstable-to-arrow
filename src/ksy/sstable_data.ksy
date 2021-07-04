@@ -38,7 +38,7 @@ types:
       - id: unfiltereds # either row or range_tombstone_marker
         type: unfiltered
         repeat: until
-        repeat-until: _.flags == 0x01 # end of partition
+        repeat-until: (_.flags & 0x01) != 0 # end of partition
         doc: Usually something that extends Unfiltered, i.e. either a Row or RangeTombstoneMarker
 
   partition_header:
@@ -148,12 +148,12 @@ types:
 
       - id: delta_ttl
         type: vint
-        if: (_parent._parent.flags) & 0x08 != 0 # HAS_TTL flag on `unfiltered`
+        if: (_parent._parent.flags & 0x08) != 0 # HAS_TTL flag on `unfiltered`
         doc: delta from EncodingStats.minTTL
 
       - id: primary_key_liveness_deletion_time
         type: vint
-        if: (_parent._parent.flags) & 0x08 != 0 # HAS_TTL flag on `unfiltered`
+        if: (_parent._parent.flags & 0x08) != 0 # HAS_TTL flag on `unfiltered`
         doc: delta from EncodingStats.minLocalDeletionTime
 
   delta_deletion_time:
@@ -190,8 +190,10 @@ types:
         type: cell_path
         if: complex
 
+        # TODO maybe process this differently directly into arrow instead of processing it after?
+        # doesn't change order of complexity, maybe constant factor optimization
       - id: value
-        type: cell_value
+        size: _root.deserialization_helper.get_col_size.as<u8>
         if: (flags & 0x04) == 0 # only if does not have empty value
 
       - id: tmp_
@@ -209,13 +211,6 @@ types:
       - id: value
         size: length.val.as<u4>
 
-  cell_value:
-    seq:
-        # TODO maybe process this differently directly into arrow instead of processing it after?
-        # doesn't change order of complexity, maybe constant factor optimization
-      - id: value
-        size: _root.deserialization_helper.get_col_size.as<u8>
-
   complex_cell:
     seq:
       - id: complex_deletion_time
@@ -223,7 +218,7 @@ types:
         if: (_parent._parent.flags & 0x40) != 0 # HAS_COMPLEX_DELETION set on row
       - id: items_count
         type: vint
-      - id: simple_cell
+      - id: simple_cells
         type: simple_cell(true) # "true" means "is a child of a complex cell"
         repeat: expr
         repeat-expr: items_count.val.as<u4>

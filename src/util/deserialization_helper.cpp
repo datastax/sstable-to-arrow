@@ -11,40 +11,46 @@
 
 typedef std::vector<std::string> strvec;
 
+arrow::FieldVector decimal_fields{
+    arrow::field("scale", arrow::int32()), arrow::field("val", arrow::binary())};
+
 const std::map<std::string, struct cassandra_type> type_info{
-    {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0}},     // ascii
-    {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1}}, // boolean
-    {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 1}},    // tinyint
-    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0}},      // blob
+    {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0, arrow::utf8()}},        // ascii
+    {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1, arrow::boolean()}}, // boolean
+    {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 1, arrow::int8()}},       // tinyint
+    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary()}},       // blob
     // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
     // {"org.apache.cassandra.db.marshal.DateType", {"", 8}},             // old version of TimestampType
-    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0}},    // decimal
-    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8}},      // double
-    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 16}}, // duration
+    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0, arrow::struct_(decimal_fields)}}, // decimal, custom implementation
+    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}},                 // double
+    {"org.apache.cassandra.db.marshal.DurationType", {
+                                                         "duration",
+                                                         16,
+                                                     }}, // duration
     // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.FloatType", {"float", 4}}, // float
+    {"org.apache.cassandra.db.marshal.FloatType", {"float", 4, arrow::float32()}}, // float
     // {"org.apache.cassandra.db.marshal.FrozenType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 4}}, // inet
-    {"org.apache.cassandra.db.marshal.Int32Type", {"int", 4}},        // int
-    {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0}},   // varint
+    {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 0, arrow::int32()}}, // inet
+    {"org.apache.cassandra.db.marshal.Int32Type", {"int", 4, arrow::int32()}},        // int
+    {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0, arrow::binary()}},  // varint
     // {"org.apache.cassandra.db.marshal.LexicalUUIDType", { "", 16 }},
     // TODO ListType
-    {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8}}, // bigint
+    {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8, arrow::int64()}}, // bigint
     // TODO MapType
     // {"org.apache.cassandra.db.marshal.PartitionerDefinedOrder", { "", 0 }}, // not for user-defined
     // https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/ReversedType.java
     // {"org.apache.cassandra.db.marshal.ReversedType", { "", 0 }}, // size of descendant
     // TODO SetType
-    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 2}},  // smallint
-    {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 4}}, // date, represented as 32-bit unsigned
-    {"org.apache.cassandra.db.marshal.TimeType", {"time", 8}},           // time
-    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16}}, // timeuuid
-    {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8}}, // timestamp
+    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 2, arrow::int16()}},                   // smallint
+    {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 0, arrow::date32()}},                 // date, represented as 32-bit unsigned
+    {"org.apache.cassandra.db.marshal.TimeType", {"time", 0, arrow::time64(arrow::TimeUnit::NANO)}},  // time
+    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16, arrow::fixed_size_binary(16)}}, // timeuuid
+    {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8, arrow::uint64()}},             // timestamp
     // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0}}, // text, varchar
-    {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16}}, // uuid
+    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0, arrow::utf8()}},                 // text, varchar
+    {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16, arrow::fixed_size_binary(16)}}, // uuid
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
 
@@ -89,7 +95,7 @@ std::string deserialization_helper_t::get_col_type(int kind, int i)
     return (*colkinds[kind])[i];
 }
 /** Set the data type stored in this column */
-void deserialization_helper_t::set_col_type(int kind, int i, std::string val)
+void deserialization_helper_t::set_col_type(int kind, int i, const std::string &val)
 {
     CHECK_KIND(kind);
     (*colkinds[kind])[i] = val;
@@ -115,9 +121,18 @@ int deserialization_helper_t::get_n_blocks()
 /**
  * Checks if the currently selected cell is complex (usually a collection like a list, map, set, etc)
  */
+bool deserialization_helper_t::is_complex(const std::string &coltype)
+{
+    int idx = coltype.find('(');
+    return idx >= 0;
+}
+bool deserialization_helper_t::is_complex(int kind, int i)
+{
+    return is_complex(get_col_type(kind, i));
+}
 bool deserialization_helper_t::is_complex()
 {
-    return is_multi_cell.count(get_col_type(curkind, idx)) != 0;
+    return is_complex(curkind, idx);
 }
 
 /** =============== utility functions for the sstable_data.ksy file ===============
@@ -154,11 +169,24 @@ int deserialization_helper_t::get_n_cols()
 {
     return get_n_cols(curkind);
 }
-// Get the size of the cell value in bytes
-int deserialization_helper_t::get_col_size()
+
+int deserialization_helper_t::get_col_size(const std::string &coltype)
 {
-    std::string coltype = get_col_type(curkind, idx);
     std::cout << "getting col size of " << coltype << "\n";
+
+    if (is_complex(coltype))
+    {
+        // it seems like children cells of a complex cell have their
+        // size marked as a varint instead of the expected value...
+        // std::string child_type(
+        //     coltype.begin() + coltype.find('(') + 1,
+        //     coltype.begin() + coltype.rfind(')'));
+        // return get_col_size(child_type);
+        long long len = vint_t(_io()).val();
+        std::cout << "length of child cell: " << len << '\n';
+        return len;
+    }
+
     // check if this data type has a fixed length
     auto it = type_info.find(coltype);
     if (it == type_info.end())
@@ -174,4 +202,10 @@ int deserialization_helper_t::get_col_size()
         len = vint_t(_io()).val();
     std::cout << "length: " << len << '\n';
     return len;
+}
+
+// Get the size of the cell value in bytes
+int deserialization_helper_t::get_col_size()
+{
+    return get_col_size(get_col_type(curkind, idx));
 }

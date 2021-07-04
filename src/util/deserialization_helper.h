@@ -3,6 +3,7 @@
 
 #include <kaitai/kaitaistruct.h>
 #include <kaitai/kaitaistream.h>
+#include <arrow/api.h>
 #include <cmath>
 #include <vector>
 #include <memory>
@@ -16,6 +17,7 @@ struct cassandra_type
 {
     std::string cql_name;
     size_t fixed_len;
+    std::shared_ptr<arrow::DataType> arrow_type;
 };
 extern const std::map<std::string, struct cassandra_type> type_info;
 extern const std::set<std::string> is_multi_cell;
@@ -39,16 +41,21 @@ public:
     static int get_n_cols(int kind);
 
     static std::string get_col_type(int kind, int i);
-    static void set_col_type(int kind, int i, std::string val);
+    static void set_col_type(int kind, int i, const std::string &val);
 
     deserialization_helper_t(kaitai::kstream *ks);
 
-    int set_static();
-    int set_regular();
-    int get_n_cols();
-    bool is_complex();
+    static int set_static();
+    static int set_regular();
+    static int get_n_cols();
+    static bool is_complex();
+    static bool is_complex(const std::string &type);
+    static bool is_complex(int kind, int i);
+
     int get_col_size();
-    int inc();
+    int get_col_size(const std::string &type);
+
+    static int inc();
 };
 
 #endif

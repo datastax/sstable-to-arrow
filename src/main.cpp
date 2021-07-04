@@ -34,12 +34,13 @@ void get_file_paths(const std::string path)
     struct dirent *dent;
     while ((dent = readdir(table_dir)) != nullptr)
     {
+        std::string fname = dent->d_name;
+        if (!ends_with(fname, ".db"))
+            continue;
+
         char fmt[5];
         int num;
         char ftype_[10];
-        std::string fname = dent->d_name;
-        if (fname == "." || fname == "..")
-            continue;
 
         if (sscanf(dent->d_name, "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
         {
@@ -111,13 +112,20 @@ int main(int argc, char *argv[])
 
         read_statistics(it->second.statistics, &statistics);
         read_data(it->second.data, &sstable);
-        read_index(it->second.index, &index);
+        // read_index(it->second.index, &index);
 
         if ((flags & NO_NETWORK_FLAG) == 0)
         {
             std::shared_ptr<arrow::Table> table;
             std::shared_ptr<arrow::Schema> schema;
-            EXIT_ON_FAILURE(vector_to_columnar_table(statistics, sstable, &schema, &table));
+
+            arrow::Status status_ = vector_to_columnar_table(statistics, sstable, &schema, &table);
+            if (!status_.ok())
+            {
+                std::cerr << status_.message() << std::endl;
+                return EXIT_FAILURE;
+            }
+
             arrow::Status status = send_data(schema, table);
             if (!status.ok())
                 return 1;
@@ -204,6 +212,8 @@ void read_data(const std::string &path, std::shared_ptr<sstable_data_t> *sstable
     kaitai::kstream ks(&ifs);
     *sstable = std::make_shared<sstable_data_t>(&ks);
 
+    std::cout << "\n\n===== done parsing Data.db file =====\n";
+
     for (auto &partition : *sstable->get()->partitions())
     {
         std::cout << "\n========== partition ==========\nkey: " << partition->header()->key() << '\n';
@@ -223,19 +233,28 @@ void read_data(const std::string &path, std::shared_ptr<sstable_data_t> *sstable
                 std::cout << "\n=== row ===\n";
                 sstable_data_t::row_t *row = (sstable_data_t::row_t *)unfiltered->body();
                 for (auto &cell : *row->clustering_blocks()->values())
-                {
                     std::cout << "clustering cell: " << cell << '\n';
-                }
 
-                for (auto &cell : *row->cells())
+                for (int i = 0; i < deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR); ++i)
                 {
-                    sstable_data_t::simple_cell_t *simple_cell = (sstable_data_t::simple_cell_t *)cell.get();
-                    std::cout << "cell value: " << simple_cell->value()->value() << "\n";
+                    if (deserialization_helper_t::is_complex(deserialization_helper_t::REGULAR, i))
+                    {
+                        std::cout << "=== complex cell ===\n";
+                        sstable_data_t::complex_cell_t *cell = (sstable_data_t::complex_cell_t *)(*row->cells())[i].get();
+                        for (const auto &simple_cell : *cell->simple_cells())
+                            std::cout << "child value as string: " << simple_cell->value() << "\n";
+                    }
+                    else
+                    {
+                        sstable_data_t::simple_cell_t *cell = (sstable_data_t::simple_cell_t *)(*row->cells())[i].get();
+                        std::cout << "=== simple cell value as string: " << cell->value() << " ===\n";
+                    }
                 }
             }
         }
     }
-}
+    std::cout << "done reading data\n\n";
+} // read_data
 
 // TODO
 void read_summary(const std::string &path, std::shared_ptr<sstable_summary_t> *summary)
