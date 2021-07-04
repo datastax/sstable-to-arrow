@@ -34,8 +34,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}")
 target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/src/util")
 
-MESSAGE(STATUS "CMAKE_CURRENT_BINARY_DIR: " ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY})
-
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/deletion_time.h" "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/deletion_time.cpp"
     COMMAND echo "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}" && pwd && /usr/bin/kaitai-struct-compiler --target cpp_stl --cpp-standard 11 --opaque-types true --outdir "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}" "${CMAKE_SOURCE_DIR}/src/ksy/deletion_time.ksy"

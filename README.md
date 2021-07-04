@@ -103,5 +103,5 @@ The visualizations are currently quite rudimentary due to limitations of kaitai 
 - deduplication?
 - timing / load testing
 - Collect stats
-
+- dates and decimals
 
