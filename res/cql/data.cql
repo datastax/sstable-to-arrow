@@ -1,6 +1,6 @@
-CREATE KEYSPACE IF NOT EXISTS testing WITH REPLICATION = { 'class': 'SimpleStrategy', 'replication_factor': '1' };
+CREATE KEYSPACE IF NOT EXISTS testalltypes WITH REPLICATION = { 'class': 'SimpleStrategy', 'replication_factor': '1' };
 
-CREATE TABLE IF NOT EXISTS testing.alltypes (
+CREATE TABLE IF NOT EXISTS testalltypes.alltypes (
     asciival ascii PRIMARY KEY,
     bigintval bigint,
     blobval blob,
