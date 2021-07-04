@@ -31,7 +31,8 @@ The big picture goal is to allow GPU-accelerated analytic queries on the Cassand
 This project can be run through a Docker container via
 ```bash
 docker build -t sstable-to-arrow .
-docker run --rm -p 9143:9143 -d --name sstable-to-arrow sstable-to-arrow <PATH_TO_SSTABLE_DIRECTORY>
+# to view output interactively, run:
+docker run --rm -itp 9143:9143 --name sstable-to-arrow sstable-to-arrow <PATH_TO_SSTABLE_DIRECTORY>
 ```
 If not using Docker, you can manually build the project as follows, though installation of dependencies may vary from machine to machine.
 
