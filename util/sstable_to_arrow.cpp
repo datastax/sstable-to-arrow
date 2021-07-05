@@ -11,7 +11,7 @@
 
 const int PORT = 9143;
 
-arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std::shared_ptr<arrow::Table> &table)
+arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table)
 {
     int sockfd;
     FAIL_ON_STATUS(sockfd = socket(AF_INET, SOCK_STREAM, 0), "socket failed");
@@ -54,17 +54,16 @@ arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std:
     std::cout << "writing table:\n==========\n"
               << table->ToString() << "\n==========\n";
     ARROW_RETURN_NOT_OK(writer->WriteTable(*table));
+    ARROW_RETURN_NOT_OK(writer->Close());
 
     std::cout << "finishing stream\n";
     auto maybe_bytes = ostream->Finish();
     ARROW_RETURN_NOT_OK(maybe_bytes);
     auto bytes = *maybe_bytes;
 
-    std::cout << "buffer size: " << bytes->size();
+    std::cout << "buffer size (number of bytes written): " << bytes->size() << '\n';
 
     FAIL_ON_STATUS(write(newsockfd, (char *)bytes->data(), bytes->size()), "error writing to socket");
-
-    ARROW_RETURN_NOT_OK(writer->Close());
 
     close(newsockfd);
     close(sockfd);
@@ -72,16 +71,16 @@ arrow::Status send_data(const std::shared_ptr<arrow::Schema> &schema, const std:
     return arrow::Status::OK();
 }
 
-typedef const std::shared_ptr<std::vector<std::string>> str_arr_t;
-typedef const std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> builder_arr_t;
+typedef std::shared_ptr<std::vector<std::string>> str_arr_t;
+typedef std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> builder_arr_t;
 
 const std::string maptype = "org.apache.cassandra.db.marshal.MapType";
 const std::string settype = "org.apache.cassandra.db.marshal.SetType";
 const std::string listtype = "org.apache.cassandra.db.marshal.ListType";
 
-void append_builder(str_arr_t &types, str_arr_t &names, builder_arr_t &arr, const std::string &cassandra_type, const std::string &name, arrow::MemoryPool *pool)
+void append_builder(str_arr_t types, str_arr_t names, builder_arr_t arr, const std::string &cassandra_type, const std::string &name, arrow::MemoryPool *pool)
 {
-    std::cout << "Handling column \"" << name << "\" with type " << cassandra_type << "\n";
+    std::cout << "Handling column \"" << name << "\" with type " << cassandra_type << '\n';
     types->push_back(cassandra_type);
     names->push_back(name);
     arr->push_back(create_builder(cassandra_type, pool));
@@ -206,7 +205,7 @@ std::string get_child_type(const std::string &type)
 
 arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const std::string &bytes, arrow::MemoryPool *pool)
 {
-    std::cout << "appending to vector: " << coltype << "\n";
+    std::cout << "appending to vector: " << coltype << '\n';
 
     // for ascii or blob or varchar or text, we just return the bytes directly
     if (coltype == "org.apache.cassandra.db.marshal.AsciiType" ||
@@ -407,7 +406,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
                         for (const auto &simple_cell : *cell->simple_cells())
                         {
-                            std::cout << "child value as string: " << simple_cell->value() << ", num children of builder: " << builder->num_children() << "\n";
+                            std::cout << "child value as string: " << simple_cell->value() << ", num children of builder: " << builder->num_children() << '\n';
                             ARROW_RETURN_NOT_OK(append_scalar(get_child_type(coltype), builder->value_builder(), simple_cell->value(), pool));
                         }
                     }

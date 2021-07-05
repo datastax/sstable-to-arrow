@@ -13,6 +13,7 @@ add_executable(sstable_to_arrow
     util/modified_utf8.cpp util/modified_utf8.h
     util/vint.cpp util/vint.h
     util/sstable_to_arrow.cpp util/sstable_to_arrow.h
+    util/timer.cpp util/timer.h
     ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/deletion_time.h ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/deletion_time.cpp
     ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/sstable_data.h ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/sstable_data.cpp
     ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/sstable_index.h ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/sstable_index.cpp

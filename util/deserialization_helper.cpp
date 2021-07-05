@@ -172,7 +172,7 @@ int deserialization_helper_t::get_n_cols()
 
 int deserialization_helper_t::get_col_size(const std::string &coltype)
 {
-    std::cout << "getting col size of " << coltype << "\n";
+    std::cout << "getting col size of " << coltype << '\n';
 
     if (is_complex(coltype))
     {
