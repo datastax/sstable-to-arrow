@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/sstable_to_arrow",
+            "args": [
+                "/workspaces/sstable-to-arrow/res/data/testtypes1/ascii-bfc83fe0dce711ebb28f9116fc548b6b"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "C/C++: build cmake project for debugging with ninja",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ]
+}

@@ -34,6 +34,8 @@ docker build -t sstable-to-arrow .
 # to view output interactively, run:
 docker run --rm -itp 9143:9143 --name sstable-to-arrow sstable-to-arrow <PATH_TO_SSTABLE_DIRECTORY>
 ```
+With the VS Code [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension installed, you can also run `Open Folder in Container` from the command palette and select this folder to run the project within a docker container.
+
 If not using Docker, you can manually build the project as follows, though installation of dependencies may vary from machine to machine.
 
 1. This project depends on [Kaitai Struct](`https://kaitai.io/#download`), the [Kaitai Struct C++/STL runtime library](https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime), and [Apache Arrow for C++](http://arrow.apache.org/docs/cpp/cmake.html). (Note: if you are manually building Arrow and using other Arrow features like the filesystem interface `arrow::fs`, make sure to check [if you need to include any optional components](http://arrow.apache.org/docs/developers/cpp/building.html#optional-components).)
@@ -73,39 +75,6 @@ make
 ## Visualizations
 
 The visualizations are currently quite rudimentary due to limitations of kaitai exporting to graphviz. It doesn't support kaitai opaque types and also doesn't show conditional fields. The current `visualization/*_modified.dot` files are edited by hand, and the `visualization/*.ksy` files are not meant to parse actual files but rather just to generate boilerplate graphviz code for the diagrams.
-
-## Sample launch.json for VS Code users
-
-```json
-{
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "g++ - Build and debug active file",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/sstable_to_arrow",
-            "args": ["<INSERT SSTABLE FOLDER HERE>"],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ],
-            "miDebuggerPath": "/usr/bin/gdb"
-        }
-    ]
-}
-```
 
 ## TODO (Caveats)
 

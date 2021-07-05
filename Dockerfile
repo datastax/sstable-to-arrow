@@ -2,7 +2,7 @@ FROM ubuntu:18.04
 
 RUN apt-get update -y
 
-RUN apt-get install git curl build-essential cmake ninja-build -y
+RUN apt-get install -y git curl build-essential cmake ninja-build
 
 # download required resources
 WORKDIR /tmp
@@ -11,7 +11,7 @@ RUN git clone https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime.git
 RUN git clone https://github.com/apache/arrow.git
 
 # install kaitai-struct-compiler
-RUN apt-get install ./kaitai-struct-compiler_0.9_all.deb -y
+RUN apt-get install -y ./kaitai-struct-compiler_0.9_all.deb
 
 # install kaitai_struct_cpp_stl_runtime
 WORKDIR /tmp/kaitai_struct_cpp_stl_runtime/build
