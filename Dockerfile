@@ -29,7 +29,7 @@ WORKDIR /home
 COPY . .
 RUN mkdir /home/build
 WORKDIR /home/build
-RUN cmake -GNinja ..
+RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release ..
 RUN ninja
 
 EXPOSE 9143
