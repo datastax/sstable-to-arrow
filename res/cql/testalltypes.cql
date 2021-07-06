@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS testalltypes.alltypes (
     varintval varint
 ) WITH compression = { 'enabled': 'false' };
 
-insert into testing.alltypes (
-    asciival , bigintval , blobval , booleanval , dateval , decimalval , doubleval , durationval , floatval , inetval , intval , smallintval , textval , timeval , timestampval , timeuuidval  , tinyintval , uuidval , varcharval , varintval
+INSERT INTO testalltypes.alltypes (
+    asciival ,  bigintval , blobval ,           booleanval ,    dateval ,       decimalval , doubleval , durationval ,  floatval ,  inetval ,       intval ,    smallintval ,   textval ,           timeval ,   timestampval ,              timeuuidval  ,  tinyintval ,    uuidval ,                               varcharval ,            varintval
 ) VALUES (
-    'foo', 2048, intAsBlob(4096), false, '2021-06-25', 2.718281828, 3.14159265, 12h30m50ms, 6.28, '127.0.0.1', 420, 50, 'barbarbarbar', '2021-06-25T23:40:05.718Z', now(), '23:39:52' , 24, 4e944ad2-d60f-11eb-b8bc-0242ac130003, 'varcharvalvarcharval', 7801234567
+    'foo',      2048,       intAsBlob(4096),    false,          '2021-06-25',   2.718281828, 3.14159265, 12h30m50ms,    6.28,       '127.0.0.1',    420,        50,             'barbarbarbar',     '23:39:52', '2021-06-25T23:40:05.718Z', now(),          24,             4e944ad2-d60f-11eb-b8bc-0242ac130003,   'varcharvalvarcharval', 7801234567
 );
