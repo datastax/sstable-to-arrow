@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <unistd.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -16,13 +17,30 @@
 #include "sstable_statistics.h"
 #include "timer.h"
 
+#define FAIL_ON_STATUS(x, msg) \
+    if ((x) < 0)               \
+    {                          \
+        perror((msg));         \
+        exit(1);               \
+    }
+
 struct cql_decimal_t
 {
     int scale;
     long long val;
 };
 
-void append_builder(
+arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table);
+arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
+arrow::Status process_row(
+    const std::string &partition_key,
+    std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
+    std::shared_ptr<std::vector<std::string>> types,
+    std::shared_ptr<std::vector<std::string>> names,
+    std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
+    arrow::MemoryPool *pool);
+
+void process_column(
     std::shared_ptr<std::vector<std::string>> types,
     std::shared_ptr<std::vector<std::string>> names,
     std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
@@ -30,12 +48,13 @@ void append_builder(
     const std::string &name,
     arrow::MemoryPool *pool);
 
-arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const std::string &bytes, arrow::MemoryPool *pool);
-
 std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arrow::MemoryPool *pool);
-arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table);
-arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
+
+arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const std::string &bytes, arrow::MemoryPool *pool);
+arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
 
 std::shared_ptr<arrow::DataType> get_arrow_type(const std::string &type);
+void get_map_child_types(const std::string &type, std::string *key_type, std::string *value_type);
+std::string get_child_type(const std::string &type);
 
 #endif

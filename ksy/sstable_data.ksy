@@ -124,7 +124,7 @@ types:
 
       - id: cells
         type:
-          switch-on: _root.deserialization_helper.is_complex.as<b1>
+          switch-on: _root.deserialization_helper.is_multi_cell.as<b1>
           cases:
             true: complex_cell
             false: simple_cell(false) # "false" means "not a child of a complex cell"
@@ -178,15 +178,15 @@ types:
         type: vint
         if: (flags & 0x08) == 0 # USE_ROW_TIMESTAMP_MASK flag is off
 
-      - id: delta_local_deletion_time
+        - id: delta_local_deletion_time
         type: vint
         if: ((flags & 0x10) == 0) and (((flags & 0x01) != 0) or ((flags & 0x02) != 0)) # if the cell does NOT use row TTL, and (the cell is deleted or it is expiring)
 
-      - id: delta_ttl
+        - id: delta_ttl
         type: vint
         if: ((flags & 0x10) == 0) and ((flags & 0x02) != 0) # if cell does not use row TTL, and it is expiring
 
-      - id: path
+        - id: path
         type: cell_path
         if: complex
 
@@ -196,11 +196,11 @@ types:
         size: _root.deserialization_helper.get_col_size.as<u8>
         if: (flags & 0x04) == 0 # only if does not have empty value
 
-      - id: tmp_
+        - id: tmp_
         if: not complex
         size: _root.deserialization_helper.inc.as<u4>
 
-    doc: |
+        doc: |
       See https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/BufferCell.java#L209
       for serialization info
 
@@ -210,6 +210,11 @@ types:
         type: vint
       - id: value
         size: length.val.as<u4>
+    doc: |
+      For collections, this is:
+      - an auto-generated timeuuid for lists
+      - the current map key for maps
+      - the actual value for sets (the complex_cell_item.value is empty in this case)
 
   complex_cell:
     seq:

@@ -40,6 +40,6 @@ foreach(ksy_file deletion_time sstable_data sstable_index sstable_statistics sst
     add_custom_command(
         OUTPUT "${PROJECT_BINARY_DIR}/${ksy_file}.h" "${PROJECT_BINARY_DIR}/${ksy_file}.cpp"
         COMMAND /usr/bin/kaitai-struct-compiler --target cpp_stl --cpp-standard 11 --opaque-types true --outdir "${PROJECT_BINARY_DIR}" "${CMAKE_SOURCE_DIR}/ksy/${ksy_file}.ksy"
-        DEPENDS /usr/bin/kaitai-struct-compiler
+        DEPENDS /usr/bin/kaitai-struct-compiler ${CMAKE_SOURCE_DIR}/ksy/${ksy_file}.ksy
     )
 endforeach()

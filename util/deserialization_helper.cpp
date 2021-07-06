@@ -53,12 +53,6 @@ const std::map<std::string, struct cassandra_type> type_info{
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
 
-// complex types
-const std::set<std::string> is_multi_cell{
-    "org.apache.cassandra.db.marshal.ListType",
-    "org.apache.cassandra.db.marshal.MapType",
-    "org.apache.cassandra.db.marshal.SetType"};
-
 // =============== DEFINE STATIC FIELDS ===============
 
 int deserialization_helper_t::idx = 0;
@@ -120,18 +114,20 @@ int deserialization_helper_t::get_n_blocks()
 /**
  * Checks if the currently selected cell is complex (usually a collection like a list, map, set, etc)
  */
-bool deserialization_helper_t::is_complex(const std::string &coltype)
+bool deserialization_helper_t::is_multi_cell(const std::string &coltype)
 {
-    int idx = coltype.find('(');
-    return idx >= 0;
+    for (const std::string &complex_type : multi_cell_types)
+        if (coltype.rfind(complex_type, 0) == 0)
+            return true;
+    return false;
 }
-bool deserialization_helper_t::is_complex(int kind, int i)
+bool deserialization_helper_t::is_multi_cell(int kind, int i)
 {
-    return is_complex(get_col_type(kind, i));
+    return is_multi_cell(get_col_type(kind, i));
 }
-bool deserialization_helper_t::is_complex()
+bool deserialization_helper_t::is_multi_cell()
 {
-    return is_complex(curkind, idx);
+    return is_multi_cell(curkind, idx);
 }
 
 /** =============== utility functions for the sstable_data.ksy file ===============
@@ -172,7 +168,7 @@ int deserialization_helper_t::get_n_cols()
 int deserialization_helper_t::get_col_size(const std::string &coltype)
 {
     DEBUG_ONLY(std::cout << "getting col size of " << coltype << '\n');
-    if (is_complex(coltype))
+    if (is_multi_cell(coltype))
     {
         // it seems like children cells of a complex cell have their
         // size marked as a varint instead of the expected value...

@@ -32,15 +32,15 @@ struct sstable_t
 
 arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable);
 
+void read_data(std::shared_ptr<struct sstable_t> sstable);
 template <typename T>
 void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj);
 void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statistics_t> *sstable_obj);
-void read_data(std::shared_ptr<struct sstable_t> sstable);
 
 void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics);
 void debug_data(std::shared_ptr<sstable_data_t> data);
 void debug_index(std::shared_ptr<sstable_index_t> index);
-void debug_summary(std::shared_ptr<sstable_summary_t> summary);
+// void debug_summary(std::shared_ptr<sstable_summary_t> summary);
 
 void read_options(int argc, char *argv[]);
 bool ends_with(const std::string &s, const std::string &end);

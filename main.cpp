@@ -150,12 +150,12 @@ void debug_data(std::shared_ptr<sstable_data_t> sstable)
 
                 for (int i = 0; i < deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR); ++i)
                 {
-                    if (deserialization_helper_t::is_complex(deserialization_helper_t::REGULAR, i))
+                    if (deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i))
                     {
                         std::cout << "=== complex cell ===\n";
                         sstable_data_t::complex_cell_t *cell = (sstable_data_t::complex_cell_t *)(*row->cells())[i].get();
                         for (const auto &simple_cell : *cell->simple_cells())
-                            std::cout << "child value as string: " << simple_cell->value() << '\n';
+                            std::cout << "child path, value as string: " << simple_cell->path()->value() << " | " << simple_cell->value() << '\n';
                     }
                     else
                     {
