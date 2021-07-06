@@ -15,33 +15,7 @@ int main(int argc, char *argv[])
 {
     instrumentor::get().begin_session("main");
 
-    sstable_map_t sstables;
-
-    int opt;
-    std::shared_ptr<sstable_summary_t> *summary;
-    std::shared_ptr<sstable_statistics_t> *statistics;
-    std::shared_ptr<sstable_index_t> *index;
-    while ((opt = getopt(argc, argv, ":t:m:i:n")) != -1)
-    {
-
-        switch (opt)
-        {
-        case 'm':
-            read_sstable_file(optarg, summary);
-            return 0;
-        case 't':
-            read_sstable_file(optarg, statistics);
-            return 0;
-        case 'i':
-            read_sstable_file(optarg, index);
-            return 0;
-        case 'n': // turn off sending via network
-            flags |= NO_NETWORK_FLAG;
-            break;
-        default:
-            break;
-        }
-    }
+    read_options(argc, argv);
 
     if (argc < 2)
     {
@@ -49,13 +23,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    sstable_map_t sstables;
     const std::string table_dir = argv[optind];
     get_file_paths(table_dir, sstables);
 
     for (auto it = sstables.begin(); it != sstables.end(); ++it)
     {
         DEBUG_ONLY(std::cout << "\n\n===== Reading SSTable #" << it->first << " =====\n");
-        process_sstable(std::move(it->second));
+        process_sstable(it->second);
     }
 
     instrumentor::get().end_session();
@@ -65,7 +40,7 @@ int main(int argc, char *argv[])
 arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
 {
     PROFILE_FUNCTION;
-    std::thread data(load_data, sstable);
+    std::thread data(read_data, sstable);
     std::thread index(read_sstable_file<sstable_index_t>, sstable->index_path, &sstable->index);
     std::thread summary(read_sstable_file<sstable_summary_t>, sstable->summary_path, &sstable->summary);
 
@@ -86,7 +61,7 @@ arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
 // These functions use kaitai to parse sstable files into C++
 // objects.
 
-void load_data(std::shared_ptr<struct sstable_t> sstable)
+void read_data(std::shared_ptr<struct sstable_t> sstable)
 {
     PROFILE_FUNCTION;
     read_sstable_file(sstable->statistics_path, &sstable->statistics);
@@ -210,6 +185,35 @@ void debug_index(std::shared_ptr<sstable_index_t> index)
 
 // ==================== HELPER FUNCTIONS ====================
 
+void read_options(int argc, char *argv[])
+{
+    int opt;
+    std::shared_ptr<sstable_summary_t> summary;
+    std::shared_ptr<sstable_statistics_t> statistics;
+    std::shared_ptr<sstable_index_t> index;
+    while ((opt = getopt(argc, argv, ":t:m:i:n")) != -1)
+    {
+
+        switch (opt)
+        {
+        case 'm':
+            read_sstable_file(optarg, &summary);
+            return;
+        case 't':
+            read_sstable_file(optarg, &statistics);
+            return;
+        case 'i':
+            read_sstable_file(optarg, &index);
+            return;
+        case 'n': // turn off sending via network
+            flags |= NO_NETWORK_FLAG;
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 bool ends_with(const std::string &s, const std::string &end)
 {
     PROFILE_FUNCTION;
@@ -230,15 +234,14 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
     PROFILE_FUNCTION;
     DIR *table_dir = opendir(path.c_str());
     struct dirent *dent;
+    char fmt[5];
+    int num;
+    char ftype_[10];
     while ((dent = readdir(table_dir)) != nullptr)
     {
         std::string fname = dent->d_name;
         if (!ends_with(fname, ".db"))
             continue;
-
-        char fmt[5];
-        int num;
-        char ftype_[10];
 
         if (sscanf(dent->d_name, "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
         {
@@ -249,7 +252,7 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
         std::string full_path = path + fpath_separator + dent->d_name;
 
         if (sstables.count(num) == 0)
-            sstables.insert({num, std::make_shared<sstable_t>()});
+            sstables[num] = std::make_shared<sstable_t>();
 
         if (ftype == "Data")
             sstables[num]->data_path = full_path;
@@ -260,6 +263,7 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
         else if (ftype == "Summary")
             sstables[num]->summary_path = full_path;
     }
+    free(table_dir);
 }
 
 void open_stream(const std::string &path, std::ifstream *ifs)
