@@ -18,7 +18,7 @@
 #   define PROFILE_FUNCTION
 #endif
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #   define DEBUG_ONLY(msg) msg
 #else

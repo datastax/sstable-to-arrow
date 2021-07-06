@@ -10,6 +10,7 @@ class vint_t : public kaitai::kstruct
 
 public:
     vint_t(kaitai::kstream *ks);
+    static long long parse_java(const char *bytes, size_t size);
     long long val();
 };
 

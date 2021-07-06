@@ -23,13 +23,14 @@ void instrumentor::end_session()
 
 void instrumentor::write_profile(const profile_result &result)
 {
-    if (m_profile_count++ > 0)
-        m_ostream << ",";
-
     std::string name = result.name;
     std::replace(name.begin(), name.end(), '"', '\'');
 
     std::lock_guard<std::mutex> lockGuard(mutex);
+
+    if (m_profile_count++ > 0)
+        m_ostream << ",";
+
     m_ostream << "{";
     m_ostream << "\"cat\":\"function\",";
     m_ostream << "\"dur\":" << (result.end - result.start) << ',';

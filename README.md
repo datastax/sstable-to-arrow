@@ -85,4 +85,5 @@ The visualizations are currently quite rudimentary due to limitations of kaitai 
 - deduplication?
 - timing / load testing
 - collect statistics on speed of different approaches
-- test with larger datasets
+- test with larger datasets (bigger vs larger than memory)
+

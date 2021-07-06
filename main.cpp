@@ -66,6 +66,7 @@ void read_data(std::shared_ptr<struct sstable_t> sstable)
     PROFILE_FUNCTION;
     read_sstable_file(sstable->statistics_path, &sstable->statistics);
     process_serialization_header(get_serialization_header(sstable->statistics));
+    DEBUG_ONLY(debug_statistics(sstable->statistics));
     read_sstable_file(sstable->data_path, &sstable->data);
 }
 

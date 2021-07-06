@@ -19,6 +19,8 @@ arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<a
     PROFILE_FUNCTION;
     int sockfd;
     FAIL_ON_STATUS(sockfd = socket(AF_INET, SOCK_STREAM, 0), "socket failed");
+    int option = 1;
+    FAIL_ON_STATUS(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option)), "failed setting socket options");
     std::cout << "created socket at file descriptor " << sockfd << '\n';
 
     struct sockaddr_in serv_addr;
@@ -46,23 +48,29 @@ arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<a
     std::cout << "waiting for message\n";
     FAIL_ON_STATUS(read(newsockfd, buffer, 255), "error reading from socket");
 
-    auto maybe_ostream = arrow::io::BufferOutputStream::Create();
-    ARROW_RETURN_NOT_OK(maybe_ostream);
+    arrow::Result<std::shared_ptr<arrow::io::BufferOutputStream>> maybe_ostream;
+    ARROW_RETURN_NOT_OK(maybe_ostream = arrow::io::BufferOutputStream::Create());
     auto ostream = *maybe_ostream;
 
     DEBUG_ONLY(std::cout << "making stream writer\n");
-    auto maybe_writer = arrow::ipc::MakeStreamWriter(ostream, schema);
-    ARROW_RETURN_NOT_OK(maybe_writer);
+    arrow::Result<std::shared_ptr<arrow::ipc::RecordBatchWriter>> maybe_writer;
+    ARROW_RETURN_NOT_OK(maybe_writer = arrow::ipc::MakeStreamWriter(ostream, schema));
     auto writer = *maybe_writer;
 
-    DEBUG_ONLY(std::cout << "writing table:\n==========\n"
-                         << table->ToString() << "\n==========\n");
-    ARROW_RETURN_NOT_OK(writer->WriteTable(*table));
+    ARROW_RETURN_NOT_OK(writer->WriteTable(*table, -1));
+    DEBUG_ONLY(
+        std::cout << "writer stats:"
+                  << "\n\tnum dictionary batches: " << writer->stats().num_dictionary_batches
+                  << "\n\tnum dictionary deltas: " << writer->stats().num_dictionary_deltas
+                  << "\n\tnum messages: " << writer->stats().num_messages
+                  << "\n\tnum record batches: " << writer->stats().num_record_batches
+                  << "\n\tnum replaced dictionaries: " << writer->stats().num_replaced_dictionaries
+                  << '\n');
     ARROW_RETURN_NOT_OK(writer->Close());
 
     DEBUG_ONLY(std::cout << "finishing stream\n");
-    auto maybe_bytes = ostream->Finish();
-    ARROW_RETURN_NOT_OK(maybe_bytes);
+    arrow::Result<std::shared_ptr<arrow::Buffer>> maybe_bytes;
+    ARROW_RETURN_NOT_OK(maybe_bytes = ostream->Finish());
     auto bytes = *maybe_bytes;
 
     DEBUG_ONLY(std::cout << "buffer size (number of bytes written): " << bytes->size() << '\n');
@@ -112,9 +120,10 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     int n = arr->size();
     DEBUG_ONLY(std::cout << "number of fields in table: " << n << '\n');
 
-    std::vector<std::shared_ptr<arrow::Array>> finished_arrays;
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    // finish the arrays and store them into a vector
 
+    arrow::ArrayVector finished_arrays;
+    arrow::FieldVector schema_vector;
     for (int i = 0; i < n; ++i)
     {
         std::shared_ptr<arrow::Array> arrptr;
@@ -122,10 +131,15 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
         finished_arrays.push_back(arrptr);
         schema_vector.push_back(arrow::field((*names)[i], get_arrow_type((*types)[i])));
     }
-
     *schema = std::make_shared<arrow::Schema>(schema_vector);
-
     *table = arrow::Table::Make(*schema, finished_arrays);
+
+    DEBUG_ONLY(
+        std::cout
+        << "==========\nschema:\n==========\n"
+        << (*schema)->ToString()
+        << "\n==========\ntable:\n==========\n"
+        << (*table)->ToString() << "\n==========\n");
 
     return arrow::Status::OK();
 }
@@ -264,7 +278,7 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arr
         return std::make_shared<arrow::Time64Builder>(arrow::time64(arrow::TimeUnit::NANO), pool);
     else if (type == "org.apache.cassandra.db.marshal.TimeUUIDType") // timeuuid
         return std::make_shared<arrow::FixedSizeBinaryBuilder>(arrow::fixed_size_binary(16), pool);
-    else if (type == "org.apache.cassandra.db.marshal.TimestampType") // timestamp
+    else if (type == "org.apache.cassandra.db.marshal.TimestampType" || type == "org.apache.cassandra.db.marshal.DateType") // timestamp
         return std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MILLI), pool);
     else if (type == "org.apache.cassandra.db.marshal.UTF8Type") // text, varchar
         return std::make_shared<arrow::StringBuilder>(pool);
@@ -368,9 +382,9 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     {
         auto builder = (arrow::FixedSizeListBuilder *)builder_ptr;
         auto value_builder = (arrow::Int64Builder *)builder->value_builder();
-        int months = ks.read_s4be();
-        int days = ks.read_s4be();
-        int nanoseconds = ks.read_s8be();
+        long long months = vint_t(&ks).val();
+        long long days = vint_t(&ks).val();
+        long long nanoseconds = vint_t(&ks).val();
         ARROW_RETURN_NOT_OK(builder->Append());
         ARROW_RETURN_NOT_OK(value_builder->Append(months));
         ARROW_RETURN_NOT_OK(value_builder->Append(days));
@@ -383,8 +397,24 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     }
     else if (coltype == "org.apache.cassandra.db.marshal.InetAddressType") // inet
     {
-        auto builder = (arrow::Int64Builder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s8be()));
+        auto builder = (arrow::DenseUnionBuilder *)builder_ptr;
+        if (ks.size() == 4)
+        {
+            builder->Append(0);
+            auto ipv4_builder = static_cast<arrow::Int32Builder *>(builder->child(0));
+            ARROW_RETURN_NOT_OK(ipv4_builder->Append(ks.read_s4be()));
+        }
+        else if (ks.size() == 8)
+        {
+            builder->Append(1);
+            auto ipv6_builder = static_cast<arrow::Int64Builder *>(builder->child(1));
+            ARROW_RETURN_NOT_OK(ipv6_builder->Append(ks.read_s8be()));
+        }
+        else
+        {
+            std::cerr << "invalid IP address of size " << ks.size() << " bytes. needs to be 4 or 8\n";
+            return arrow::Status::TypeError("invalid IP address");
+        }
     }
     else if (coltype == "org.apache.cassandra.db.marshal.Int32Type") // int
     {
@@ -393,19 +423,8 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     }
     else if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
     {
-        if (bytes.size() > 8)
-        {
-            DEBUG_ONLY(std::cout << "ERROR: currently only supports up to 8 byte varints\n");
-            exit(1);
-        }
-        auto builder = (arrow::Int64Builder *)builder_ptr;
-        int64_t val = 0;
-        if (BYTE_ORDER == LITTLE_ENDIAN)
-            for (int i = 0; i < bytes.size(); ++i)
-                val |= (bytes[bytes.size() - i - 1] & 0xff) << (i * 8);
-        else
-            memcpy(&val, bytes.c_str(), bytes.size());
-        ARROW_RETURN_NOT_OK(builder->Append(val));
+        auto builder = static_cast<arrow::Int64Builder *>(builder_ptr);
+        ARROW_RETURN_NOT_OK(builder->Append(vint_t::parse_java(bytes.c_str(), bytes.size())));
     }
     else if (coltype == "org.apache.cassandra.db.marshal.LongType") // bigint
     {
@@ -420,8 +439,7 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     else if (coltype == "org.apache.cassandra.db.marshal.SimpleDateType") // date
     {
         auto builder = (arrow::Date32Builder *)builder_ptr;
-        uint32_t date = ks.read_u4be() - (1 << 31); // why doesn't this work?
-        DEBUG_ONLY(std::cout << date << " < DATE\n");
+        uint32_t date = ks.read_u4be() - (1 << 31);
         ARROW_RETURN_NOT_OK(builder->Append(date));
     }
     else if (coltype == "org.apache.cassandra.db.marshal.TimeType") // time

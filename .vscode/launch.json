@@ -7,7 +7,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
-                "/workspaces/sstable-to-arrow/res/data/testtypes1/ascii-bfc83fe0dce711ebb28f9116fc548b6b"
+                "-n",
+                "/workspaces/sstable-to-arrow/res/data/testalltypes/alltypes-b15935a0de6c11eb87f69116fc548b6b"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
