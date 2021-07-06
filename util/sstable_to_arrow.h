@@ -14,6 +14,7 @@
 #include "clustering_blocks.h"
 #include "sstable_data.h"
 #include "sstable_statistics.h"
+#include "timer.h"
 
 struct cql_decimal_t
 {

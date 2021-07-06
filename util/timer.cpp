@@ -29,6 +29,7 @@ void instrumentor::write_profile(const profile_result &result)
     std::string name = result.name;
     std::replace(name.begin(), name.end(), '"', '\'');
 
+    std::lock_guard<std::mutex> lockGuard(mutex);
     m_ostream << "{";
     m_ostream << "\"cat\":\"function\",";
     m_ostream << "\"dur\":" << (result.end - result.start) << ',';
@@ -42,12 +43,15 @@ void instrumentor::write_profile(const profile_result &result)
     m_ostream.flush();
 }
 
+// We shouldn't need to lock to prevent race conditions, since this is only
+// called once by the main thread.
 void instrumentor::write_header()
 {
     m_ostream << "{\"otherData\": {},\"traceEvents\":[";
     m_ostream.flush();
 }
 
+// Similar to write_header, no need to lock since it is only called by main thread.
 void instrumentor::write_footer()
 {
     m_ostream << "]}";

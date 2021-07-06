@@ -6,35 +6,34 @@ const char fpath_separator =
 #else
     '/';
 #endif
-
 const int NO_NETWORK_FLAG = 0x01;
+int flags;
+
+typedef std::map<int, std::shared_ptr<struct sstable_t>> sstable_map_t;
 
 int main(int argc, char *argv[])
 {
     instrumentor::get().begin_session("main");
-    PROFILE_FUNCTION;
-    std::shared_ptr<sstable_index_t> index;
-    std::shared_ptr<sstable_data_t> sstable;
-    std::shared_ptr<sstable_statistics_t> statistics;
-    std::shared_ptr<sstable_summary_t> summary;
 
-    std::map<int, struct sstable_files_t> sstables;
+    sstable_map_t sstables;
 
-    int flags = 0;
     int opt;
+    std::shared_ptr<sstable_summary_t> *summary;
+    std::shared_ptr<sstable_statistics_t> *statistics;
+    std::shared_ptr<sstable_index_t> *index;
     while ((opt = getopt(argc, argv, ":t:m:i:n")) != -1)
     {
+
         switch (opt)
         {
         case 'm':
-            read_summary(optarg, &summary);
+            read_sstable_file(optarg, summary);
             return 0;
         case 't':
-            std::cout << "reading statistics\n";
-            read_statistics(optarg, &statistics);
+            read_sstable_file(optarg, statistics);
             return 0;
         case 'i':
-            read_index(optarg, &index);
+            read_sstable_file(optarg, index);
             return 0;
         case 'n': // turn off sending via network
             flags |= NO_NETWORK_FLAG;
@@ -46,7 +45,7 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        perror("must specify path to table directory");
+        std::cerr << "must specify path to table directory\n";
         return 1;
     }
 
@@ -55,44 +54,58 @@ int main(int argc, char *argv[])
 
     for (auto it = sstables.begin(); it != sstables.end(); ++it)
     {
-        std::cout << "\n\n===== Reading SSTable #" << it->first << " =====\n";
-
-        read_statistics(it->second.statistics, &statistics);
-        process_serialization_header(get_serialization_header(statistics));
-        read_data(it->second.data, &sstable);
-        read_index(it->second.index, &index);
-
-        if ((flags & NO_NETWORK_FLAG) == 0)
-        {
-            std::shared_ptr<arrow::Table> table;
-            std::shared_ptr<arrow::Schema> schema;
-
-            arrow::Status conversion_status = vector_to_columnar_table(statistics, sstable, &schema, &table);
-            if (!conversion_status.ok())
-            {
-                std::cerr << "an error occurred when converting from an sstable to an arrow table: "
-                          << conversion_status.message() << '\n';
-                return EXIT_FAILURE;
-            }
-
-            arrow::Status send_status = send_data(schema, table);
-            if (!send_status.ok())
-            {
-                std::cerr << "an error occurred when sending data: " << send_status.message() << '\n';
-                return 1;
-            }
-        }
+        DEBUG_ONLY(std::cout << "\n\n===== Reading SSTable #" << it->first << " =====\n");
+        process_sstable(std::move(it->second));
     }
 
     instrumentor::get().end_session();
     return 0;
 }
 
+arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
+{
+    PROFILE_FUNCTION;
+    std::thread data(load_data, sstable);
+    std::thread index(read_sstable_file<sstable_index_t>, sstable->index_path, &sstable->index);
+    std::thread summary(read_sstable_file<sstable_summary_t>, sstable->summary_path, &sstable->summary);
+
+    data.join();
+    index.join();
+    summary.join();
+
+    std::shared_ptr<arrow::Table> table;
+    std::shared_ptr<arrow::Schema> schema;
+    ARROW_RETURN_NOT_OK(vector_to_columnar_table(sstable->statistics, sstable->data, &schema, &table));
+    if ((flags & NO_NETWORK_FLAG) == 0)
+        ARROW_RETURN_NOT_OK(send_data(schema, table));
+
+    return arrow::Status::OK();
+}
+
 // ==================== READ SSTABLE FILES ====================
 // These functions use kaitai to parse sstable files into C++
 // objects.
 
-void read_statistics(const std::string &path, std::shared_ptr<sstable_statistics_t> *statistics)
+void load_data(std::shared_ptr<struct sstable_t> sstable)
+{
+    PROFILE_FUNCTION;
+    read_sstable_file(sstable->statistics_path, &sstable->statistics);
+    process_serialization_header(get_serialization_header(sstable->statistics));
+    read_sstable_file(sstable->data_path, &sstable->data);
+}
+
+template <typename T>
+void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj)
+{
+    PROFILE_FUNCTION;
+    std::ifstream ifs;
+    open_stream(path, &ifs);
+    kaitai::kstream ks(&ifs);
+    *sstable_obj = std::make_shared<T>(&ks);
+}
+
+// overload for statistics file, which requires the stream to persist
+void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statistics_t> *sstable_obj)
 {
     PROFILE_FUNCTION;
     // These streams are static because kaitai "instances" (a section of the
@@ -102,34 +115,7 @@ void read_statistics(const std::string &path, std::shared_ptr<sstable_statistics
     static std::ifstream ifs;
     open_stream(path, &ifs);
     static kaitai::kstream ks(&ifs);
-    *statistics = std::make_shared<sstable_statistics_t>(&ks);
-}
-
-void read_data(const std::string &path, std::shared_ptr<sstable_data_t> *sstable)
-{
-    PROFILE_FUNCTION;
-    std::ifstream ifs;
-    open_stream(path, &ifs);
-    kaitai::kstream ks(&ifs);
-    *sstable = std::make_shared<sstable_data_t>(&ks);
-}
-
-void read_index(const std::string &path, std::shared_ptr<sstable_index_t> *index)
-{
-    PROFILE_FUNCTION;
-    std::ifstream ifs;
-    open_stream(path, &ifs);
-    kaitai::kstream ks(&ifs);
-    *index = std::make_shared<sstable_index_t>(&ks);
-}
-
-void read_summary(const std::string &path, std::shared_ptr<sstable_summary_t> *summary)
-{
-    PROFILE_FUNCTION;
-    std::ifstream ifs;
-    open_stream(path, &ifs);
-    kaitai::kstream ks(&ifs);
-    *summary = std::make_shared<sstable_summary_t>(&ks);
+    *sstable_obj = std::make_shared<sstable_statistics_t>(&ks);
 }
 
 // ==================== DEBUG SSTABLE FILES ====================
@@ -138,6 +124,7 @@ void read_summary(const std::string &path, std::shared_ptr<sstable_summary_t> *s
 
 void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
 {
+    PROFILE_FUNCTION;
     auto body = get_serialization_header(statistics);
     std::cout << "\npartition key type: " << body->partition_key_type()->body() << '\n';
 
@@ -164,8 +151,7 @@ void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
 
 void debug_data(std::shared_ptr<sstable_data_t> sstable)
 {
-    std::cout << "\n\n===== done parsing Data.db file =====\n";
-
+    PROFILE_FUNCTION;
     for (auto &partition : *sstable->partitions())
     {
         std::cout << "\n========== partition ==========\nkey: " << partition->header()->key() << '\n';
@@ -210,6 +196,7 @@ void debug_data(std::shared_ptr<sstable_data_t> sstable)
 
 void debug_index(std::shared_ptr<sstable_index_t> index)
 {
+    PROFILE_FUNCTION;
     for (std::unique_ptr<sstable_index_t::index_entry_t> &entry : *index->entries())
     {
         std::cout
@@ -225,6 +212,7 @@ void debug_index(std::shared_ptr<sstable_index_t> index)
 
 bool ends_with(const std::string &s, const std::string &end)
 {
+    PROFILE_FUNCTION;
     if (end.size() > s.size())
         return false;
     return std::equal(end.rbegin(), end.rend(), s.rbegin());
@@ -237,7 +225,7 @@ bool ends_with(const std::string &s, const std::string &end)
  * path.
  * @param path the path to the folder containing the SSTable files
  */
-void get_file_paths(const std::string &path, std::map<int, struct sstable_files_t> &sstables)
+void get_file_paths(const std::string &path, sstable_map_t &sstables)
 {
     PROFILE_FUNCTION;
     DIR *table_dir = opendir(path.c_str());
@@ -254,32 +242,33 @@ void get_file_paths(const std::string &path, std::map<int, struct sstable_files_
 
         if (sscanf(dent->d_name, "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
         {
-            std::cout << "Error reading formatted filename\n";
+            std::cerr << "Error reading formatted filename\n";
             continue;
         }
         std::string ftype = ftype_;
         std::string full_path = path + fpath_separator + dent->d_name;
 
         if (sstables.count(num) == 0)
-            sstables.insert({num, sstable_files_t()});
+            sstables.insert({num, std::make_shared<sstable_t>()});
 
         if (ftype == "Data")
-            sstables[num].data = full_path;
+            sstables[num]->data_path = full_path;
         else if (ftype == "Statistics")
-            sstables[num].statistics = full_path;
+            sstables[num]->statistics_path = full_path;
         else if (ftype == "Index")
-            sstables[num].index = full_path;
+            sstables[num]->index_path = full_path;
         else if (ftype == "Summary")
-            sstables[num].summary = full_path;
+            sstables[num]->summary_path = full_path;
     }
 }
 
 void open_stream(const std::string &path, std::ifstream *ifs)
 {
+    PROFILE_FUNCTION;
     *ifs = std::ifstream(path, std::ifstream::binary);
     if (!ifs->is_open())
     {
-        perror("could not open file");
+        std::cerr << "could not open file";
         exit(1);
     }
 }
@@ -287,6 +276,7 @@ void open_stream(const std::string &path, std::ifstream *ifs)
 // Read the serialization header from the statistics file.
 sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics)
 {
+    PROFILE_FUNCTION;
     const auto &toc = *statistics->toc()->array();
     const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file
     return static_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());
@@ -296,6 +286,7 @@ sstable_statistics_t::serialization_header_t *get_serialization_header(std::shar
 // header stored in the statistics file. This must be called before `read_data`.
 void process_serialization_header(sstable_statistics_t::serialization_header_t *serialization_header)
 {
+    PROFILE_FUNCTION;
     // Set important constants for the serialization helper and initialize vectors to store
     // types of clustering columns
     auto clustering_key_types = serialization_header->clustering_key_types()->array();

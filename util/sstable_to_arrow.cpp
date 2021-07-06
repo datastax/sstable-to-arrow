@@ -13,6 +13,7 @@ const int PORT = 9143;
 
 arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table)
 {
+    PROFILE_FUNCTION;
     int sockfd;
     FAIL_ON_STATUS(sockfd = socket(AF_INET, SOCK_STREAM, 0), "socket failed");
 
@@ -28,7 +29,7 @@ arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<a
                        sizeof(serv_addr)),
                    "error on binding");
 
-    std::cout << "waiting for connection\n";
+    std::cout << "listening on port " << PORT << '\n';
     listen(sockfd, 5);
 
     struct sockaddr_in cli_addr;
@@ -38,30 +39,29 @@ arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<a
 
     char buffer[256];
     bzero(buffer, 256);
-
-    std::cout << "listening\n";
+    std::cout << "waiting for message\n";
     FAIL_ON_STATUS(read(newsockfd, buffer, 255), "error reading from socket");
 
     auto maybe_ostream = arrow::io::BufferOutputStream::Create();
     ARROW_RETURN_NOT_OK(maybe_ostream);
     auto ostream = *maybe_ostream;
 
-    std::cout << "making stream writer\n";
+    DEBUG_ONLY(std::cout << "making stream writer\n");
     auto maybe_writer = arrow::ipc::MakeStreamWriter(ostream, schema);
     ARROW_RETURN_NOT_OK(maybe_writer);
     auto writer = *maybe_writer;
 
-    std::cout << "writing table:\n==========\n"
-              << table->ToString() << "\n==========\n";
+    DEBUG_ONLY(std::cout << "writing table:\n==========\n"
+                         << table->ToString() << "\n==========\n");
     ARROW_RETURN_NOT_OK(writer->WriteTable(*table));
     ARROW_RETURN_NOT_OK(writer->Close());
 
-    std::cout << "finishing stream\n";
+    DEBUG_ONLY(std::cout << "finishing stream\n");
     auto maybe_bytes = ostream->Finish();
     ARROW_RETURN_NOT_OK(maybe_bytes);
     auto bytes = *maybe_bytes;
 
-    std::cout << "buffer size (number of bytes written): " << bytes->size() << '\n';
+    DEBUG_ONLY(std::cout << "buffer size (number of bytes written): " << bytes->size() << '\n');
 
     FAIL_ON_STATUS(write(newsockfd, (char *)bytes->data(), bytes->size()), "error writing to socket");
 
@@ -80,7 +80,8 @@ const std::string listtype = "org.apache.cassandra.db.marshal.ListType";
 
 void append_builder(str_arr_t types, str_arr_t names, builder_arr_t arr, const std::string &cassandra_type, const std::string &name, arrow::MemoryPool *pool)
 {
-    std::cout << "Handling column \"" << name << "\" with type " << cassandra_type << '\n';
+    PROFILE_FUNCTION;
+    DEBUG_ONLY(std::cout << "Handling column \"" << name << "\" with type " << cassandra_type << '\n');
     types->push_back(cassandra_type);
     names->push_back(name);
     arr->push_back(create_builder(cassandra_type, pool));
@@ -96,7 +97,8 @@ void append_builder(str_arr_t types, str_arr_t names, builder_arr_t arr, const s
  */
 std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arrow::MemoryPool *pool)
 {
-    std::cout << "creating new vector of type " << type << '\n';
+    PROFILE_FUNCTION;
+    DEBUG_ONLY(std::cout << "creating new vector of type " << type << '\n');
     if (type == "org.apache.cassandra.db.marshal.AsciiType") // ascii
         return std::make_shared<arrow::StringBuilder>(pool);
     else if (type == "org.apache.cassandra.db.marshal.BooleanType") // boolean
@@ -175,7 +177,7 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arr
         const int sep_idx = type.find(',');
         std::string key_type = std::string(type.begin() + maptype.size() + 1, type.begin() + sep_idx);
         std::string value_type = std::string(type.begin() + sep_idx + 1, type.end() - 1);
-        std::cout << key_type << ": " << value_type << '\n';
+        DEBUG_ONLY(std::cout << key_type << ": " << value_type << '\n');
         exit(0);
     }
     else if (type.rfind(settype, 0) == 0) // set<type>
@@ -191,13 +193,14 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arr
     }
     else
     {
-        std::cout << "unrecognized type when creating arrow array builder: " << type.c_str() << '\n';
+        DEBUG_ONLY(std::cout << "unrecognized type when creating arrow array builder: " << type.c_str() << '\n');
         exit(1);
     }
 }
 
 std::string get_child_type(const std::string &type)
 {
+    PROFILE_FUNCTION;
     return std::string(
         type.begin() + type.find('(') + 1,
         type.begin() + type.rfind(')'));
@@ -205,7 +208,8 @@ std::string get_child_type(const std::string &type)
 
 arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const std::string &bytes, arrow::MemoryPool *pool)
 {
-    std::cout << "appending to vector: " << coltype << '\n';
+    PROFILE_FUNCTION;
+    DEBUG_ONLY(std::cout << "appending to vector: " << coltype << '\n');
 
     // for ascii or blob or varchar or text, we just return the bytes directly
     if (coltype == "org.apache.cassandra.db.marshal.AsciiType" ||
@@ -279,7 +283,7 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     {
         if (bytes.size() > 8)
         {
-            std::cout << "ERROR: currently only supports up to 8 byte varints\n";
+            DEBUG_ONLY(std::cout << "ERROR: currently only supports up to 8 byte varints\n");
             exit(1);
         }
         auto builder = (arrow::Int64Builder *)builder_ptr;
@@ -305,7 +309,7 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     {
         auto builder = (arrow::Date32Builder *)builder_ptr;
         uint32_t date = ks.read_u4be() - (1 << 31); // why doesn't this work?
-        std::cout << date << " < DATE\n";
+        DEBUG_ONLY(std::cout << date << " < DATE\n");
         ARROW_RETURN_NOT_OK(builder->Append(date));
     }
     else if (coltype == "org.apache.cassandra.db.marshal.TimeType") // time
@@ -330,7 +334,7 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     }
     else
     {
-        std::cout << "unrecognized type when appending to arrow array builder: " << coltype.c_str() << '\n';
+        DEBUG_ONLY(std::cout << "unrecognized type when appending to arrow array builder: " << coltype.c_str() << '\n');
         exit(1);
     }
 
@@ -339,6 +343,7 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
 
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
 {
+    PROFILE_FUNCTION;
     arrow::MemoryPool *pool = arrow::default_memory_pool();
 
     auto &ptr = (*statistics->toc()->array())[3];
@@ -348,15 +353,15 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     str_arr_t names = std::make_shared<std::vector<std::string>>();
     builder_arr_t arr = std::make_shared<std::vector<std::shared_ptr<arrow::ArrayBuilder>>>();
 
-    std::cout << "saving partition key\n";
+    DEBUG_ONLY(std::cout << "saving partition key\n");
     append_builder(types, names, arr, body->partition_key_type()->body(), "partition key", pool);
 
-    std::cout << "saving clustering keys\n";
+    DEBUG_ONLY(std::cout << "saving clustering keys\n");
     for (auto &col : *body->clustering_key_types()->array())
         append_builder(types, names, arr, col->body(), "clustering key", pool);
 
     // TODO handle static columns
-    std::cout << "saving regular columns\n";
+    DEBUG_ONLY(std::cout << "saving regular columns\n");
     for (auto &col : *body->regular_columns()->array())
         append_builder(types, names, arr, col->column_type()->body(), col->name()->body(), pool);
 
@@ -406,7 +411,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
                         for (const auto &simple_cell : *cell->simple_cells())
                         {
-                            std::cout << "child value as string: " << simple_cell->value() << ", num children of builder: " << builder->num_children() << '\n';
+                            DEBUG_ONLY(std::cout << "child value as string: " << simple_cell->value() << ", num children of builder: " << builder->num_children() << '\n');
                             ARROW_RETURN_NOT_OK(append_scalar(get_child_type(coltype), builder->value_builder(), simple_cell->value(), pool));
                         }
                     }
@@ -421,7 +426,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     }
 
     int n = arr->size();
-    std::cout << "number of fields in table: " << n << '\n';
+    DEBUG_ONLY(std::cout << "number of fields in table: " << n << '\n');
 
     std::vector<std::shared_ptr<arrow::Array>> finished_arrays;
     std::vector<std::shared_ptr<arrow::Field>> schema_vector;
@@ -443,6 +448,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
 std::shared_ptr<arrow::DataType> get_arrow_type(const std::string &type)
 {
+    PROFILE_FUNCTION;
     auto type_ptr = type_info.find(type);
     if (type_ptr != type_info.end())
         return type_ptr->second.arrow_type;
@@ -458,6 +464,6 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string &type)
         return arrow::list(get_arrow_type(get_child_type(type)));
     }
 
-    std::cout << "type not found or supported: " << type << '\n';
+    DEBUG_ONLY(std::cout << "type not found or supported: " << type << '\n');
     exit(1);
 }

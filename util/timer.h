@@ -7,14 +7,22 @@
 #include <fstream>
 #include <algorithm>
 #include <thread>
+#include <mutex>
 
 #define PROFILING 1
 #if PROFILING
 #   define PROFILE_SCOPE(name) instrumentation_timer timer##__LINE__(name)
-#   define PROFILE_FUNCTION PROFILE_SCOPE(__FUNCTION__)
+#   define PROFILE_FUNCTION PROFILE_SCOPE(__PRETTY_FUNCTION__)
 #else
 #   define PROFILE_SCOPE(name)
 #   define PROFILE_FUNCTION
+#endif
+
+#define DEBUG 0
+#if DEBUG
+#   define DEBUG_ONLY(msg) msg
+#else
+#   define DEBUG_ONLY(msg)
 #endif
 
 struct profile_result
@@ -36,6 +44,7 @@ private:
     instrumentation_session *m_current_session;
     std::ofstream m_ostream;
     int m_profile_count;
+    std::mutex mutex;
 
 public:
     instrumentor();

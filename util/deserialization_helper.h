@@ -11,7 +11,10 @@
 #include <assert.h>
 #include <map>
 #include <set>
+#include <iostream>
+
 #include "vint.h"
+#include "timer.h"
 
 struct cassandra_type
 {

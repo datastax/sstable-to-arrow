@@ -5,7 +5,6 @@
  */
 
 #include "deserialization_helper.h"
-#include <iostream>
 
 #define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
 
@@ -149,7 +148,7 @@ int deserialization_helper_t::inc()
 // Indicate that we are processing a static row
 int deserialization_helper_t::set_static()
 {
-    std::cout << "begin processing static row\n";
+    DEBUG_ONLY(std::cout << "begin processing static row\n";)
     idx = 0;
     curkind = STATIC;
     return 0;
@@ -157,7 +156,7 @@ int deserialization_helper_t::set_static()
 // Indicate that we are processing a regular row
 int deserialization_helper_t::set_regular()
 {
-    std::cout << "begin processing regular row\n";
+    DEBUG_ONLY(std::cout << "begin processing regular row\n");
     idx = 0;
     curkind = REGULAR;
     return 0;
@@ -172,8 +171,7 @@ int deserialization_helper_t::get_n_cols()
 
 int deserialization_helper_t::get_col_size(const std::string &coltype)
 {
-    std::cout << "getting col size of " << coltype << '\n';
-
+    DEBUG_ONLY(std::cout << "getting col size of " << coltype << '\n');
     if (is_complex(coltype))
     {
         // it seems like children cells of a complex cell have their
@@ -183,7 +181,7 @@ int deserialization_helper_t::get_col_size(const std::string &coltype)
         //     coltype.begin() + coltype.rfind(')'));
         // return get_col_size(child_type);
         long long len = vint_t(_io()).val();
-        std::cout << "length of child cell: " << len << '\n';
+        DEBUG_ONLY(std::cout << "length of child cell: " << len << '\n');
         return len;
     }
 
@@ -191,7 +189,7 @@ int deserialization_helper_t::get_col_size(const std::string &coltype)
     auto it = type_info.find(coltype);
     if (it == type_info.end())
     {
-        perror(("unrecognized type: " + coltype).c_str());
+        std::cerr << "unrecognized type: " << coltype << '\n';
         exit(1);
     }
     long long len;
@@ -200,7 +198,7 @@ int deserialization_helper_t::get_col_size(const std::string &coltype)
     // otherwise read the length as a varint
     else
         len = vint_t(_io()).val();
-    std::cout << "length: " << len << '\n';
+    DEBUG_ONLY(std::cout << "length: " << len << '\n');
     return len;
 }
 
