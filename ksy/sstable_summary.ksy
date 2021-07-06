@@ -1,5 +1,3 @@
-# WIP
-
 meta:
   id: sstable_summary
   endian: be
@@ -31,13 +29,13 @@ types:
   summary_entries_block:
     seq:
       - id: offsets
-        type: u4
+        type: u4le # not sure why this is little endian
         repeat: expr
-        repeat-expr: _parent.header.entries_count
+        repeat-expr: _root.header.entries_count
       - id: entries
         type: summary_entry(_index)
         repeat: expr
-        repeat-expr: _parent.header.entries_count
+        repeat-expr: _root.header.entries_count
 
   summary_entry:
     params:
@@ -54,4 +52,4 @@ types:
       - id: length
         type: u4
       - id: key
-        size: length      
+        size: length
