@@ -8,7 +8,7 @@
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
                 "-n",
-                "/workspaces/sstable-to-arrow/res/data/testalltypes/alltypes-b15935a0de6c11eb87f69116fc548b6b"
+                "/workspaces/sstable-to-arrow/res/data/baselines/iot-3b265bd0df4111eb82769116fc548b6b"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",

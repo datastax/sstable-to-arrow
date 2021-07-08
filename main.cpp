@@ -81,6 +81,7 @@ void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj)
 }
 
 // overload for statistics file, which requires the stream to persist
+template <>
 void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statistics_t> *sstable_obj)
 {
     PROFILE_FUNCTION;

@@ -1,10 +1,19 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.10.2)
 project(sstable_to_arrow VERSION 0.1.0)
 
-include(CTest)
-enable_testing()
+# include(CTest)
+# enable_testing()
+
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CPACK_PROJECT_NAME ${PROJECT_NAME})
+set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+include(CPack)
 
 find_package(Arrow REQUIRED)
+find_package(Threads REQUIRED)
 
 add_executable(sstable_to_arrow
     util/clustering_blocks.cpp util/clustering_blocks.h
@@ -14,6 +23,7 @@ add_executable(sstable_to_arrow
     util/vint.cpp util/vint.h
     util/sstable_to_arrow.cpp util/sstable_to_arrow.h
     util/timer.cpp util/timer.h
+    util/conversions.cpp util/conversions.h
     ${PROJECT_BINARY_DIR}/deletion_time.cpp ${PROJECT_BINARY_DIR}/deletion_time.h
     ${PROJECT_BINARY_DIR}/sstable_data.cpp ${PROJECT_BINARY_DIR}/sstable_data.h
     ${PROJECT_BINARY_DIR}/sstable_index.cpp ${PROJECT_BINARY_DIR}/sstable_index.h
@@ -24,17 +34,11 @@ add_executable(sstable_to_arrow
 
 target_link_libraries(sstable_to_arrow PRIVATE kaitai_struct_cpp_stl_runtime)
 target_link_libraries(sstable_to_arrow PRIVATE arrow_shared)
-target_link_libraries(sstable_to_arrow PRIVATE pthread)
-
-set(CPACK_PROJECT_NAME ${PROJECT_NAME})
-set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
-include(CPack)
-
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+target_link_libraries(sstable_to_arrow PRIVATE Threads::Threads)
 
 target_include_directories(sstable_to_arrow PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/util")
+target_link_libraries(sstable_to_arrow PRIVATE "-pg")
 
 foreach(ksy_file deletion_time sstable_data sstable_index sstable_statistics sstable_summary)
     add_custom_command(

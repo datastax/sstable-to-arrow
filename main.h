@@ -35,6 +35,7 @@ arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable);
 void read_data(std::shared_ptr<struct sstable_t> sstable);
 template <typename T>
 void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj);
+template <>
 void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statistics_t> *sstable_obj);
 
 void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics);

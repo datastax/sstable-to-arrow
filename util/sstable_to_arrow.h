@@ -33,7 +33,7 @@ struct cql_decimal_t
 arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table);
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
 arrow::Status process_row(
-    const std::string &partition_key,
+    std::string_view partition_key,
     std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
     std::shared_ptr<std::vector<std::string>> types,
     std::shared_ptr<std::vector<std::string>> names,
@@ -48,13 +48,9 @@ void process_column(
     const std::string &name,
     arrow::MemoryPool *pool);
 
-std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arrow::MemoryPool *pool);
+std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type, arrow::MemoryPool *pool);
 
-arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const std::string &bytes, arrow::MemoryPool *pool);
-arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
-
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string &type);
-void get_map_child_types(const std::string &type, std::string *key_type, std::string *value_type);
-std::string get_child_type(const std::string &type);
+arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool);
+arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
 
 #endif

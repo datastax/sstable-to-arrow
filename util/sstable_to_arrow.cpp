@@ -100,6 +100,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     builder_arr_t arr = std::make_shared<std::vector<std::shared_ptr<arrow::ArrayBuilder>>>();
 
     DEBUG_ONLY(std::cout << "saving partition key\n");
+
     process_column(types, names, arr, body->partition_key_type()->body(), "partition key", pool);
 
     DEBUG_ONLY(std::cout << "saving clustering keys\n");
@@ -114,7 +115,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     for (auto &partition : *sstable->partitions())
         for (auto &unfiltered : *partition->unfiltereds())
             if ((unfiltered->flags() & 0x01) == 0 && (unfiltered->flags() & 0x02) == 0) // ensure that this is a row instead of an end of partition marker or range tombstone marker
-                // TODO handle end of partition and range tombstone markers
+                                                                                        // TODO handle end of partition and range tombstone markers
                 process_row(partition->header()->key(), unfiltered, types, names, arr, pool);
 
     int n = arr->size();
@@ -129,7 +130,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
         std::shared_ptr<arrow::Array> arrptr;
         ARROW_RETURN_NOT_OK((*arr)[i]->Finish(&arrptr));
         finished_arrays.push_back(arrptr);
-        schema_vector.push_back(arrow::field((*names)[i], get_arrow_type((*types)[i])));
+        schema_vector.push_back(arrow::field(std::string((*names)[i]), conversions::get_arrow_type((*types)[i])));
     }
     *schema = std::make_shared<arrow::Schema>(schema_vector);
     *table = arrow::Table::Make(*schema, finished_arrays);
@@ -140,54 +141,6 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
         << (*schema)->ToString()
         << "\n==========\ntable:\n==========\n"
         << (*table)->ToString() << "\n==========\n");
-
-    return arrow::Status::OK();
-}
-
-arrow::Status process_row(
-    const std::string &partition_key,
-    std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
-    str_arr_t types,
-    str_arr_t names,
-    builder_arr_t arr,
-    arrow::MemoryPool *pool)
-{
-    PROFILE_FUNCTION;
-
-    // now we know that this unfiltered is actually a row
-    sstable_data_t::row_t *row = static_cast<sstable_data_t::row_t *>(unfiltered->body());
-
-    int idx = 0;
-    int kind = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0)
-                   ? deserialization_helper_t::STATIC
-                   : deserialization_helper_t::REGULAR; // TODO deal with static row
-
-    ARROW_RETURN_NOT_OK(append_scalar((*types)[idx], (*arr)[idx].get(), partition_key, pool));
-    idx++;
-    for (auto &cell : *row->clustering_blocks()->values())
-    {
-        ARROW_RETURN_NOT_OK(append_scalar((*types)[idx], (*arr)[idx].get(), cell, pool));
-        idx++;
-    }
-
-    for (int i = 0; i < deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR); ++i, ++idx)
-    {
-        auto cell_ptr = (*row->cells())[i].get();
-        auto builder_ptr = (*arr)[idx].get();
-        const std::string &coltype = (*types)[idx];
-        if (deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i))
-            ARROW_RETURN_NOT_OK(append_scalar(
-                coltype,
-                builder_ptr,
-                static_cast<sstable_data_t::complex_cell_t *>(cell_ptr),
-                pool));
-        else
-            ARROW_RETURN_NOT_OK(append_scalar(
-                coltype,
-                builder_ptr,
-                static_cast<sstable_data_t::simple_cell_t *>(cell_ptr)->value(),
-                pool));
-    }
 
     return arrow::Status::OK();
 }
@@ -216,6 +169,67 @@ void process_column(
     arr->push_back(create_builder(cassandra_type, pool));
 }
 
+arrow::Status process_row(
+    std::string_view partition_key,
+    std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
+    str_arr_t types,
+    str_arr_t names,
+    builder_arr_t arr,
+    arrow::MemoryPool *pool)
+{
+    PROFILE_FUNCTION;
+
+    // now we know that this unfiltered is actually a row
+    sstable_data_t::row_t *row = static_cast<sstable_data_t::row_t *>(unfiltered->body());
+
+    int idx = 0;
+    int kind = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0)
+                   ? deserialization_helper_t::STATIC
+                   : deserialization_helper_t::REGULAR; // TODO deal with static row
+
+    ARROW_RETURN_NOT_OK(append_scalar((*types)[idx], (*arr)[idx].get(), partition_key, pool));
+    idx++;
+    for (auto &cell : *row->clustering_blocks()->values())
+    {
+        ARROW_RETURN_NOT_OK(append_scalar((*types)[idx], (*arr)[idx].get(), cell, pool));
+        idx++;
+    }
+
+    const int &n_regular = deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR);
+    for (int i = 0; i < n_regular; ++i, ++idx)
+    {
+        PROFILE_SCOPE("LOOP");
+        const auto cell_ptr = (*row->cells())[i].get();
+        auto builder_ptr = (*arr)[idx].get();
+        const std::string_view &coltype = (*types)[idx];
+        if (deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i))
+        {
+            PROFILE_SCOPE("multi cell");
+            append_scalar(
+                coltype,
+                builder_ptr,
+                (sstable_data_t::complex_cell_t *)cell_ptr,
+                pool);
+            // ARROW_RETURN_NOT_OK(append_scalar(
+            //     coltype,
+            //     builder_ptr,
+            //     (sstable_data_t::complex_cell_t *)cell_ptr,
+            //     pool));
+        }
+        else // simple cell
+        {
+            PROFILE_SCOPE("simple cell");
+            append_scalar(
+                coltype,
+                builder_ptr,
+                ((sstable_data_t::simple_cell_t *)cell_ptr)->value(),
+                pool);
+        }
+    }
+
+    return arrow::Status::OK();
+}
+
 /**
  * @brief See https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/TypeParser.java
  * @param types the vector of the Cassandra types of each column (e.g. org.apache.cassandra.db.marshal.AsciiType)
@@ -224,7 +238,7 @@ void process_column(
  * @param name the name of this column
  * @param pool the arrow memory pool to use for the array builders
  */
-std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arrow::MemoryPool *pool)
+std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type, arrow::MemoryPool *pool)
 {
     PROFILE_FUNCTION;
     DEBUG_ONLY(std::cout << "creating new vector of type " << type << '\n');
@@ -300,27 +314,45 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arr
     // else if (cassandra_type == "org.apache.cassandra.db.marshal.UserType")
     // else if (cassandra_type == "org.apache.cassandra.db.marshal.TupleType")
     //     arr->push_back(std::make_shared<arrow::UInt32Builder>(pool));
-    else if (type.rfind(maptype, 0) == 0) // if it begins with the map type map<type, type>
+
+    else if (conversions::is_reversed(type))
+    {
+        return create_builder(conversions::get_child_type(type), pool);
+    }
+    else if (conversions::is_composite(type))
+    {
+        arrow::FieldVector fields;
+        std::vector<std::shared_ptr<arrow::ArrayBuilder>> field_builders;
+        auto maybe_tree = conversions::parse_nested_type(type);
+        auto tree = *maybe_tree;
+        for (auto field : *tree->children)
+        {
+            fields.push_back(arrow::field(std::string(field->str), conversions::get_arrow_type(field->str)));
+            field_builders.push_back(create_builder(field->str, pool));
+        }
+        return std::make_shared<arrow::StructBuilder>(arrow::struct_(fields), pool, field_builders);
+    }
+    else if (conversions::is_list(type)) // list<type>
+    {
+        return std::make_shared<arrow::ListBuilder>(pool, create_builder(conversions::get_child_type(type), pool));
+    }
+    else if (conversions::is_map(type)) // if it begins with the map type map<type, type>
     {
         // TODO this currently only works if both the key and value are simple types, i.e. not maps
-        std::string key_type, value_type;
-        get_map_child_types(type, &key_type, &value_type);
+        std::string_view key_type, value_type;
+        conversions::get_map_child_types(type, &key_type, &value_type);
         DEBUG_ONLY(std::cout << "map types: " << key_type << ": " << value_type << '\n');
         auto key_builder = create_builder(key_type, pool);
         auto value_builder = create_builder(value_type, pool);
         return std::make_shared<arrow::MapBuilder>(pool, key_builder, value_builder);
     }
-    else if (type.rfind(settype, 0) == 0) // set<type>
+    else if (conversions::is_set(type)) // set<type>
     {
-        return std::make_shared<arrow::ListBuilder>(pool, create_builder(get_child_type(type), pool));
-    }
-    else if (type.rfind(listtype, 0) == 0) // list<type>
-    {
-        return std::make_shared<arrow::ListBuilder>(pool, create_builder(get_child_type(type), pool));
+        return std::make_shared<arrow::ListBuilder>(pool, create_builder(conversions::get_child_type(type), pool));
     }
     else
     {
-        DEBUG_ONLY(std::cout << "unrecognized type when creating arrow array builder: " << type.c_str() << '\n');
+        std::cerr << "unrecognized type when creating arrow array builder: " << type << '\n';
         exit(1);
     }
 }
@@ -332,10 +364,16 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string &type, arr
  * @param builder_ptr a pointer to the arrow ArrayBuilder
  * @param bytes a buffer containing the bytes from the SSTable
  */
-arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const std::string &bytes, arrow::MemoryPool *pool)
+arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool)
 {
     PROFILE_FUNCTION;
     DEBUG_ONLY(std::cout << "appending to vector: " << coltype << '\n');
+
+    // for all other types, we parse the data using kaitai, which might end up
+    // being a performance bottleneck
+    // TODO look into potential uses of memcpy for optimization
+    std::string buffer(bytes);
+    kaitai::kstream ks(buffer);
 
     // for ascii or blob or varchar or text, we just return the bytes directly
     if (coltype == "org.apache.cassandra.db.marshal.AsciiType" ||
@@ -343,16 +381,30 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
         coltype == "org.apache.cassandra.db.marshal.UTF8Type")
     {
         auto builder = (arrow::StringBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(bytes));
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes_full()));
         return arrow::Status::OK();
     }
 
-    // for all other types, we parse the data using kaitai, which might end up
-    // being a performance bottleneck
-    // TODO look into potential uses of memcpy for optimization
-    kaitai::kstream ks(bytes);
+    if (conversions::is_composite(coltype))
+    {
+        auto builder = static_cast<arrow::StructBuilder *>(builder_ptr);
+        ARROW_RETURN_NOT_OK(builder->Append());
 
-    if (coltype == "org.apache.cassandra.db.marshal.BooleanType") // boolean
+        auto maybe_tree = conversions::parse_nested_type(coltype);
+        auto tree = *maybe_tree;
+        for (int i = 0; i < tree->children->size(); ++i)
+        {
+            uint16_t child_size = ks.read_u2be();
+            auto data = ks.read_bytes(child_size);
+            ks.read_bytes(1); // inserts a '0' bit at end
+            ARROW_RETURN_NOT_OK(append_scalar((*tree->children)[i]->str, builder->child(i), data, pool));
+        }
+    }
+    else if (conversions::is_reversed(coltype))
+    {
+        ARROW_RETURN_NOT_OK(append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool));
+    }
+    else if (coltype == "org.apache.cassandra.db.marshal.BooleanType") // boolean
     {
         auto builder = (arrow::BooleanBuilder *)builder_ptr;
         ARROW_RETURN_NOT_OK(builder->Append(ks.read_u1()));
@@ -369,9 +421,8 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
         auto scale_builder = (arrow::Int32Builder *)builder->child(0);
         auto val_builder = (arrow::BinaryBuilder *)builder->child(1);
         int scale = ks.read_s4be();
-        std::string val = ks.read_bytes_full();
         ARROW_RETURN_NOT_OK(scale_builder->Append(scale));
-        ARROW_RETURN_NOT_OK(val_builder->Append(val));
+        ARROW_RETURN_NOT_OK(val_builder->Append(ks.read_bytes_full()));
     }
     else if (coltype == "org.apache.cassandra.db.marshal.DoubleType") // double
     {
@@ -424,7 +475,8 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     else if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
     {
         auto builder = static_cast<arrow::Int64Builder *>(builder_ptr);
-        ARROW_RETURN_NOT_OK(builder->Append(vint_t::parse_java(bytes.c_str(), bytes.size())));
+        int size = ks.size();
+        ARROW_RETURN_NOT_OK(builder->Append(vint_t::parse_java(bytes.data(), bytes.size())));
     }
     else if (coltype == "org.apache.cassandra.db.marshal.LongType") // bigint
     {
@@ -450,7 +502,7 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     else if (coltype == "org.apache.cassandra.db.marshal.TimeUUIDType") // timeuuid
     {
         auto builder = (arrow::FixedSizeBinaryBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(bytes));
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes_full()));
     }
     else if (coltype == "org.apache.cassandra.db.marshal.TimestampType") // timestamp
     {
@@ -460,44 +512,46 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
     else if (coltype == "org.apache.cassandra.db.marshal.UUIDType") // uuid
     {
         auto builder = (arrow::FixedSizeBinaryBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(bytes));
+        ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes_full()));
     }
     else
     {
-        DEBUG_ONLY(std::cout << "unrecognized type when appending to arrow array builder: " << coltype.c_str() << '\n');
+        std::cerr << "unrecognized type when appending to arrow array builder: " << coltype << '\n';
         exit(1);
     }
 
     return arrow::Status::OK();
 }
 
-arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
+arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
 {
-    if (coltype.rfind(maptype, 0) == 0) // if it begins with the map type map<type, type>
+    if (conversions::is_map(coltype))
     {
         auto builder = static_cast<arrow::MapBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
-        std::string key_type, value_type;
+        std::string_view key_type, value_type;
         for (const auto &simple_cell : *cell->simple_cells())
         {
-            get_map_child_types(coltype, &key_type, &value_type);
+            // keys are stored in the cell path
+            conversions::get_map_child_types(coltype, &key_type, &value_type);
             append_scalar(key_type, builder->key_builder(), simple_cell->path()->value(), pool);
             append_scalar(value_type, builder->item_builder(), simple_cell->value(), pool);
             DEBUG_ONLY(std::cout << "key and value as strings: " << simple_cell->path()->value() << " | " << simple_cell->value() << '\n');
         }
     }
-    else if (coltype.rfind(settype, 0) == 0) // set<type>
+    else if (conversions::is_set(coltype))
     {
         auto builder = static_cast<arrow::ListBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
 
         for (const auto &simple_cell : *cell->simple_cells())
         {
+            // values of a set are stored in the path, while the actual cell value is empty
             DEBUG_ONLY(std::cout << "child value as string: " << simple_cell->path()->value() << '\n');
-            ARROW_RETURN_NOT_OK(append_scalar(get_child_type(coltype), builder->value_builder(), simple_cell->path()->value(), pool));
+            ARROW_RETURN_NOT_OK(append_scalar(conversions::get_child_type(coltype), builder->value_builder(), simple_cell->path()->value(), pool));
         }
     }
-    else if (coltype.rfind(listtype, 0) == 0) // list<type>
+    else if (conversions::is_list(coltype))
     {
         auto builder = static_cast<arrow::ListBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
@@ -505,46 +559,9 @@ arrow::Status append_scalar(const std::string &coltype, arrow::ArrayBuilder *bui
         for (const auto &simple_cell : *cell->simple_cells())
         {
             DEBUG_ONLY(std::cout << "child value as string: " << simple_cell->value() << '\n');
-            ARROW_RETURN_NOT_OK(append_scalar(get_child_type(coltype), builder->value_builder(), simple_cell->value(), pool));
+            ARROW_RETURN_NOT_OK(append_scalar(conversions::get_child_type(coltype), builder->value_builder(), simple_cell->value(), pool));
         }
     }
 
     return arrow::Status::OK();
-}
-
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string &type)
-{
-    PROFILE_FUNCTION;
-    auto type_ptr = type_info.find(type);
-    if (type_ptr != type_info.end())
-        return type_ptr->second.arrow_type;
-    if (type.rfind(maptype, 0) == 0)
-    {
-        std::string key_type, value_type;
-        get_map_child_types(type, &key_type, &value_type);
-        return arrow::map(get_arrow_type(key_type), get_arrow_type(value_type));
-    }
-    // TODO currently treating sets and lists identically
-    else if (type.rfind(settype, 0) == 0 || type.rfind(listtype, 0) == 0)
-    {
-        return arrow::list(get_arrow_type(get_child_type(type)));
-    }
-
-    DEBUG_ONLY(std::cout << "type not found or supported: " << type << '\n');
-    exit(1);
-}
-
-void get_map_child_types(const std::string &type, std::string *key_type, std::string *value_type)
-{
-    const int sep_idx = type.find(',');
-    *key_type = std::string(type.begin() + maptype.size() + 1, type.begin() + sep_idx);
-    *value_type = std::string(type.begin() + sep_idx + 1, type.end() - 1);
-}
-
-std::string get_child_type(const std::string &type)
-{
-    PROFILE_FUNCTION;
-    return std::string(
-        type.begin() + type.find('(') + 1,
-        type.begin() + type.rfind(')'));
 }

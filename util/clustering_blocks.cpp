@@ -17,33 +17,13 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
         while (offset < limit)
         {
             std::string cql_type = deserialization_helper_t::get_col_type(CLUSTERING, offset);
-            auto type_ptr = type_info.find(cql_type);
 
             if (is_null(header, offset))
                 values_[offset] = nullptr; // this is probably unsafe but idk a better way
             else if (is_empty(header, offset))
-                values_[offset] = ks->read_bytes(0);
-            else if (type_ptr == type_info.end())
-            {
-                std::string err = "Invalid or unsupported type: " + cql_type;
-                perror(err.c_str());
-                exit(1);
-            }
-            else if (type_ptr->second.fixed_len != 0)
-            {
-                values_[offset] = ks->read_bytes(type_ptr->second.fixed_len);
-            }
+                values_[offset] = '\0';
             else
-            {
-                long long len = vint_t(ks).val();
-                if (len < 0)
-                {
-                    perror("error: corrupted file, read negative length");
-                    exit(1);
-                }
-                // TODO handle maximum size
-                values_[offset] = ks->read_bytes(len);
-            }
+                values_[offset] = ks->read_bytes(conversions::get_col_size(cql_type, _io()));
             offset++;
         }
     }

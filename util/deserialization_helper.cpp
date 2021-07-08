@@ -8,59 +8,15 @@
 
 #define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
 
-typedef std::vector<std::string> strvec;
-
-arrow::FieldVector decimal_fields{
-    arrow::field("scale", arrow::int32()), arrow::field("val", arrow::binary())};
-arrow::FieldVector inet_fields{
-    arrow::field("ipv4", arrow::int32()), arrow::field("ipv6", arrow::int64())};
-
-const std::map<std::string, struct cassandra_type> type_info{
-    {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0, arrow::utf8()}},        // ascii
-    {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1, arrow::boolean()}}, // boolean
-    {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 0, arrow::int8()}},       // tinyint
-    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary()}},       // blob
-    // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
-    // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
-    {"org.apache.cassandra.db.marshal.DateType", {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // old version of TimestampType
-    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0, arrow::struct_(decimal_fields)}}, // decimal, custom implementation
-    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}},                 // double
-    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0, arrow::list(arrow::int64())}}, // duration
-    // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
-    // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.FloatType", {"float", 4, arrow::float32()}}, // float
-    // {"org.apache.cassandra.db.marshal.FrozenType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 0, arrow::dense_union(inet_fields)}}, // inet
-    {"org.apache.cassandra.db.marshal.Int32Type", {"int", 4, arrow::int32()}},        // int
-    {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0, arrow::int64()}},  // varint
-    {"org.apache.cassandra.db.marshal.LexicalUUIDType", {"", 16, arrow::fixed_size_binary(16)}},
-    // TODO ListType
-    {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8, arrow::int64()}}, // bigint
-    // TODO MapType
-    // {"org.apache.cassandra.db.marshal.PartitionerDefinedOrder", { "", 0 }}, // not for user-defined
-    // https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/ReversedType.java
-    // {"org.apache.cassandra.db.marshal.ReversedType", { "", 0 }}, // size of descendant
-    // TODO SetType
-    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 0, arrow::int16()}},                   // smallint
-    {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 0, arrow::date32()}},                 // date, represented as 32-bit unsigned
-    {"org.apache.cassandra.db.marshal.TimeType", {"time", 0, arrow::time64(arrow::TimeUnit::NANO)}},  // time
-    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16, arrow::fixed_size_binary(16)}}, // timeuuid
-    {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}},             // timestamp
-    // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0, arrow::utf8()}},                 // text, varchar
-    {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16, arrow::fixed_size_binary(16)}}, // uuid
-    // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
-};
-
 // =============== DEFINE STATIC FIELDS ===============
 
 int deserialization_helper_t::idx = 0;
 int deserialization_helper_t::curkind = 0;
 
-const std::vector<std::shared_ptr<strvec>> deserialization_helper_t::colkinds = {
-    std::make_shared<strvec>(),
-    std::make_shared<strvec>(),
-    std::make_shared<strvec>()};
+const std::vector<std::shared_ptr<std::vector<std::string>>> deserialization_helper_t::colkinds = {
+    std::make_shared<std::vector<std::string>>(),
+    std::make_shared<std::vector<std::string>>(),
+    std::make_shared<std::vector<std::string>>()};
 
 // =============== METHOD DECLARATIONS ===============
 
@@ -109,20 +65,9 @@ int deserialization_helper_t::get_n_blocks()
 {
     return (get_n_cols(CLUSTERING) + 31) / 32;
 }
-
-/**
- * Checks if the currently selected cell is complex (usually a collection like a list, map, set, etc)
- */
-bool deserialization_helper_t::is_multi_cell(const std::string &coltype)
-{
-    for (const std::string &complex_type : multi_cell_types)
-        if (coltype.rfind(complex_type, 0) == 0)
-            return true;
-    return false;
-}
 bool deserialization_helper_t::is_multi_cell(int kind, int i)
 {
-    return is_multi_cell(get_col_type(kind, i));
+    return conversions::is_multi_cell(get_col_type(kind, i));
 }
 bool deserialization_helper_t::is_multi_cell()
 {
@@ -163,42 +108,8 @@ int deserialization_helper_t::get_n_cols()
 {
     return get_n_cols(curkind);
 }
-
-int deserialization_helper_t::get_col_size(const std::string &coltype)
-{
-    DEBUG_ONLY(std::cout << "getting col size of " << coltype << '\n');
-    if (is_multi_cell(coltype))
-    {
-        // it seems like children cells of a complex cell have their
-        // size marked as a varint instead of the expected value...
-        // std::string child_type(
-        //     coltype.begin() + coltype.find('(') + 1,
-        //     coltype.begin() + coltype.rfind(')'));
-        // return get_col_size(child_type);
-        long long len = vint_t(_io()).val();
-        DEBUG_ONLY(std::cout << "length of child cell: " << len << '\n');
-        return len;
-    }
-
-    // check if this data type has a fixed length
-    auto it = type_info.find(coltype);
-    if (it == type_info.end())
-    {
-        std::cerr << "unrecognized type: " << coltype << '\n';
-        exit(1);
-    }
-    long long len;
-    if (it->second.fixed_len != 0)
-        len = it->second.fixed_len;
-    // otherwise read the length as a varint
-    else
-        len = vint_t(_io()).val();
-    DEBUG_ONLY(std::cout << "length: " << len << '\n');
-    return len;
-}
-
-// Get the size of the cell value in bytes
+// Get the size of the current cell value in bytes
 int deserialization_helper_t::get_col_size()
 {
-    return get_col_size(get_col_type(curkind, idx));
+    return conversions::get_col_size(get_col_type(curkind, idx), _io());
 }
