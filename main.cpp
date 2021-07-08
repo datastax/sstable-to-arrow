@@ -67,7 +67,16 @@ void read_data(std::shared_ptr<struct sstable_t> sstable)
     read_sstable_file(sstable->statistics_path, &sstable->statistics);
     process_serialization_header(get_serialization_header(sstable->statistics));
     DEBUG_ONLY(debug_statistics(sstable->statistics));
+
+    auto start_ts = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
+
     read_sstable_file(sstable->data_path, &sstable->data);
+
+    auto end_ts = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
+
+    std::cout << "[PROFILE read_data]: " << end - start << '\n';
 }
 
 template <typename T>

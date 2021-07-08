@@ -52,6 +52,7 @@
         "typeinfo": "cpp",
         "condition_variable": "cpp",
         "mutex": "cpp",
-        "iomanip": "cpp"
+        "iomanip": "cpp",
+        "future": "cpp"
     }
 }

@@ -10,6 +10,9 @@
 #include <arrow/api.h>
 #include <arrow/ipc/api.h>
 #include <arrow/io/api.h>
+#include <thread>
+#include <future>
+#include <chrono>
 
 #include "deserialization_helper.h"
 #include "clustering_blocks.h"
@@ -52,5 +55,7 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type
 
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool);
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
+
+arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::ArrayBuilder *builder_ptr, const std::string_view &coltype, bool is_multi_cell, arrow::MemoryPool *pool);
 
 #endif

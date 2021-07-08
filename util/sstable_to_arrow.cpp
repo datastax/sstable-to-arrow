@@ -90,6 +90,10 @@ arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<a
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
 {
     PROFILE_FUNCTION;
+
+    auto start_ts = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
+
     arrow::MemoryPool *pool = arrow::default_memory_pool();
 
     auto &ptr = (*statistics->toc()->array())[3];
@@ -141,6 +145,11 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
         << (*schema)->ToString()
         << "\n==========\ntable:\n==========\n"
         << (*table)->ToString() << "\n==========\n");
+
+    auto end_ts = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
+
+    std::cout << "[Profile - converting sstable to arrow]: " << end - start << '\n';
 
     return arrow::Status::OK();
 }
@@ -196,37 +205,43 @@ arrow::Status process_row(
     }
 
     const int &n_regular = deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR);
+    std::vector<std::future<arrow::Status>> col_threads;
+    col_threads.reserve(n_regular);
+
     for (int i = 0; i < n_regular; ++i, ++idx)
     {
-        PROFILE_SCOPE("LOOP");
-        const auto cell_ptr = (*row->cells())[i].get();
+        auto cell_ptr = std::move((*row->cells())[i]);
         auto builder_ptr = (*arr)[idx].get();
         const std::string_view &coltype = (*types)[idx];
-        if (deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i))
-        {
-            PROFILE_SCOPE("multi cell");
-            append_scalar(
-                coltype,
-                builder_ptr,
-                (sstable_data_t::complex_cell_t *)cell_ptr,
-                pool);
-            // ARROW_RETURN_NOT_OK(append_scalar(
-            //     coltype,
-            //     builder_ptr,
-            //     (sstable_data_t::complex_cell_t *)cell_ptr,
-            //     pool));
-        }
-        else // simple cell
-        {
-            PROFILE_SCOPE("simple cell");
-            append_scalar(
-                coltype,
-                builder_ptr,
-                ((sstable_data_t::simple_cell_t *)cell_ptr)->value(),
-                pool);
-        }
+        const bool is_multi_cell = deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i);
+        col_threads.push_back(std::async(handle_cell, std::move(cell_ptr), builder_ptr, coltype, is_multi_cell, pool));
     }
 
+    for (auto &future : col_threads)
+        ARROW_RETURN_NOT_OK(future.get());
+
+    return arrow::Status::OK();
+}
+
+arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::ArrayBuilder *builder_ptr, const std::string_view &coltype, bool is_multi_cell, arrow::MemoryPool *pool)
+{
+    if (is_multi_cell)
+    {
+        ARROW_RETURN_NOT_OK(append_scalar(
+            coltype,
+            builder_ptr,
+            (sstable_data_t::complex_cell_t *)cell_ptr.get(),
+            pool));
+    }
+    else // simple cell
+    {
+        ARROW_RETURN_NOT_OK(
+            append_scalar(
+                coltype,
+                builder_ptr,
+                ((sstable_data_t::simple_cell_t *)cell_ptr.get())->value(),
+                pool));
+    }
     return arrow::Status::OK();
 }
 
