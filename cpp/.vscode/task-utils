@@ -1,0 +1,25 @@
+#!/bin/bash
+
+case "$1" in
+    release)
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release -GNinja ..
+        ninja
+        ;;
+    debug)
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Debug -GNinja ..
+        ninja
+        ;;
+    profile)
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release -GNinja -DPROFILE_GPROF ..
+        ninja
+        ;;
+    *)
+        echo "Use subcommand release, debug, or profile"
+        ;;
+esac

@@ -1,0 +1,62 @@
+#!/bin/bash
+
+if [ "$#" -lt 1 ]; then
+    echo "[SCRIPT] pass the number of rows to generate, e.g. ./generate_data 10k"
+    exit 1
+fi
+
+function prompt() {
+    read -p "$* [Y/n] " && [[ ! "$REPLY" =~ ^[nN] ]]
+}
+
+if docker network ls | grep -q cassandra; then
+    echo "[SCRIPT] cassandra network found"
+else
+    echo "[SCRIPT] cassandra network not found, creating"
+    docker network create cassandra
+fi
+
+if ! docker ps | grep -q cassandra; then
+    echo "[SCRIPT] cassandra container not found, creating"
+    docker run --rm -dit --name cassandra -p 9042:9042 --hostname cassandra --network cassandra cassandra:3.11
+    sleep 10s
+elif prompt "[SCRIPT] cassandra container already exists, reset?"; then
+    echo "[SCRIPT] stopping cassandra container"
+    docker stop cassandra
+
+    echo "[SCRIPT] creating new cassandra container"
+    docker run --rm -dit --name cassandra -p 9042:9042 --hostname cassandra --network cassandra cassandra:3.11
+    sleep 10s
+fi
+
+echo "[SCRIPT] initializing iot schema"
+docker run --rm -it --name nb --network cassandra nosqlbench/nosqlbench run driver=cql workload=cql-iot tags=phase:schema hosts=cassandra
+
+echo "[SCRIPT] writing $1 element(s) to database"
+docker run --rm -it --name nb --network cassandra nosqlbench/nosqlbench run driver=cql workload=cql-iot tags=phase:rampup hosts=cassandra threads=auto cycles="$1" --progress console:1s
+
+echo "[SCRIPT] turning off compression for table baselines.iot"
+docker exec cassandra /opt/cassandra/bin/cqlsh -e "ALTER TABLE baselines.iot WITH compression = {'enabled': 'false'}"
+
+echo "[SCRIPT] flushing sstables to disk"
+docker exec cassandra /opt/cassandra/bin/nodetool flush
+
+echo "[SCRIPT] compacting sstables"
+docker exec cassandra /opt/cassandra/bin/nodetool compact
+
+if prompt "[SCRIPT] run commands in container?"; then
+    docker exec -it cassandra /bin/bash
+fi
+
+echo "[SCRIPT] copying sstables to $(pwd)/res/iot-$1"
+mkdir -p "$(pwd)/res/iot-$1"
+docker cp cassandra:/var/lib/cassandra/data/baselines "$(pwd)/res/iot-$1"
+
+if prompt "[SCRIPT] stop container?"; then
+    echo "[SCRIPT] stopping cassandra image"
+    docker stop cassandra
+
+    echo "[SCRIPT] removing cassandra network"
+    docker network rm cassandra
+fi
+

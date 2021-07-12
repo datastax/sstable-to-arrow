@@ -28,6 +28,8 @@ The big picture goal is to allow GPU-accelerated analytic queries on the Cassand
 
 ## Getting started
 
+The instructions below apply to the `cpp` directory.
+
 This project can be run through a Docker container via
 ```bash
 docker build -t sstable-to-arrow .

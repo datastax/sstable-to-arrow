@@ -1,0 +1,56 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: build cmake project with ninja for release",
+			"command": "./.vscode/task-utils",
+			"args": [
+				"release"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "cppbuild",
+			"label": "C/C++: build cmake project for debugging with ninja",
+			"command": "./.vscode/task-utils",
+			"args": [
+				"debug"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"type": "process",
+			"label": "C/C++: profile sstable-to-arrow project",
+			"command": "./.vscode/task-utils",
+			"args": [
+				"profile"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		}
+	]
+}

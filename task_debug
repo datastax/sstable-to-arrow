@@ -1,6 +1,0 @@
-#!/bin/bash
-
-mkdir -p build
-cd build
-[ -f "build.ninja" ] || cmake -DCMAKE_BUILD_TYPE=Debug -GNinja ..
-ninja
