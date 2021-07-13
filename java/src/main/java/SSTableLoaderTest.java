@@ -77,9 +77,12 @@ public class SSTableLoaderTest {
         ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(CF_STANDARD1);
         cfs.forceBlockingFlush(); // wait for sstables to be on disk else we won't be able to stream them
 
-        final CountDownLatch latch = new CountDownLatch(1);
+
+//        measure time from SSTableLoader creation
         long startTime = System.nanoTime();
+        final CountDownLatch latch = new CountDownLatch(1);
         SSTableLoader loader = new SSTableLoader(dataDir, new TestClient(), new OutputHandler.SystemOutput(false, false));
+//        the loader will countdown the latch when it's done reading the table
         loader.stream(Collections.emptySet(), completionStreamListener(latch)).get();
         List<FilteredPartition> partitions = getAll(cmd(cfs).build());
         latch.await();

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [ "$#" -lt 2 ]; then
+    echo "must specify the path to the directory with sstable files and the name of the csv file to output to"
+    exit 1
+fi
+
+for i in {1..10}; do
+    echo "starting run $i"
+    /workspaces/sstable-to-arrow/cpp/build/sstable_to_arrow -n "$1" | while read line1; do
+        read line2
+        echo "$i,${line1:21:-2},${line2:22:-2}" >> "$2"
+    done
+done
