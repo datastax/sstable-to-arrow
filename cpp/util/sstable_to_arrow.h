@@ -13,6 +13,7 @@
 #include <thread>
 #include <future>
 #include <chrono>
+#include <string_view>
 
 #include "deserialization_helper.h"
 #include "clustering_blocks.h"
@@ -41,14 +42,25 @@ arrow::Status process_row(
     std::shared_ptr<std::vector<std::string>> types,
     std::shared_ptr<std::vector<std::string>> names,
     std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
+    sstable_statistics_t::serialization_header_t *serialization_header,
     arrow::MemoryPool *pool);
 
 void process_column(
     std::shared_ptr<std::vector<std::string>> types,
     std::shared_ptr<std::vector<std::string>> names,
     std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
+    std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> data_types,
     const std::string &cassandra_type,
     const std::string &name,
+    arrow::MemoryPool *pool);
+void process_column(
+    std::shared_ptr<std::vector<std::string>> types,
+    std::shared_ptr<std::vector<std::string>> names,
+    std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
+    std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> data_types,
+    const std::string &cassandra_type,
+    const std::string &name,
+    const std::shared_ptr<arrow::DataType> &data_type,
     arrow::MemoryPool *pool);
 
 std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type, arrow::MemoryPool *pool);
