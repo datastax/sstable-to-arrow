@@ -28,39 +28,32 @@
         exit(1);               \
     }
 
-struct cql_decimal_t
-{
-    int scale;
-    long long val;
-};
-
 arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table);
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
 arrow::Status process_row(
     std::string_view partition_key,
     std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
     std::shared_ptr<std::vector<std::string>> types,
-    std::shared_ptr<std::vector<std::string>> names,
     std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
     sstable_statistics_t::serialization_header_t *serialization_header,
     arrow::MemoryPool *pool);
 
 void process_column(
     std::shared_ptr<std::vector<std::string>> types,
-    std::shared_ptr<std::vector<std::string>> names,
+    arrow::FieldVector &schema_vector,
     std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
-    std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> data_types,
     const std::string &cassandra_type,
     const std::string &name,
+    int64_t nrows,
     arrow::MemoryPool *pool);
 void process_column(
     std::shared_ptr<std::vector<std::string>> types,
-    std::shared_ptr<std::vector<std::string>> names,
+    arrow::FieldVector &schema_vector,
     std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
-    std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> data_types,
     const std::string &cassandra_type,
     const std::string &name,
     const std::shared_ptr<arrow::DataType> &data_type,
+    int64_t nrows,
     arrow::MemoryPool *pool);
 
 std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type, arrow::MemoryPool *pool);

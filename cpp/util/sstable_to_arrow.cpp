@@ -101,36 +101,43 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     auto serialization_header = dynamic_cast<sstable_statistics_t::serialization_header_t *>(serialization_ptr->body());
     assert(serialization_header != nullptr);
 
-    str_arr_t types = std::make_shared<std::vector<std::string>>();
-    str_arr_t names = std::make_shared<std::vector<std::string>>();
-    builder_arr_t arr = std::make_shared<std::vector<std::shared_ptr<arrow::ArrayBuilder>>>();
-    data_type_arr_t data_types = std::make_shared<std::vector<std::shared_ptr<arrow::DataType>>>();
+    str_arr_t types = std::make_shared<std::vector<std::string>>();                            // cql types of all columns
+    arrow::FieldVector schema_vector;                                                          // name and arrow datatype of all columns
+    builder_arr_t arr = std::make_shared<std::vector<std::shared_ptr<arrow::ArrayBuilder>>>(); // arrow builder for each column
 
     DEBUG_ONLY(std::cout << "saving partition key\n");
 
-    // use process_column to create a vector to contain row timestamps
-    types->push_back("org.apache.cassandra.db.marshal.TimestampType");
-    names->push_back("_timestamp");
-    arr->push_back(std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool));
-    data_types->push_back(arrow::timestamp(arrow::TimeUnit::MICRO));
+    int64_t nrows = 5; // allocate some extra space
+    for (auto &partition : *sstable->partitions())
+        for (auto &unfiltered : *partition->unfiltereds())
+            if ((unfiltered->flags() & 0x01) == 0 && (unfiltered->flags() & 0x02) == 0) // ensure that this is a row instead of an end of partition marker or range tombstone marker
+                ++nrows;
+    std::cout << "nrows: " << nrows << '\n';
+
+    // use create a vector to contain row timestamps
+    process_column(types, schema_vector, arr, "org.apache.cassandra.db.marshal.TimestampType", "_timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), nrows, pool);
 
     std::string partition_key_type = serialization_header->partition_key_type()->body();
-    process_column(types, names, arr, data_types, partition_key_type, "partition key", pool);
+    process_column(types, schema_vector, arr, partition_key_type, "partition key", nrows, pool);
 
     DEBUG_ONLY(std::cout << "saving clustering keys\n");
     for (auto &col : *serialization_header->clustering_key_types()->array())
-        process_column(types, names, arr, data_types, col->body(), "clustering key", pool);
+        process_column(types, schema_vector, arr, col->body(), "clustering key", nrows, pool);
 
     // TODO handle static columns
     DEBUG_ONLY(std::cout << "saving regular columns\n");
     for (auto &col : *serialization_header->regular_columns()->array())
-        process_column(types, names, arr, data_types, col->column_type()->body(), col->name()->body(), pool);
+        process_column(types, schema_vector, arr, col->column_type()->body(), col->name()->body(), nrows, pool);
+
+    *schema = std::make_shared<arrow::Schema>(schema_vector);
+    std::cout << "==========\nschema ==========\n"
+              << (*schema)->ToString() << "\n==========\n";
 
     for (auto &partition : *sstable->partitions())
         for (auto &unfiltered : *partition->unfiltereds())
             if ((unfiltered->flags() & 0x01) == 0 && (unfiltered->flags() & 0x02) == 0) // ensure that this is a row instead of an end of partition marker or range tombstone marker
                                                                                         // TODO handle end of partition and range tombstone markers
-                process_row(partition->header()->key(), unfiltered, types, names, arr, serialization_header, pool);
+                process_row(partition->header()->key(), unfiltered, types, arr, serialization_header, pool);
 
     int n = arr->size();
     DEBUG_ONLY(std::cout << "number of fields in table: " << n << '\n');
@@ -138,22 +145,16 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     // finish the arrays and store them into a vector
 
     arrow::ArrayVector finished_arrays;
-    arrow::FieldVector schema_vector;
-    for (int i = 0; i < n; ++i)
+    for (auto &builder : *arr)
     {
         std::shared_ptr<arrow::Array> arrptr;
-        ARROW_RETURN_NOT_OK((*arr)[i]->Finish(&arrptr));
+        ARROW_RETURN_NOT_OK(builder->Finish(&arrptr));
         finished_arrays.push_back(arrptr);
-        schema_vector.push_back(arrow::field(std::string((*names)[i]), (*data_types)[i]));
     }
-    *schema = std::make_shared<arrow::Schema>(schema_vector);
     *table = arrow::Table::Make(*schema, finished_arrays);
 
-    std::cout
-        << "==========\nschema:\n==========\n"
-        << (*schema)->ToString()
-        << "\n==========\ntable:\n==========\n"
-        << (*table)->ToString() << "\n==========\n";
+    std::cout << "\n==========\ntable:\n==========\n"
+              << (*table)->ToString() << "\n==========\n";
 
     auto end_ts = std::chrono::high_resolution_clock::now();
     auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
@@ -165,20 +166,21 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
 void process_column(
     str_arr_t types,
-    str_arr_t names,
+    arrow::FieldVector &schema_vector,
     builder_arr_t arr,
-    data_type_arr_t data_types,
     const std::string &cassandra_type,
     const std::string &name,
     const std::shared_ptr<arrow::DataType> &data_type,
+    int64_t nrows,
     arrow::MemoryPool *pool)
 {
     PROFILE_FUNCTION;
     DEBUG_ONLY(std::cout << "Handling column \"" << name << "\" with type " << cassandra_type << '\n');
     types->push_back(cassandra_type);
-    names->push_back(name);
-    arr->push_back(create_builder(cassandra_type, pool));
-    data_types->push_back(data_type);
+    schema_vector.push_back(arrow::field(name, data_type));
+    auto builder = create_builder(cassandra_type, pool);
+    // builder->Reserve(nrows);
+    arr->push_back(builder);
 }
 
 /**
@@ -192,21 +194,20 @@ void process_column(
  */
 void process_column(
     str_arr_t types,
-    str_arr_t names,
+    arrow::FieldVector &schema_vector,
     builder_arr_t arr,
-    data_type_arr_t data_types,
     const std::string &cassandra_type,
     const std::string &name,
+    int64_t nrows,
     arrow::MemoryPool *pool)
 {
-    process_column(types, names, arr, data_types, cassandra_type, name, conversions::get_arrow_type(cassandra_type), pool);
+    process_column(types, schema_vector, arr, cassandra_type, name, conversions::get_arrow_type(cassandra_type), nrows, pool);
 }
 
 arrow::Status process_row(
     std::string_view partition_key,
     std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
     str_arr_t types,
-    str_arr_t names,
     builder_arr_t arr,
     sstable_statistics_t::serialization_header_t *serialization_header,
     arrow::MemoryPool *pool)
@@ -219,10 +220,13 @@ arrow::Status process_row(
     // counter for which index in the global builders array we are in
     int idx = 0;
 
+    std::cout << "num builders: " << arr->size() << '\n';
+
     arrow::TimestampBuilder *builder = (arrow::TimestampBuilder *)(*arr)[idx].get();
     if (!row->_is_null_liveness_info())
     {
         long long delta_timestamp = row->liveness_info()->delta_timestamp()->val();
+        std::cout << "delta timestamp: " << delta_timestamp << '\n';
         builder->Append(serialization_header->min_timestamp()->val() + delta_timestamp);
     }
     else
@@ -245,6 +249,9 @@ arrow::Status process_row(
     std::vector<std::future<arrow::Status>> col_threads;
     col_threads.reserve(n_regular);
 
+    std::cout << "number of regular columns: " << n_regular << '\n';
+
+    // parse each of the row's cells
     for (int i = 0; i < n_regular; ++i, ++idx)
     {
         auto cell_ptr = std::move((*row->cells())[i]);
@@ -267,7 +274,7 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
         ARROW_RETURN_NOT_OK(append_scalar(
             coltype,
             builder_ptr,
-            (sstable_data_t::complex_cell_t *)cell_ptr.get(),
+            dynamic_cast<sstable_data_t::complex_cell_t *>(cell_ptr.get()),
             pool));
     }
     else // simple cell
@@ -276,7 +283,7 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
             append_scalar(
                 coltype,
                 builder_ptr,
-                ((sstable_data_t::simple_cell_t *)cell_ptr.get())->value(),
+                dynamic_cast<sstable_data_t::simple_cell_t *>(cell_ptr.get())->value(),
                 pool));
     }
     return arrow::Status::OK();
@@ -284,6 +291,9 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
 
 /**
  * @brief See https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/TypeParser.java
+ * TODO other types: CollectionType, ColumnToCollectionType, CompositeType,
+ * CounterColumnType, DateType, DynamicCompositeType, EmptyType, FrozenType,
+ * PartitionerDefinedOrder, ReversedType, LexicalUUIDType, UserType, TupleType
  * @param types the vector of the Cassandra types of each column (e.g. org.apache.cassandra.db.marshal.AsciiType)
  * @param names the vector of the names of each column
  * @param cassandra_type the Cassandra type of this column (not the actual CQL type name)
@@ -293,16 +303,25 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
 std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type, arrow::MemoryPool *pool)
 {
     PROFILE_FUNCTION;
+
+#define CASSANDRA_TO_ARROW_TYPE(cassandra_type, arrow_type)                \
+    if (type == "org.apache.cassandra.db.marshal." #cassandra_type "Type") \
+        return std::make_shared<arrow::arrow_type##Builder>(pool);
+
     DEBUG_ONLY(std::cout << "creating new vector of type " << type << '\n');
-    if (type == "org.apache.cassandra.db.marshal.AsciiType") // ascii
-        return std::make_shared<arrow::StringBuilder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.BooleanType") // boolean
-        return std::make_shared<arrow::BooleanBuilder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.ByteType") // tinyint
-        return std::make_shared<arrow::Int8Builder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.BytesType") // blob
-        return std::make_shared<arrow::BinaryBuilder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.DecimalType") // decimal
+    CASSANDRA_TO_ARROW_TYPE(Ascii, String);
+    CASSANDRA_TO_ARROW_TYPE(Boolean, Boolean);
+    CASSANDRA_TO_ARROW_TYPE(Byte, Int8);
+    CASSANDRA_TO_ARROW_TYPE(Bytes, Binary);
+    CASSANDRA_TO_ARROW_TYPE(Double, Double);
+    CASSANDRA_TO_ARROW_TYPE(Float, Float);
+    CASSANDRA_TO_ARROW_TYPE(Int32, Int32);
+    CASSANDRA_TO_ARROW_TYPE(Integer, Int64);
+    CASSANDRA_TO_ARROW_TYPE(Long, Int64);
+    CASSANDRA_TO_ARROW_TYPE(Short, Int16);
+    CASSANDRA_TO_ARROW_TYPE(SimpleDate, Date32);
+    CASSANDRA_TO_ARROW_TYPE(UTF8, String);
+    if (type == "org.apache.cassandra.db.marshal.DecimalType") // decimal
     {
         arrow::FieldVector fields;
         fields.push_back(arrow::field("scale", arrow::int32()));
@@ -312,15 +331,11 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type
         field_builders.push_back(std::make_shared<arrow::BinaryBuilder>(pool));
         return std::make_shared<arrow::StructBuilder>(arrow::struct_(fields), pool, field_builders);
     }
-    else if (type == "org.apache.cassandra.db.marshal.DoubleType") // double
-        return std::make_shared<arrow::DoubleBuilder>(pool);
     else if (type == "org.apache.cassandra.db.marshal.DurationType") // duration, consists of two int32s and one int64
     {
         auto val_builder = std::make_shared<arrow::Int64Builder>(pool);
         return std::make_shared<arrow::FixedSizeListBuilder>(pool, val_builder, 3);
     }
-    else if (type == "org.apache.cassandra.db.marshal.FloatType") // float
-        return std::make_shared<arrow::FloatBuilder>(pool);
     else if (type == "org.apache.cassandra.db.marshal.InetAddressType") // inet
     {
         auto union_builder = std::make_shared<arrow::DenseUnionBuilder>(pool);
@@ -330,47 +345,16 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type
         union_builder->AppendChild(ipv6_builder, "ipv6");
         return union_builder;
     }
-    else if (type == "org.apache.cassandra.db.marshal.Int32Type") // int
-        return std::make_shared<arrow::Int32Builder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.IntegerType") // varint
-        return std::make_shared<arrow::Int64Builder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.LongType") // bigint
-        return std::make_shared<arrow::Int64Builder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.ShortType") // smallint
-        return std::make_shared<arrow::Int16Builder>(pool);
-    else if (type == "org.apache.cassandra.db.marshal.SimpleDateType") // date
-        return std::make_shared<arrow::Date32Builder>(pool);
     else if (type == "org.apache.cassandra.db.marshal.TimeType") // time
         return std::make_shared<arrow::Time64Builder>(arrow::time64(arrow::TimeUnit::NANO), pool);
     else if (type == "org.apache.cassandra.db.marshal.TimeUUIDType") // timeuuid
         return std::make_shared<arrow::FixedSizeBinaryBuilder>(arrow::fixed_size_binary(16), pool);
     else if (type == "org.apache.cassandra.db.marshal.TimestampType" || type == "org.apache.cassandra.db.marshal.DateType") // timestamp
         return std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MILLI), pool);
-    else if (type == "org.apache.cassandra.db.marshal.UTF8Type") // text, varchar
-        return std::make_shared<arrow::StringBuilder>(pool);
     else if (type == "org.apache.cassandra.db.marshal.UUIDType") // uuid
         return std::make_shared<arrow::FixedSizeBinaryBuilder>(arrow::fixed_size_binary(16), pool);
-
-    // TODO other types
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.CollectionType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.ColumnToCollectionType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.CompositeType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.CounterColumnType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.DateType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.DynamicCompositeType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.EmptyType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.FrozenType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.PartitionerDefinedOrder")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.ReversedType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.LexicalUUIDType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.UserType")
-    // else if (cassandra_type == "org.apache.cassandra.db.marshal.TupleType")
-    //     arr->push_back(std::make_shared<arrow::UInt32Builder>(pool));
-
     else if (conversions::is_reversed(type))
-    {
         return create_builder(conversions::get_child_type(type), pool);
-    }
     else if (conversions::is_composite(type))
     {
         arrow::FieldVector fields;
@@ -385,9 +369,7 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type
         return std::make_shared<arrow::StructBuilder>(arrow::struct_(fields), pool, field_builders);
     }
     else if (conversions::is_list(type)) // list<type>
-    {
         return std::make_shared<arrow::ListBuilder>(pool, create_builder(conversions::get_child_type(type), pool));
-    }
     else if (conversions::is_map(type)) // if it begins with the map type map<type, type>
     {
         // TODO this currently only works if both the key and value are simple types, i.e. not maps
@@ -399,14 +381,12 @@ std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type
         return std::make_shared<arrow::MapBuilder>(pool, key_builder, value_builder);
     }
     else if (conversions::is_set(type)) // set<type>
-    {
         return std::make_shared<arrow::ListBuilder>(pool, create_builder(conversions::get_child_type(type), pool));
-    }
-    else
-    {
-        std::cerr << "unrecognized type when creating arrow array builder: " << type << '\n';
-        exit(1);
-    }
+
+    std::cerr << "unrecognized type when creating arrow array builder: " << type << '\n';
+    exit(1);
+
+#undef CASSANDRA_TO_ARROW_TYPE
 }
 
 /**
@@ -427,15 +407,35 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
     std::string buffer(bytes);
     kaitai::kstream ks(buffer);
 
-    // for ascii or blob or varchar or text, we just return the bytes directly
-    if (coltype == "org.apache.cassandra.db.marshal.AsciiType" ||
-        coltype == "org.apache.cassandra.db.marshal.BytesType" ||
-        coltype == "org.apache.cassandra.db.marshal.UTF8Type")
-    {
-        auto builder = (arrow::StringBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes_full()));
-        return arrow::Status::OK();
-    }
+    DEBUG_ONLY(std::cout << "creating new vector of type " << type << '\n');
+
+    // we can do an unsafe append below because we reserve enough space when
+    // initializing the builders
+#define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                    \
+    do                                                                              \
+    {                                                                               \
+        if (coltype == "org.apache.cassandra.db.marshal." #cassandra_type "Type")   \
+        {                                                                           \
+            auto builder = dynamic_cast<arrow::arrow_type##Builder *>(builder_ptr); \
+            return builder->Append(ks.read_##read_size());                          \
+        }                                                                           \
+    } while (0)
+
+    APPEND_TO_BUILDER(Ascii, String, bytes_full);
+    APPEND_TO_BUILDER(Boolean, Boolean, u1);
+    APPEND_TO_BUILDER(Bytes, String, bytes_full);
+    APPEND_TO_BUILDER(Byte, Int8, s1);
+    APPEND_TO_BUILDER(Bytes, Binary, bytes_full);
+    APPEND_TO_BUILDER(Double, Double, f8be);
+    APPEND_TO_BUILDER(Float, Float, f4be);
+    APPEND_TO_BUILDER(Int32, Int32, s4be);
+    APPEND_TO_BUILDER(Long, Int64, s8be);
+    APPEND_TO_BUILDER(Short, Int16, s2be);
+    APPEND_TO_BUILDER(Time, Time64, s8be);
+    APPEND_TO_BUILDER(Timestamp, Timestamp, s8be);
+    APPEND_TO_BUILDER(TimeUUID, FixedSizeBinary, bytes_full);
+    APPEND_TO_BUILDER(UTF8, String, bytes_full);
+    APPEND_TO_BUILDER(UUID, FixedSizeBinary, bytes_full);
 
     if (conversions::is_composite(coltype))
     {
@@ -451,22 +451,13 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
             ks.read_bytes(1); // inserts a '0' bit at end
             ARROW_RETURN_NOT_OK(append_scalar((*tree->children)[i]->str, builder->child(i), data, pool));
         }
+        return arrow::Status::OK();
     }
-    else if (conversions::is_reversed(coltype))
+    if (conversions::is_reversed(coltype))
     {
-        ARROW_RETURN_NOT_OK(append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool));
+        return append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool);
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.BooleanType") // boolean
-    {
-        auto builder = (arrow::BooleanBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_u1()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.ByteType") // tinyint
-    {
-        auto builder = (arrow::Int8Builder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s1()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.DecimalType") // decimal
+    if (coltype == "org.apache.cassandra.db.marshal.DecimalType") // decimal
     {
         auto builder = (arrow::StructBuilder *)builder_ptr;
         ARROW_RETURN_NOT_OK(builder->Append());
@@ -474,14 +465,9 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
         auto val_builder = (arrow::BinaryBuilder *)builder->child(1);
         int scale = ks.read_s4be();
         ARROW_RETURN_NOT_OK(scale_builder->Append(scale));
-        ARROW_RETURN_NOT_OK(val_builder->Append(ks.read_bytes_full()));
+        return val_builder->Append(ks.read_bytes_full());
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.DoubleType") // double
-    {
-        auto builder = (arrow::DoubleBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_f8be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.DurationType") // duration
+    if (coltype == "org.apache.cassandra.db.marshal.DurationType") // duration
     {
         auto builder = (arrow::FixedSizeListBuilder *)builder_ptr;
         auto value_builder = (arrow::Int64Builder *)builder->value_builder();
@@ -491,27 +477,22 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
         ARROW_RETURN_NOT_OK(builder->Append());
         ARROW_RETURN_NOT_OK(value_builder->Append(months));
         ARROW_RETURN_NOT_OK(value_builder->Append(days));
-        ARROW_RETURN_NOT_OK(value_builder->Append(nanoseconds));
+        return value_builder->Append(nanoseconds);
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.FloatType") // float
-    {
-        auto builder = (arrow::FloatBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_f4be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.InetAddressType") // inet
+    if (coltype == "org.apache.cassandra.db.marshal.InetAddressType") // inet
     {
         auto builder = (arrow::DenseUnionBuilder *)builder_ptr;
         if (ks.size() == 4)
         {
             builder->Append(0);
             auto ipv4_builder = static_cast<arrow::Int32Builder *>(builder->child(0));
-            ARROW_RETURN_NOT_OK(ipv4_builder->Append(ks.read_s4be()));
+            return ipv4_builder->Append(ks.read_s4be());
         }
         else if (ks.size() == 8)
         {
             builder->Append(1);
             auto ipv6_builder = static_cast<arrow::Int64Builder *>(builder->child(1));
-            ARROW_RETURN_NOT_OK(ipv6_builder->Append(ks.read_s8be()));
+            return ipv6_builder->Append(ks.read_s8be());
         }
         else
         {
@@ -519,62 +500,32 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
             return arrow::Status::TypeError("invalid IP address");
         }
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.Int32Type") // int
-    {
-        auto builder = (arrow::Int32Builder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s4be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
+    if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
     {
         auto builder = static_cast<arrow::Int64Builder *>(builder_ptr);
         int size = ks.size();
-        ARROW_RETURN_NOT_OK(builder->Append(vint_t::parse_java(bytes.data(), bytes.size())));
+        return builder->Append(vint_t::parse_java(bytes.data(), bytes.size()));
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.LongType") // bigint
-    {
-        auto builder = (arrow::Int64Builder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s8be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.ShortType") // smallint
-    {
-        auto builder = (arrow::Int16Builder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s2be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.SimpleDateType") // date
+    if (coltype == "org.apache.cassandra.db.marshal.SimpleDateType") // date
     {
         auto builder = (arrow::Date32Builder *)builder_ptr;
         uint32_t date = ks.read_u4be() - (1 << 31);
-        ARROW_RETURN_NOT_OK(builder->Append(date));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.TimeType") // time
-    {
-        auto builder = (arrow::Time64Builder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s8be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.TimeUUIDType") // timeuuid
-    {
-        auto builder = (arrow::FixedSizeBinaryBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes_full()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.TimestampType") // timestamp
-    {
-        auto builder = (arrow::TimestampBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_s8be()));
-    }
-    else if (coltype == "org.apache.cassandra.db.marshal.UUIDType") // uuid
-    {
-        auto builder = (arrow::FixedSizeBinaryBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes_full()));
-    }
-    else
-    {
-        std::cerr << "unrecognized type when appending to arrow array builder: " << coltype << '\n';
-        exit(1);
+        return builder->Append(date);
     }
 
-    return arrow::Status::OK();
+    return arrow::Status::TypeError(std::string("unrecognized type when appending to arrow array builder: ") + std::string(coltype));
+#undef APPEND_TO_BUILDER
 }
 
+/**
+ * @brief Overloaded function to handle adding complex types
+ * 
+ * @param coltype 
+ * @param builder_ptr 
+ * @param cell 
+ * @param pool 
+ * @return arrow::Status 
+ */
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
 {
     if (conversions::is_map(coltype))
