@@ -30,7 +30,7 @@ const std::unordered_map<std::string_view, struct cassandra_type> type_info{
     {"org.apache.cassandra.db.marshal.DateType", {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // old version of TimestampType
     {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0, arrow::struct_(decimal_fields)}}, // decimal, custom implementation
     {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}},                 // double
-    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0, arrow::list(arrow::int64())}},  // duration
+    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0, arrow::fixed_size_list(arrow::int64(), 3)}},  // duration
     // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
     {"org.apache.cassandra.db.marshal.FloatType", {"float", 4, arrow::float32()}}, // float

@@ -35,6 +35,7 @@ add_executable(sstable_to_arrow
 target_link_libraries(sstable_to_arrow PRIVATE kaitai_struct_cpp_stl_runtime)
 target_link_libraries(sstable_to_arrow PRIVATE arrow_shared)
 target_link_libraries(sstable_to_arrow PRIVATE Threads::Threads)
+target_link_libraries(sstable_to_arrow PRIVATE parquet)
 
 target_include_directories(sstable_to_arrow PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/util")

@@ -14,6 +14,7 @@
 #include <future>
 #include <chrono>
 #include <string_view>
+#include <parquet/arrow/writer.h>
 
 #include "deserialization_helper.h"
 #include "clustering_blocks.h"
@@ -34,33 +35,25 @@ arrow::Status process_row(
     std::string_view partition_key,
     std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
     std::shared_ptr<std::vector<std::string>> types,
-    std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
+    std::shared_ptr<std::vector<std::unique_ptr<arrow::ArrayBuilder>>> arr,
     sstable_statistics_t::serialization_header_t *serialization_header,
-    arrow::MemoryPool *pool);
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
 
-void process_column(
+arrow::Status process_column(
     std::shared_ptr<std::vector<std::string>> types,
     arrow::FieldVector &schema_vector,
-    std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
-    const std::string &cassandra_type,
-    const std::string &name,
-    int64_t nrows,
-    arrow::MemoryPool *pool);
-void process_column(
-    std::shared_ptr<std::vector<std::string>> types,
-    arrow::FieldVector &schema_vector,
-    std::shared_ptr<std::vector<std::shared_ptr<arrow::ArrayBuilder>>> arr,
+    std::shared_ptr<std::vector<std::unique_ptr<arrow::ArrayBuilder>>> arr,
     const std::string &cassandra_type,
     const std::string &name,
     const std::shared_ptr<arrow::DataType> &data_type,
     int64_t nrows,
-    arrow::MemoryPool *pool);
-
-std::shared_ptr<arrow::ArrayBuilder> create_builder(const std::string_view &type, arrow::MemoryPool *pool);
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool);
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
 
 arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::ArrayBuilder *builder_ptr, const std::string_view &coltype, bool is_multi_cell, arrow::MemoryPool *pool);
+
+arrow::Status write_parquet(const arrow::Table &table, arrow::MemoryPool *pool);
 
 #endif

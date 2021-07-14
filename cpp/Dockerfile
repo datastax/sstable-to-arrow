@@ -21,7 +21,7 @@ RUN ninja install
 # install arrow
 RUN mkdir /tmp/arrow/cpp/release
 WORKDIR /tmp/arrow/cpp/release
-RUN cmake -GNinja ..
+RUN cmake -GNinja -DARROW_PARQUET=ON ..
 RUN ninja install
 
 # copy and build project

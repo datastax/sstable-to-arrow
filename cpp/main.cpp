@@ -7,6 +7,7 @@ const char fpath_separator =
     '/';
 #endif
 const int NO_NETWORK_FLAG = 0x01;
+const int WRITE_PARQUET_FLAG = 0x02;
 int flags;
 
 typedef std::map<int, std::shared_ptr<struct sstable_t>> sstable_map_t;
@@ -51,6 +52,10 @@ arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
     std::shared_ptr<arrow::Table> table;
     std::shared_ptr<arrow::Schema> schema;
     ARROW_RETURN_NOT_OK(vector_to_columnar_table(sstable->statistics, sstable->data, &schema, &table));
+
+    if ((flags & WRITE_PARQUET_FLAG) != 0)
+        write_parquet(*table, arrow::default_memory_pool());
+
     if ((flags & NO_NETWORK_FLAG) == 0)
         ARROW_RETURN_NOT_OK(send_data(schema, table));
 
@@ -202,7 +207,7 @@ void read_options(int argc, char *argv[])
     std::shared_ptr<sstable_summary_t> summary;
     std::shared_ptr<sstable_statistics_t> statistics;
     std::shared_ptr<sstable_index_t> index;
-    while ((opt = getopt(argc, argv, ":t:m:i:n")) != -1)
+    while ((opt = getopt(argc, argv, ":t:m:i:np")) != -1)
     {
 
         switch (opt)
@@ -218,6 +223,9 @@ void read_options(int argc, char *argv[])
             return;
         case 'n': // turn off sending via network
             flags |= NO_NETWORK_FLAG;
+            break;
+        case 'p':
+            flags |= WRITE_PARQUET_FLAG;
             break;
         default:
             break;
