@@ -31,6 +31,7 @@
 
 arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table);
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table);
+arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows);
 arrow::Status process_row(
     std::string_view partition_key,
     std::unique_ptr<sstable_data_t::unfiltered_t> &unfiltered,
@@ -50,7 +51,7 @@ arrow::Status process_column(
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool);
-arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
+arrow::Status append_complex(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
 
 arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::ArrayBuilder *builder_ptr, const std::string_view &coltype, bool is_multi_cell, arrow::MemoryPool *pool);
 

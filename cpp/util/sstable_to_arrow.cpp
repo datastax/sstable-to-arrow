@@ -110,7 +110,8 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
     DEBUG_ONLY(std::cout << "saving partition key\n");
 
-    std::cout << "nrows: " << statistics_data->number_of_rows() << '\n';
+    int64_t nrows = statistics_data->number_of_rows();
+    std::cout << "nrows: " << nrows << '\n';
 
     // use create a vector to contain row timestamps
     process_column(types, schema_vector, arr, "org.apache.cassandra.db.marshal.TimestampType", "_timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), nrows);
@@ -131,6 +132,13 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     std::cout << "==========\nschema ==========\n"
               << (*schema)->ToString() << "\n==========\n";
 
+    for (auto &builder : *arr)
+    {
+        std::cout << "capacity/length before: " << builder->capacity() << ", " << builder->length() << '\n';
+        ARROW_RETURN_NOT_OK(reserve_builder(builder.get(), nrows));
+        std::cout << "after: " << builder->capacity() << ", " << builder->length() << '\n';
+    }
+
     for (auto &partition : *sstable->partitions())
         for (auto &unfiltered : *partition->unfiltereds())
             if ((unfiltered->flags() & 0x01) == 0 && (unfiltered->flags() & 0x02) == 0) // ensure that this is a row instead of an end of partition marker or range tombstone marker
@@ -146,6 +154,8 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     for (auto &builder : *arr)
     {
         std::shared_ptr<arrow::Array> arrptr;
+        std::cout << builder->capacity() << ", " << builder->length() << '\n';
+        std::cout << "nchildren: " << builder->num_children() << '\n';
         ARROW_RETURN_NOT_OK(builder->Finish(&arrptr));
         finished_arrays.push_back(arrptr);
     }
@@ -159,6 +169,15 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
     std::cout << "[PROFILE conversion]: " << (end - start) << "us\n";
 
+    return arrow::Status::OK();
+}
+
+arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows)
+{
+    DEBUG_ONLY(std::cout << "reserving for " << builder->type()->ToString() << '\n');
+    ARROW_RETURN_NOT_OK(builder->Reserve(nrows));
+    for (int i = 0; i < builder->num_children(); ++i)
+        ARROW_RETURN_NOT_OK(reserve_builder(builder->child(i), nrows));
     return arrow::Status::OK();
 }
 
@@ -178,7 +197,6 @@ arrow::Status process_column(
     schema_vector.push_back(arrow::field(name, data_type));
     std::unique_ptr<arrow::ArrayBuilder> builder;
     ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, data_type, &builder));
-    // builder->Reserve(nrows);
     arr->push_back(std::move(builder));
     return arrow::Status::OK();
 }
@@ -201,15 +219,16 @@ arrow::Status process_row(
 
     std::cout << "num builders: " << arr->size() << '\n';
 
-    arrow::TimestampBuilder *builder = dynamic_cast<arrow::TimestampBuilder *>((*arr)[idx].get());
+    auto builder = dynamic_cast<arrow::TimestampBuilder *>((*arr)[idx].get());
     if (!row->_is_null_liveness_info())
     {
         long long delta_timestamp = row->liveness_info()->delta_timestamp()->val();
         std::cout << "delta timestamp: " << delta_timestamp << '\n';
-        builder->Append(serialization_header->min_timestamp()->val() + delta_timestamp);
+        std::cout << builder->capacity() << ", " << builder->length() << '\n';
+        builder->UnsafeAppend(serialization_header->min_timestamp()->val() + delta_timestamp);
     }
     else
-        builder->AppendNull();
+        builder->UnsafeAppendNull();
     idx++;
 
     int kind = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0)
@@ -250,7 +269,7 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
 {
     if (is_multi_cell)
     {
-        ARROW_RETURN_NOT_OK(append_scalar(
+        ARROW_RETURN_NOT_OK(append_complex(
             coltype,
             builder_ptr,
             dynamic_cast<sstable_data_t::complex_cell_t *>(cell_ptr.get()),
@@ -258,12 +277,11 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
     }
     else // simple cell
     {
-        ARROW_RETURN_NOT_OK(
-            append_scalar(
-                coltype,
-                builder_ptr,
-                dynamic_cast<sstable_data_t::simple_cell_t *>(cell_ptr.get())->value(),
-                pool));
+        ARROW_RETURN_NOT_OK(append_scalar(
+            coltype,
+            builder_ptr,
+            dynamic_cast<sstable_data_t::simple_cell_t *>(cell_ptr.get())->value(),
+            pool));
     }
     return arrow::Status::OK();
 }
@@ -278,7 +296,7 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool)
 {
     PROFILE_FUNCTION;
-    DEBUG_ONLY(std::cout << "appending to vector: " << coltype << '\n');
+    DEBUG_ONLY(std::cout << "appending to vector: " << coltype << " (builder capacity " << builder_ptr->capacity() << ")\n");
 
     // for all other types, we parse the data using kaitai, which might end up
     // being a performance bottleneck
@@ -286,39 +304,9 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
     std::string buffer(bytes);
     kaitai::kstream ks(buffer);
 
-    DEBUG_ONLY(std::cout << "creating new vector of type " << type << '\n');
-
-    // we can do an unsafe append below because we reserve enough space when
-    // initializing the builders
-#define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                    \
-    do                                                                              \
-    {                                                                               \
-        if (coltype == "org.apache.cassandra.db.marshal." #cassandra_type "Type")   \
-        {                                                                           \
-            auto builder = dynamic_cast<arrow::arrow_type##Builder *>(builder_ptr); \
-            return builder->Append(ks.read_##read_size());                          \
-        }                                                                           \
-    } while (0)
-
-    APPEND_TO_BUILDER(Ascii, String, bytes_full);
-    APPEND_TO_BUILDER(Boolean, Boolean, u1);
-    APPEND_TO_BUILDER(Bytes, String, bytes_full);
-    APPEND_TO_BUILDER(Byte, Int8, s1);
-    APPEND_TO_BUILDER(Bytes, Binary, bytes_full);
-    APPEND_TO_BUILDER(Double, Double, f8be);
-    APPEND_TO_BUILDER(Float, Float, f4be);
-    APPEND_TO_BUILDER(Int32, Int32, s4be);
-    APPEND_TO_BUILDER(Long, Int64, s8be);
-    APPEND_TO_BUILDER(Short, Int16, s2be);
-    APPEND_TO_BUILDER(Time, Time64, s8be);
-    APPEND_TO_BUILDER(Timestamp, Timestamp, s8be);
-    APPEND_TO_BUILDER(TimeUUID, FixedSizeBinary, bytes_full);
-    APPEND_TO_BUILDER(UTF8, String, bytes_full);
-    APPEND_TO_BUILDER(UUID, FixedSizeBinary, bytes_full);
-
     if (conversions::is_composite(coltype))
     {
-        auto builder = static_cast<arrow::StructBuilder *>(builder_ptr);
+        auto builder = dynamic_cast<arrow::StructBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
 
         auto maybe_tree = conversions::parse_nested_type(coltype);
@@ -332,45 +320,46 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
         }
         return arrow::Status::OK();
     }
-    if (conversions::is_reversed(coltype))
-    {
+    else if (conversions::is_reversed(coltype))
         return append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool);
-    }
-    if (coltype == "org.apache.cassandra.db.marshal.DecimalType") // decimal
+
+    else if (coltype == "org.apache.cassandra.db.marshal.DecimalType") // decimal
     {
         auto builder = (arrow::StructBuilder *)builder_ptr;
         ARROW_RETURN_NOT_OK(builder->Append());
-        auto scale_builder = (arrow::Int32Builder *)builder->child(0);
-        auto val_builder = (arrow::BinaryBuilder *)builder->child(1);
+        auto scale_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
+        auto val_builder = dynamic_cast<arrow::BinaryBuilder *>(builder->child(1));
         int scale = ks.read_s4be();
         ARROW_RETURN_NOT_OK(scale_builder->Append(scale));
-        return val_builder->Append(ks.read_bytes_full());
+        ARROW_RETURN_NOT_OK(val_builder->Append(ks.read_bytes_full()));
+        return arrow::Status::OK();
     }
-    if (coltype == "org.apache.cassandra.db.marshal.DurationType") // duration
+    else if (coltype == "org.apache.cassandra.db.marshal.DurationType") // duration
     {
-        auto builder = (arrow::FixedSizeListBuilder *)builder_ptr;
-        auto value_builder = (arrow::Int64Builder *)builder->value_builder();
+        auto builder = dynamic_cast<arrow::FixedSizeListBuilder *>(builder_ptr);
+        auto value_builder = dynamic_cast<arrow::Int64Builder *>(builder->value_builder());
         long long months = vint_t(&ks).val();
         long long days = vint_t(&ks).val();
         long long nanoseconds = vint_t(&ks).val();
         ARROW_RETURN_NOT_OK(builder->Append());
         ARROW_RETURN_NOT_OK(value_builder->Append(months));
         ARROW_RETURN_NOT_OK(value_builder->Append(days));
-        return value_builder->Append(nanoseconds);
+        ARROW_RETURN_NOT_OK(value_builder->Append(nanoseconds));
+        return arrow::Status::OK();
     }
-    if (coltype == "org.apache.cassandra.db.marshal.InetAddressType") // inet
+    else if (coltype == "org.apache.cassandra.db.marshal.InetAddressType") // inet
     {
-        auto builder = (arrow::DenseUnionBuilder *)builder_ptr;
+        auto builder = dynamic_cast<arrow::DenseUnionBuilder *>(builder_ptr);
         if (ks.size() == 4)
         {
             builder->Append(0);
-            auto ipv4_builder = static_cast<arrow::Int32Builder *>(builder->child(0));
+            auto ipv4_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
             return ipv4_builder->Append(ks.read_s4be());
         }
         else if (ks.size() == 8)
         {
             builder->Append(1);
-            auto ipv6_builder = static_cast<arrow::Int64Builder *>(builder->child(1));
+            auto ipv6_builder = dynamic_cast<arrow::Int64Builder *>(builder->child(1));
             return ipv6_builder->Append(ks.read_s8be());
         }
         else
@@ -379,21 +368,44 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
             return arrow::Status::TypeError("invalid IP address");
         }
     }
-    if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
+    else if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
     {
-        auto builder = static_cast<arrow::Int64Builder *>(builder_ptr);
-        int size = ks.size();
+        auto builder = dynamic_cast<arrow::Int64Builder *>(builder_ptr);
         return builder->Append(vint_t::parse_java(bytes.data(), bytes.size()));
     }
-    if (coltype == "org.apache.cassandra.db.marshal.SimpleDateType") // date
+    else if (coltype == "org.apache.cassandra.db.marshal.SimpleDateType") // date
     {
-        auto builder = (arrow::Date32Builder *)builder_ptr;
+        auto builder = dynamic_cast<arrow::Date32Builder *>(builder_ptr);
         uint32_t date = ks.read_u4be() - (1 << 31);
         return builder->Append(date);
     }
 
-    return arrow::Status::TypeError(std::string("unrecognized type when appending to arrow array builder: ") + std::string(coltype));
+#define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                   \
+    else if (coltype == "org.apache.cassandra.db.marshal." #cassandra_type "Type") \
+    {                                                                              \
+        auto builder = dynamic_cast<arrow::arrow_type##Builder *>(builder_ptr);    \
+        return builder->Append(ks.read_##read_size());                             \
+    }
+
+    APPEND_TO_BUILDER(Ascii, String, bytes_full)
+    APPEND_TO_BUILDER(Boolean, Boolean, u1)
+    APPEND_TO_BUILDER(Byte, Int8, s1)
+    APPEND_TO_BUILDER(Bytes, Binary, bytes_full)
+    APPEND_TO_BUILDER(Double, Double, f8be)
+    APPEND_TO_BUILDER(Float, Float, f4be)
+    APPEND_TO_BUILDER(Int32, Int32, s4be)
+    APPEND_TO_BUILDER(LexicalUUID, FixedSizeBinary, bytes_full)
+    APPEND_TO_BUILDER(Long, Int64, s8be)
+    APPEND_TO_BUILDER(Short, Int16, s2be)
+    APPEND_TO_BUILDER(Time, Time64, s8be)
+    APPEND_TO_BUILDER(Timestamp, Timestamp, s8be)
+    APPEND_TO_BUILDER(TimeUUID, FixedSizeBinary, bytes_full)
+    APPEND_TO_BUILDER(UTF8, String, bytes_full)
+    APPEND_TO_BUILDER(UUID, FixedSizeBinary, bytes_full)
+
 #undef APPEND_TO_BUILDER
+
+    return arrow::Status::TypeError(std::string("unrecognized type when appending to arrow array builder: ") + std::string(coltype));
 }
 
 /**
@@ -405,11 +417,11 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
  * @param pool 
  * @return arrow::Status 
  */
-arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
+arrow::Status append_complex(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
 {
     if (conversions::is_map(coltype))
     {
-        auto builder = static_cast<arrow::MapBuilder *>(builder_ptr);
+        auto builder = dynamic_cast<arrow::MapBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
         std::string_view key_type, value_type;
         for (const auto &simple_cell : *cell->simple_cells())
@@ -423,7 +435,7 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
     }
     else if (conversions::is_set(coltype))
     {
-        auto builder = static_cast<arrow::ListBuilder *>(builder_ptr);
+        auto builder = dynamic_cast<arrow::ListBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
 
         for (const auto &simple_cell : *cell->simple_cells())
@@ -435,7 +447,7 @@ arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder
     }
     else if (conversions::is_list(coltype))
     {
-        auto builder = static_cast<arrow::ListBuilder *>(builder_ptr);
+        auto builder = dynamic_cast<arrow::ListBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
 
         for (const auto &simple_cell : *cell->simple_cells())
