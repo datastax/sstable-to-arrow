@@ -57,4 +57,6 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
 
 arrow::Status write_parquet(const arrow::Table &table, arrow::MemoryPool *pool);
 
+sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics);
+
 #endif

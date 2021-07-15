@@ -6,6 +6,7 @@ const char fpath_separator =
 #else
     '/';
 #endif
+
 const int NO_NETWORK_FLAG = 0x01;
 const int WRITE_PARQUET_FLAG = 0x02;
 int flags;
@@ -76,12 +77,83 @@ void read_data(std::shared_ptr<struct sstable_t> sstable)
     auto start_ts = std::chrono::high_resolution_clock::now();
     auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
 
-    read_sstable_file(sstable->data_path, &sstable->data);
+    if (sstable->compression_info_path != "") // if the SSTable is compressed
+    {
+        read_sstable_file(sstable->compression_info_path, &sstable->compression_info);
+        sstable->data = read_decompressed_sstable(sstable->compression_info, sstable->data_path);
+    }
+    else
+        read_sstable_file(sstable->data_path, &sstable->data);
 
     auto end_ts = std::chrono::high_resolution_clock::now();
     auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
 
     std::cout << "[PROFILE read_data]: " << (end - start) << "us\n";
+}
+
+std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstable_compression_info_t> compression_info, const std::string &data_path)
+{
+    std::ifstream ifs;
+    open_stream(data_path, &ifs);
+
+    // get the number of compressed bytes
+    ifs.seekg(0, std::ios::end);
+    int32_t src_size = static_cast<int32_t>(ifs.tellg()); // the total size of the uncompressed file
+    std::cout << "compressed size: " << src_size << "\n";
+    if (src_size < 0)
+    {
+        std::cerr << "error reading compressed data file\n";
+        exit(1);
+    }
+    uint32_t nchunks = compression_info->chunk_count();
+
+    std::vector<char> decompressed;
+
+    const auto &offsets = *compression_info->chunk_offsets();
+    uint32_t chunk_length = compression_info->chunk_length();
+
+    uint64_t total_decompressed_size = 0;
+    // loop through chunks to get total decompressed size (written by Cassandra)
+    for (int i = 0; i < nchunks; ++i)
+    {
+        ifs.seekg(offsets[i]);
+        int32_t decompressed_size =
+            ((ifs.get() & 0xff) << 0x00) |
+            ((ifs.get() & 0xff) << 0x08) |
+            ((ifs.get() & 0xff) << 0x10) |
+            ((ifs.get() & 0xff) << 0x18);
+        total_decompressed_size += decompressed_size;
+    }
+    std::cout << "total decompressed size: " << total_decompressed_size << '\n';
+    decompressed.resize(total_decompressed_size);
+
+    for (int i = 0; i < nchunks; ++i) // read each chunk at a time
+    {
+        uint64_t offset = offsets[i];
+        // get size based on offset with special case for last chunk
+        uint64_t chunk_size = (i == nchunks - 1 ? src_size : offsets[i + 1]) - offset;
+
+        std::vector<char> buffer(chunk_size);
+
+        // skip 4 bytes written by Cassandra at beginning of each chunk and 4
+        // bytes at end for Adler32 checksum
+        ifs.seekg(offset + 4, std::ios::beg);
+        ifs.read(buffer.data(), chunk_size - 8);
+
+        int ntransferred = LZ4_decompress_safe(
+            buffer.data(), &decompressed[i * chunk_length],
+            chunk_size - 8, chunk_length);
+
+        if (ntransferred < 0)
+        {
+            std::cerr << "decompression of block " << i << " failed with error code " << ntransferred << '\n';
+            exit(1);
+        }
+    }
+
+    std::string decompressed_data(decompressed.data(), decompressed.size());
+    kaitai::kstream ks(decompressed_data);
+    return std::make_shared<sstable_data_t>(&ks);
 }
 
 template <typename T>
@@ -255,7 +327,7 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
     struct dirent *dent;
     char fmt[5];
     int num;
-    char ftype_[10];
+    char ftype_[25];
     while ((dent = readdir(table_dir)) != nullptr)
     {
         std::string fname = dent->d_name;
@@ -281,6 +353,8 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
             sstables[num]->index_path = full_path;
         else if (ftype == "Summary")
             sstables[num]->summary_path = full_path;
+        else if (ftype == "CompressionInfo")
+            sstables[num]->compression_info_path = full_path;
     }
     free(table_dir);
 }
@@ -291,18 +365,9 @@ void open_stream(const std::string &path, std::ifstream *ifs)
     *ifs = std::ifstream(path, std::ifstream::binary);
     if (!ifs->is_open())
     {
-        std::cerr << "could not open file";
+        std::cerr << "could not open file \"" << path << "\"\n";
         exit(1);
     }
-}
-
-// Read the serialization header from the statistics file.
-sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics)
-{
-    PROFILE_FUNCTION;
-    const auto &toc = *statistics->toc()->array();
-    const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file
-    return static_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());
 }
 
 // Initialize the deserialization helper using the schema from the serialization

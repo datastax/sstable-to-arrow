@@ -100,9 +100,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     auto statistics_data = dynamic_cast<sstable_statistics_t::statistics_t *>(statistics_ptr->body());
     assert(statistics_data != nullptr);
 
-    auto &serialization_ptr = (*statistics->toc()->array())[3];
-    auto serialization_header = dynamic_cast<sstable_statistics_t::serialization_header_t *>(serialization_ptr->body());
-    assert(serialization_header != nullptr);
+    auto serialization_header = get_serialization_header(statistics);
 
     str_arr_t types = std::make_shared<std::vector<std::string>>();                            // cql types of all columns
     arrow::FieldVector schema_vector;                                                          // name and arrow datatype of all columns
@@ -134,9 +132,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
     for (auto &builder : *arr)
     {
-        std::cout << "capacity/length before: " << builder->capacity() << ", " << builder->length() << '\n';
         ARROW_RETURN_NOT_OK(reserve_builder(builder.get(), nrows));
-        std::cout << "after: " << builder->capacity() << ", " << builder->length() << '\n';
     }
 
     for (auto &partition : *sstable->partitions())
@@ -154,8 +150,6 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     for (auto &builder : *arr)
     {
         std::shared_ptr<arrow::Array> arrptr;
-        std::cout << builder->capacity() << ", " << builder->length() << '\n';
-        std::cout << "nchildren: " << builder->num_children() << '\n';
         ARROW_RETURN_NOT_OK(builder->Finish(&arrptr));
         finished_arrays.push_back(arrptr);
     }
@@ -217,14 +211,10 @@ arrow::Status process_row(
     // counter for which index in the global builders array we are in
     int idx = 0;
 
-    std::cout << "num builders: " << arr->size() << '\n';
-
     auto builder = dynamic_cast<arrow::TimestampBuilder *>((*arr)[idx].get());
     if (!row->_is_null_liveness_info())
     {
         long long delta_timestamp = row->liveness_info()->delta_timestamp()->val();
-        std::cout << "delta timestamp: " << delta_timestamp << '\n';
-        std::cout << builder->capacity() << ", " << builder->length() << '\n';
         builder->UnsafeAppend(serialization_header->min_timestamp()->val() + delta_timestamp);
     }
     else
@@ -246,8 +236,6 @@ arrow::Status process_row(
     const int &n_regular = deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR);
     std::vector<std::future<arrow::Status>> col_threads;
     col_threads.reserve(n_regular);
-
-    std::cout << "number of regular columns: " << n_regular << '\n';
 
     // parse each of the row's cells
     for (int i = 0; i < n_regular; ++i, ++idx)
@@ -465,4 +453,13 @@ arrow::Status write_parquet(const arrow::Table &table, arrow::MemoryPool *pool)
     std::shared_ptr<arrow::io::FileOutputStream> outfile;
     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open("table.parquet"));
     return parquet::arrow::WriteTable(table, pool, outfile, 3);
+}
+
+// Read the serialization header from the statistics file.
+sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics)
+{
+    PROFILE_FUNCTION;
+    const auto &toc = *statistics->toc()->array();
+    const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file
+    return dynamic_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());
 }

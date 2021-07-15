@@ -29,6 +29,7 @@ add_executable(sstable_to_arrow
     ${PROJECT_BINARY_DIR}/sstable_index.cpp ${PROJECT_BINARY_DIR}/sstable_index.h
     ${PROJECT_BINARY_DIR}/sstable_statistics.cpp ${PROJECT_BINARY_DIR}/sstable_statistics.h
     ${PROJECT_BINARY_DIR}/sstable_summary.cpp ${PROJECT_BINARY_DIR}/sstable_summary.h
+    ${PROJECT_BINARY_DIR}/sstable_compression_info.cpp ${PROJECT_BINARY_DIR}/sstable_compression_info.h
     main.cpp main.h
     )
 
@@ -36,6 +37,7 @@ target_link_libraries(sstable_to_arrow PRIVATE kaitai_struct_cpp_stl_runtime)
 target_link_libraries(sstable_to_arrow PRIVATE arrow_shared)
 target_link_libraries(sstable_to_arrow PRIVATE Threads::Threads)
 target_link_libraries(sstable_to_arrow PRIVATE parquet)
+target_link_libraries(sstable_to_arrow PRIVATE lz4)
 
 target_include_directories(sstable_to_arrow PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/util")
@@ -50,7 +52,7 @@ if(DEBUG_VERBOSE)
     add_definitions(-DDEBUG)
 endif(DEBUG_VERBOSE)
 
-foreach(ksy_file deletion_time sstable_data sstable_index sstable_statistics sstable_summary)
+foreach(ksy_file deletion_time sstable_data sstable_index sstable_statistics sstable_summary sstable_compression_info)
     add_custom_command(
         OUTPUT "${PROJECT_BINARY_DIR}/${ksy_file}.h" "${PROJECT_BINARY_DIR}/${ksy_file}.cpp"
         COMMAND /usr/bin/kaitai-struct-compiler --target cpp_stl --cpp-standard 11 --opaque-types true --outdir "${PROJECT_BINARY_DIR}" "${CMAKE_SOURCE_DIR}/ksy/${ksy_file}.ksy"
