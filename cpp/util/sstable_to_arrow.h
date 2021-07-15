@@ -50,12 +50,25 @@ arrow::Status process_column(
     int64_t nrows,
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
-arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool);
-arrow::Status append_complex(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
+arrow::Status append_scalar(
+    const std::string_view &coltype,
+    arrow::ArrayBuilder *builder_ptr,
+    const std::string_view &bytes,
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
+arrow::Status append_complex(
+    const std::string_view &coltype,
+    arrow::ArrayBuilder *builder_ptr,
+    const sstable_data_t::complex_cell_t *cell,
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
 
-arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::ArrayBuilder *builder_ptr, const std::string_view &coltype, bool is_multi_cell, arrow::MemoryPool *pool);
+arrow::Status handle_cell(
+    std::unique_ptr<kaitai::kstruct> cell_ptr,
+    arrow::ArrayBuilder *builder_ptr,
+    const std::string_view &coltype,
+    bool is_multi_cell,
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
 
-arrow::Status write_parquet(const arrow::Table &table, arrow::MemoryPool *pool);
+arrow::Status write_parquet(const arrow::Table &table, arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics);
 

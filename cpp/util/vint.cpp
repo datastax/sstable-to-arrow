@@ -23,7 +23,7 @@ vint_t::vint_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 
 // TODO
 // decode a Java BigInteger
-long long vint_t::parse_java(const char *bytes, size_t size)
+uint64_t vint_t::parse_java(const char *bytes, size_t size)
 {
     int rtn = *(int *)bytes;
     for (int i = 1; i < size; ++i)
@@ -34,7 +34,7 @@ long long vint_t::parse_java(const char *bytes, size_t size)
     return rtn;
 }
 
-long long vint_t::val()
+uint64_t vint_t::val()
 {
     return val_;
 }

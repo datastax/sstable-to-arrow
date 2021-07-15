@@ -16,7 +16,6 @@ const int PORT = 9143;
  */
 arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Table> table)
 {
-    PROFILE_FUNCTION;
     int sockfd;
     FAIL_ON_STATUS(sockfd = socket(AF_INET, SOCK_STREAM, 0), "socket failed");
     int option = 1;
@@ -89,8 +88,6 @@ arrow::Status send_data(std::shared_ptr<arrow::Schema> schema, std::shared_ptr<a
 
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Schema> *schema, std::shared_ptr<arrow::Table> *table)
 {
-    PROFILE_FUNCTION;
-
     auto start_ts = std::chrono::high_resolution_clock::now();
     auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
 
@@ -102,6 +99,8 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
     auto serialization_header = get_serialization_header(statistics);
 
+    std::cout << "min timestamp: " << serialization_header->min_timestamp()->val() << '\n';
+
     str_arr_t types = std::make_shared<std::vector<std::string>>();                            // cql types of all columns
     arrow::FieldVector schema_vector;                                                          // name and arrow datatype of all columns
     builder_arr_t arr = std::make_shared<std::vector<std::unique_ptr<arrow::ArrayBuilder>>>(); // arrow builder for each column
@@ -112,7 +111,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     std::cout << "nrows: " << nrows << '\n';
 
     // use create a vector to contain row timestamps
-    process_column(types, schema_vector, arr, "org.apache.cassandra.db.marshal.TimestampType", "_timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), nrows);
+    process_column(types, schema_vector, arr, "org.apache.cassandra.db.marshal.TimestampType", "liveness_info_tstamp", arrow::timestamp(arrow::TimeUnit::MICRO), nrows);
 
     std::string partition_key_type = serialization_header->partition_key_type()->body();
     process_column(types, schema_vector, arr, partition_key_type, "partition key", conversions::get_arrow_type(partition_key_type), nrows);
@@ -127,13 +126,11 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
         process_column(types, schema_vector, arr, col->column_type()->body(), col->name()->body(), conversions::get_arrow_type(col->column_type()->body()), nrows);
 
     *schema = std::make_shared<arrow::Schema>(schema_vector);
-    std::cout << "==========\nschema ==========\n"
+    std::cout << "========== schema ==========\n"
               << (*schema)->ToString() << "\n==========\n";
 
     for (auto &builder : *arr)
-    {
         ARROW_RETURN_NOT_OK(reserve_builder(builder.get(), nrows));
-    }
 
     for (auto &partition : *sstable->partitions())
         for (auto &unfiltered : *partition->unfiltereds())
@@ -155,7 +152,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     }
     *table = arrow::Table::Make(*schema, finished_arrays);
 
-    std::cout << "\n==========\ntable:\n==========\n"
+    std::cout << "\n========== table ==========\n"
               << (*table)->ToString() << "\n==========\n";
 
     auto end_ts = std::chrono::high_resolution_clock::now();
@@ -185,7 +182,6 @@ arrow::Status process_column(
     int64_t nrows,
     arrow::MemoryPool *pool)
 {
-    PROFILE_FUNCTION;
     DEBUG_ONLY(std::cout << "Handling column \"" << name << "\" with type " << cassandra_type << '\n');
     types->push_back(cassandra_type);
     schema_vector.push_back(arrow::field(name, data_type));
@@ -203,8 +199,6 @@ arrow::Status process_row(
     sstable_statistics_t::serialization_header_t *serialization_header,
     arrow::MemoryPool *pool)
 {
-    PROFILE_FUNCTION;
-
     // now we know that this unfiltered is actually a row
     sstable_data_t::row_t *row = static_cast<sstable_data_t::row_t *>(unfiltered->body());
 
@@ -214,8 +208,9 @@ arrow::Status process_row(
     auto builder = dynamic_cast<arrow::TimestampBuilder *>((*arr)[idx].get());
     if (!row->_is_null_liveness_info())
     {
-        long long delta_timestamp = row->liveness_info()->delta_timestamp()->val();
-        builder->UnsafeAppend(serialization_header->min_timestamp()->val() + delta_timestamp);
+        uint64_t delta_timestamp = row->liveness_info()->delta_timestamp()->val();
+        std::cout << "delta: " << delta_timestamp << ", " << serialization_header->min_timestamp()->val() + delta_timestamp + deserialization_helper_t::TIMESTAMP_EPOCH << '\n';
+        builder->UnsafeAppend(serialization_header->min_timestamp()->val() + delta_timestamp + deserialization_helper_t::TIMESTAMP_EPOCH);
     }
     else
         builder->UnsafeAppendNull();
@@ -283,7 +278,6 @@ arrow::Status handle_cell(std::unique_ptr<kaitai::kstruct> cell_ptr, arrow::Arra
  */
 arrow::Status append_scalar(const std::string_view &coltype, arrow::ArrayBuilder *builder_ptr, const std::string_view &bytes, arrow::MemoryPool *pool)
 {
-    PROFILE_FUNCTION;
     DEBUG_ONLY(std::cout << "appending to vector: " << coltype << " (builder capacity " << builder_ptr->capacity() << ")\n");
 
     // for all other types, we parse the data using kaitai, which might end up
@@ -458,7 +452,6 @@ arrow::Status write_parquet(const arrow::Table &table, arrow::MemoryPool *pool)
 // Read the serialization header from the statistics file.
 sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics)
 {
-    PROFILE_FUNCTION;
     const auto &toc = *statistics->toc()->array();
     const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file
     return dynamic_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());

@@ -24,6 +24,9 @@ public:
     static const int STATIC = 1;
     static const int REGULAR = 2;
 
+    static const uint64_t TIMESTAMP_EPOCH = 1442880000000000;
+    static const uint64_t DELETION_TIME_EPOCH = 1442880000;
+
     static int idx;
     static int curkind;
 

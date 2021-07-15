@@ -9,14 +9,6 @@
 #include <thread>
 #include <mutex>
 
-#if PROFILING
-#   define PROFILE_SCOPE(name) instrumentation_timer timer##__LINE__(name)
-#   define PROFILE_FUNCTION PROFILE_SCOPE(__PRETTY_FUNCTION__)
-#else
-#   define PROFILE_SCOPE(name)
-#   define PROFILE_FUNCTION
-#endif
-
 #if DEBUG
 #   define DEBUG_ONLY(msg) msg
 #else

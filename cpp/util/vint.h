@@ -9,12 +9,12 @@
 
 class vint_t : public kaitai::kstruct
 {
-    long long val_;
+    uint64_t val_;
 
 public:
     vint_t(kaitai::kstream *ks);
-    static long long parse_java(const char *bytes, size_t size);
-    long long val();
+    static uint64_t parse_java(const char *bytes, size_t size);
+    uint64_t val();
 };
 
 #endif

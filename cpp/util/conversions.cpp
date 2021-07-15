@@ -62,7 +62,6 @@ node::node(const std::string_view &str_) : str(str_), children(std::make_shared<
 
 long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
 {
-    PROFILE_FUNCTION;
     DEBUG_ONLY(std::cout << "getting col size of " << coltype << '\n');
     if (coltype.rfind(reversedtype, 0) == 0)
         return get_col_size(get_child_type(coltype), ks);
@@ -116,7 +115,6 @@ void get_map_child_types(const std::string_view &type, std::string_view *key_typ
  */
 bool is_multi_cell(const std::string_view &coltype)
 {
-    PROFILE_FUNCTION;
     if (is_reversed(coltype))
         return is_multi_cell(get_child_type(coltype));
 
@@ -143,7 +141,6 @@ IS_TYPE_WITH_PARAMETERS(tuple)
 
 std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type)
 {
-    PROFILE_FUNCTION;
     auto type_ptr = type_info.find(type);
     if (type_ptr != type_info.end())
         return type_ptr->second.arrow_type;
@@ -177,7 +174,6 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type)
 
 arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_view &type)
 {
-    PROFILE_FUNCTION;
     std::stack<std::shared_ptr<struct node>> stack;
     size_t prev_start = 0;
     char prev = '\0';

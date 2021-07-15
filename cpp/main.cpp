@@ -15,8 +15,6 @@ typedef std::map<int, std::shared_ptr<struct sstable_t>> sstable_map_t;
 
 int main(int argc, char *argv[])
 {
-    instrumentor::get().begin_session("main");
-
     read_options(argc, argv);
 
     if (argc < 2)
@@ -29,19 +27,57 @@ int main(int argc, char *argv[])
     const std::string table_dir = argv[optind];
     get_file_paths(table_dir, sstables);
 
+    std::vector<std::shared_ptr<arrow::Table>> finished_tables;
+    std::vector<std::shared_ptr<arrow::Schema>> schemas;
+
     for (auto it = sstables.begin(); it != sstables.end(); ++it)
     {
         DEBUG_ONLY(std::cout << "\n\n===== Reading SSTable #" << it->first << " =====\n");
         process_sstable(it->second);
+
+        std::shared_ptr<arrow::Table> table;
+        std::shared_ptr<arrow::Schema> schema;
+        arrow::Status status = vector_to_columnar_table(it->second->statistics, it->second->data, &schema, &table);
+        if (!status.ok())
+        {
+            std::cerr << "error converting SSTable data to Arrow Table\n";
+            return 1;
+        }
+        schemas.push_back(schema);
+        finished_tables.push_back(table);
     }
 
-    instrumentor::get().end_session();
+    auto final_table_result = arrow::ConcatenateTables(finished_tables);
+    if (!final_table_result.ok())
+    {
+        std::cerr << "error concatenating sstables\n";
+        return 1;
+    }
+    auto final_table = final_table_result.ValueOrDie();
+
+    if ((flags & WRITE_PARQUET_FLAG) != 0)
+    {
+        if (!write_parquet(*final_table).ok())
+        {
+            std::cerr << "error writing to parquet\n";
+            return 1;
+        }
+    }
+
+    if ((flags & NO_NETWORK_FLAG) == 0)
+    {
+        if (!send_data(schemas[0], final_table).ok())
+        {
+            std::cerr << "error sending data\n";
+            return 1;
+        }
+    }
+
     return 0;
 }
 
 arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
 {
-    PROFILE_FUNCTION;
     std::thread data(read_data, sstable);
     std::thread index(read_sstable_file<sstable_index_t>, sstable->index_path, &sstable->index);
     std::thread summary(read_sstable_file<sstable_summary_t>, sstable->summary_path, &sstable->summary);
@@ -49,16 +85,6 @@ arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
     data.join();
     index.join();
     summary.join();
-
-    std::shared_ptr<arrow::Table> table;
-    std::shared_ptr<arrow::Schema> schema;
-    ARROW_RETURN_NOT_OK(vector_to_columnar_table(sstable->statistics, sstable->data, &schema, &table));
-
-    if ((flags & WRITE_PARQUET_FLAG) != 0)
-        write_parquet(*table, arrow::default_memory_pool());
-
-    if ((flags & NO_NETWORK_FLAG) == 0)
-        ARROW_RETURN_NOT_OK(send_data(schema, table));
 
     return arrow::Status::OK();
 }
@@ -69,7 +95,6 @@ arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
 
 void read_data(std::shared_ptr<struct sstable_t> sstable)
 {
-    PROFILE_FUNCTION;
     read_sstable_file(sstable->statistics_path, &sstable->statistics);
     process_serialization_header(get_serialization_header(sstable->statistics));
     DEBUG_ONLY(debug_statistics(sstable->statistics));
@@ -159,7 +184,6 @@ std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstabl
 template <typename T>
 void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj)
 {
-    PROFILE_FUNCTION;
     std::ifstream ifs;
     open_stream(path, &ifs);
     kaitai::kstream ks(&ifs);
@@ -170,7 +194,6 @@ void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj)
 template <>
 void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statistics_t> *sstable_obj)
 {
-    PROFILE_FUNCTION;
     // These streams are static because kaitai "instances" (a section of the
     // binary file specified by an offset) are lazy and will only read when the
     // value is accessed, and we still need to access these instances outside of
@@ -187,7 +210,6 @@ void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statisti
 
 void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
 {
-    PROFILE_FUNCTION;
     auto body = get_serialization_header(statistics);
     std::cout << "\npartition key type: " << body->partition_key_type()->body() << '\n';
 
@@ -214,7 +236,6 @@ void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
 
 void debug_data(std::shared_ptr<sstable_data_t> sstable)
 {
-    PROFILE_FUNCTION;
     for (auto &partition : *sstable->partitions())
     {
         std::cout << "\n========== partition ==========\nkey: " << partition->header()->key() << '\n';
@@ -259,7 +280,6 @@ void debug_data(std::shared_ptr<sstable_data_t> sstable)
 
 void debug_index(std::shared_ptr<sstable_index_t> index)
 {
-    PROFILE_FUNCTION;
     for (std::unique_ptr<sstable_index_t::index_entry_t> &entry : *index->entries())
     {
         std::cout
@@ -307,7 +327,6 @@ void read_options(int argc, char *argv[])
 
 bool ends_with(const std::string &s, const std::string &end)
 {
-    PROFILE_FUNCTION;
     if (end.size() > s.size())
         return false;
     return std::equal(end.rbegin(), end.rend(), s.rbegin());
@@ -322,7 +341,6 @@ bool ends_with(const std::string &s, const std::string &end)
  */
 void get_file_paths(const std::string &path, sstable_map_t &sstables)
 {
-    PROFILE_FUNCTION;
     DIR *table_dir = opendir(path.c_str());
     struct dirent *dent;
     char fmt[5];
@@ -361,7 +379,6 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
 
 void open_stream(const std::string &path, std::ifstream *ifs)
 {
-    PROFILE_FUNCTION;
     *ifs = std::ifstream(path, std::ifstream::binary);
     if (!ifs->is_open())
     {
@@ -374,7 +391,6 @@ void open_stream(const std::string &path, std::ifstream *ifs)
 // header stored in the statistics file. This must be called before `read_data`.
 void process_serialization_header(sstable_statistics_t::serialization_header_t *serialization_header)
 {
-    PROFILE_FUNCTION;
     // Set important constants for the serialization helper and initialize vectors to store
     // types of clustering columns
     auto clustering_key_types = serialization_header->clustering_key_types()->array();
