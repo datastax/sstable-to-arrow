@@ -61,6 +61,8 @@ arrow::Status append_complex(
     const sstable_data_t::complex_cell_t *cell,
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
+arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker);
+
 arrow::Status handle_cell(
     std::unique_ptr<kaitai::kstruct> cell_ptr,
     arrow::ArrayBuilder *builder_ptr,

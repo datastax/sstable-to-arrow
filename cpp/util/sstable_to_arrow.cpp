@@ -134,8 +134,11 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
     for (auto &partition : *sstable->partitions())
         for (auto &unfiltered : *partition->unfiltereds())
-            if ((unfiltered->flags() & 0x01) == 0 && (unfiltered->flags() & 0x02) == 0) // ensure that this is a row instead of an end of partition marker or range tombstone marker
-                                                                                        // TODO handle end of partition and range tombstone markers
+            if ((unfiltered->flags() & 0x01) != 0) // end of partition
+                break;
+            else if ((unfiltered->flags() & 0x02) != 0) // range tombstone
+                process_marker(dynamic_cast<sstable_data_t::range_tombstone_marker_t *>(unfiltered->body()));
+            else // row
                 process_row(partition->header()->key(), unfiltered, types, arr, serialization_header, pool);
 
     int n = arr->size();
@@ -160,6 +163,12 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
 
     std::cout << "[PROFILE conversion]: " << (end - start) << "us\n";
 
+    return arrow::Status::OK();
+}
+
+arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker)
+{
+    std::cout << "MARKER FOUND\n";
     return arrow::Status::OK();
 }
 
@@ -209,7 +218,6 @@ arrow::Status process_row(
     if (!row->_is_null_liveness_info())
     {
         uint64_t delta_timestamp = row->liveness_info()->delta_timestamp()->val();
-        std::cout << "delta: " << delta_timestamp << ", " << serialization_header->min_timestamp()->val() + delta_timestamp + deserialization_helper_t::TIMESTAMP_EPOCH << '\n';
         builder->UnsafeAppend(serialization_header->min_timestamp()->val() + delta_timestamp + deserialization_helper_t::TIMESTAMP_EPOCH);
     }
     else

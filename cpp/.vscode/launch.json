@@ -8,7 +8,7 @@
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
                 "-n",
-                "/workspaces/sstable-to-arrow/test/res/iot-1-compressed/iot-4d09d9b0e4ca11eb80249116fc548b6b"
+                "/workspaces/sstable-to-arrow/test/res/store/shopping_cart-b5f93010e66e11eb91f49116fc548b6b"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
