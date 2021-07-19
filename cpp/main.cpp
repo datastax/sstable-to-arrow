@@ -27,27 +27,22 @@ int main(int argc, char *argv[])
     const std::string table_dir = argv[optind];
     get_file_paths(table_dir, sstables);
 
-    std::vector<std::shared_ptr<arrow::Table>> finished_tables;
-    std::vector<std::shared_ptr<arrow::Schema>> schemas;
+    std::vector<std::shared_ptr<arrow::Table>> finished_tables(sstables.size());
 
+    int i = 0;
     for (auto it = sstables.begin(); it != sstables.end(); ++it)
     {
-        DEBUG_ONLY(std::cout << "\n\n===== Reading SSTable #" << it->first << " =====\n");
+        std::cout << "\n\n========== Reading SSTable #" << it->first << " ==========\n";
         process_sstable(it->second);
-
-        std::shared_ptr<arrow::Table> table;
-        std::shared_ptr<arrow::Schema> schema;
-        arrow::Status status = vector_to_columnar_table(it->second->statistics, it->second->data, &schema, &table);
+        arrow::Status status = vector_to_columnar_table(it->second->statistics, it->second->data, &finished_tables[i++]);
         if (!status.ok())
         {
             std::cerr << "error converting SSTable data to Arrow Table\n";
             return 1;
         }
-        schemas.push_back(schema);
-        finished_tables.push_back(table);
     }
 
-    auto final_table_result = arrow::ConcatenateTables(finished_tables);
+    auto final_table_result = arrow::ConcatenateTables(finished_tables, arrow::ConcatenateTablesOptions{true});
     if (!final_table_result.ok())
     {
         std::cerr << "error concatenating sstables\n";
@@ -57,7 +52,7 @@ int main(int argc, char *argv[])
 
     if ((flags & WRITE_PARQUET_FLAG) != 0)
     {
-        if (!write_parquet(*final_table).ok())
+        if (!write_parquet(final_table).ok())
         {
             std::cerr << "error writing to parquet\n";
             return 1;
@@ -66,7 +61,7 @@ int main(int argc, char *argv[])
 
     if ((flags & NO_NETWORK_FLAG) == 0)
     {
-        if (!send_data(schemas[0], final_table).ok())
+        if (!send_data(final_table).ok())
         {
             std::cerr << "error sending data\n";
             return 1;
