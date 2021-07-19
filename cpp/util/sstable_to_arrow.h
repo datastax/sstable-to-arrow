@@ -15,29 +15,65 @@
 #include "sstable_statistics.h"
 #include "timer.h"
 
-struct conversion_helper_t
+class column_t
 {
-    std::vector<std::string> types;                             // cql types of all columns
-    arrow::FieldVector schema_vector;                           // name and arrow datatype of all columns
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders; // arrow builder for each column
+public:
+    std::string cassandra_type;
+    std::shared_ptr<arrow::Field> field;
+    std::unique_ptr<arrow::ArrayBuilder> builder;
+    std::unique_ptr<arrow::TimestampBuilder> ts_builder;
+
+    column_t(
+        const std::string &name_,
+        const std::string &cassandra_type_,
+        arrow::MemoryPool *pool)
+        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_), pool) {}
+
+    column_t(
+        const std::string &name_,
+        const std::string &cassandra_type_,
+        std::shared_ptr<arrow::DataType> type_,
+        arrow::MemoryPool *pool)
+        : cassandra_type(cassandra_type_),
+          field(arrow::field(name_, type_)),
+          ts_builder(std::make_unique<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool))
+    {
+        auto status = arrow::MakeBuilder(pool, field->type(), &builder);
+        if (!status.ok())
+        {
+            std::cerr << "error making builder for column " << field->name() << '\n';
+            exit(1);
+        }
+    }
+};
+
+class conversion_helper_t
+{
+public:
+    conversion_helper_t(std::shared_ptr<sstable_statistics_t> statistics, arrow::MemoryPool *pool);
+
+    std::shared_ptr<column_t> partition_key;
+    std::vector<std::shared_ptr<column_t>> clustering_cols;
+    std::vector<std::shared_ptr<column_t>> static_cols;
+    std::vector<std::shared_ptr<column_t>> regular_cols;
+
+    // metadata from the Statistics.db file
     sstable_statistics_t::serialization_header_t *metadata;
     sstable_statistics_t::statistics_t *statistics;
+
+    uint64_t get_timestamp(uint64_t delta);
+    arrow::Status add_column(
+        const std::string &cassandra_type,
+        const std::string &name,
+        const std::shared_ptr<arrow::DataType> &data_type,
+        arrow::MemoryPool *pool);
+    std::shared_ptr<arrow::Schema> schema();
+    size_t num_cols();
 };
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Table> *table, arrow::MemoryPool *pool = arrow::default_memory_pool());
-
-// Initialize `conversion_helper` and the builders for all of the columns in
-// this table using the schema provided in the statistics file.
-arrow::Status initialize_schema(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<arrow::Schema> *schema, std::unique_ptr<conversion_helper_t> *conversion_helper, arrow::MemoryPool *pool);
-
-arrow::Status process_column(
-    const std::unique_ptr<conversion_helper_t> &helper,
-    const std::string &cassandra_type,
-    const std::string &name,
-    const std::shared_ptr<arrow::DataType> &data_type,
-    arrow::MemoryPool *pool);
 
 // Recursively allocate memory for `nrows` elements in `builder` and its child
 // builders.

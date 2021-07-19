@@ -2,31 +2,51 @@
 
 #include "sstable_to_arrow.h"
 
+uint64_t conversion_helper_t::get_timestamp(uint64_t delta)
+{
+    return metadata->min_timestamp()->val() + delta + deserialization_helper_t::TIMESTAMP_EPOCH;
+}
+
+std::shared_ptr<arrow::Schema> conversion_helper_t::schema()
+{
+    arrow::FieldVector schema_vec(num_cols());
+    schema_vec[0] = partition_key->field;
+    int i = 1;
+    for (auto &group : {clustering_cols, static_cols, regular_cols})
+        for (auto &col : group)
+            schema_vec[i++] = col->field;
+    return arrow::schema(schema_vec);
+}
+
+size_t conversion_helper_t::num_cols()
+{
+    return 1 + clustering_cols.size() + static_cols.size() + regular_cols.size();
+}
+
 arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Table> *table, arrow::MemoryPool *pool)
 {
     auto start_ts = std::chrono::high_resolution_clock::now();
     auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
 
-    std::unique_ptr<conversion_helper_t> helper;
+    auto helper = std::make_unique<conversion_helper_t>(statistics, pool);
 
-    std::shared_ptr<arrow::Schema> schema;
-    initialize_schema(statistics, &schema, &helper, pool);
-
-    std::string_view partition_key_type = helper->types[0];
-    auto partition_key_builder = helper->builders[0].get();
+    std::string_view partition_key_type = helper->partition_key->cassandra_type;
+    auto partition_key_builder = helper->partition_key->builder.get();
 
     for (auto &partition : *sstable->partitions())
     {
         // std::cout << "deletion time: " <<  std::hex << (deletion_time->local_deletion_time()) << '\n';
-        auto deletion_ts = partition->header()->deletion_time()->marked_for_delete_at();
-        auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
-        uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+        // auto deletion_ts = partition->header()->deletion_time()->marked_for_delete_at();
+        // auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
+        // uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
 
-        if (us >= deletion_ts)
-        {
-            std::cout << "found deleted partition, skipping\n";
-            continue;
-        }
+        // if (us >= deletion_ts)
+        // {
+        //     std::cout << "found deleted partition, skipping\n";
+        //     continue;
+        // }
+
+        auto partition_key = partition->header()->key();
 
         for (auto &unfiltered : *partition->unfiltereds())
         {
@@ -36,7 +56,7 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
                 process_marker(dynamic_cast<sstable_data_t::range_tombstone_marker_t *>(unfiltered->body()));
             else // row
             {
-                ARROW_RETURN_NOT_OK(append_scalar(partition_key_type, partition_key_builder, partition->header()->key(), pool));
+                ARROW_RETURN_NOT_OK(append_scalar(partition_key_type, partition_key_builder, partition_key, pool));
                 auto row = dynamic_cast<sstable_data_t::row_t *>(unfiltered->body());
                 int kind = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0)
                                ? deserialization_helper_t::STATIC
@@ -46,18 +66,14 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
         }
     }
 
-    int n = helper->builders.size();
-    DEBUG_ONLY(std::cout << "number of fields in table: " << n << '\n');
-
     // finish the arrays and store them into a vector
-    arrow::ArrayVector finished_arrays;
-    for (auto &builder : helper->builders)
-    {
-        std::shared_ptr<arrow::Array> arrptr;
-        ARROW_RETURN_NOT_OK(builder->Finish(&arrptr));
-        finished_arrays.push_back(arrptr);
-    }
-    *table = arrow::Table::Make(schema, finished_arrays);
+    arrow::ArrayVector finished_arrays(helper->num_cols());
+    helper->partition_key->builder->Finish(&finished_arrays[0]);
+    int i = 1;
+    for (auto &group : {helper->clustering_cols, helper->static_cols, helper->regular_cols})
+        for (auto &col : group)
+            ARROW_RETURN_NOT_OK(col->builder->Finish(&finished_arrays[i++]));
+    *table = arrow::Table::Make(helper->schema(), finished_arrays);
 
     std::cout << "\n===== table =====\n"
               << (*table)->ToString() << "==========\n";
@@ -70,64 +86,40 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     return arrow::Status::OK();
 }
 
-arrow::Status initialize_schema(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<arrow::Schema> *schema, std::unique_ptr<conversion_helper_t> *conversion_helper, arrow::MemoryPool *pool)
+conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> sstable_statistics, arrow::MemoryPool *pool)
 {
-    auto helper = std::make_unique<conversion_helper_t>();
-
-    auto &statistics_ptr = (*statistics->toc()->array())[2];
+    auto &statistics_ptr = (*sstable_statistics->toc()->array())[2];
     auto statistics_data = dynamic_cast<sstable_statistics_t::statistics_t *>(statistics_ptr->body());
     assert(statistics_data != nullptr);
-    helper->statistics = statistics_data;
+    statistics = statistics_data;
 
-    auto metadata = get_serialization_header(statistics);
-    assert(metadata != nullptr);
-    helper->metadata = metadata;
-
-    DEBUG_ONLY(std::cout << "saving partition key\n");
+    auto metadata_ = get_serialization_header(sstable_statistics);
+    assert(metadata_ != nullptr);
+    metadata = metadata_;
 
     int64_t nrows = statistics_data->number_of_rows();
 
+    // partition key
     std::string partition_key_type = metadata->partition_key_type()->body();
-    process_column(helper, partition_key_type, "partition key", conversions::get_arrow_type(partition_key_type), pool);
+    partition_key = std::make_shared<column_t>("partition key", partition_key_type, pool);
+    reserve_builder(partition_key->builder.get(), nrows);
 
-    // use create a vector to contain row timestamps
-    process_column(helper, "org.apache.cassandra.db.marshal.TimestampType", "liveness_info_tstamp", arrow::timestamp(arrow::TimeUnit::MICRO), pool);
-
-    DEBUG_ONLY(std::cout << "saving clustering keys\n");
+    // clustering columns
     for (auto &col : *metadata->clustering_key_types()->array())
-        process_column(helper, col->body(), "clustering key", conversions::get_arrow_type(col->body()), pool);
+        clustering_cols.push_back(std::make_shared<column_t>("clustering key", col->body(), pool));
 
-    DEBUG_ONLY(std::cout << "saving static and regular columns\n");
-    for (auto col_group : {metadata->static_columns()->array(), metadata->regular_columns()->array()})
-        for (auto &col : *col_group)
-            process_column(helper, col->column_type()->body(), col->name()->body(), conversions::get_arrow_type(col->column_type()->body()), pool);
+    // static and regular columns
+    for (auto &col : *metadata->static_columns()->array())
+        static_cols.push_back(std::make_shared<column_t>(
+            col->name()->body(),
+            col->column_type()->body(),
+            pool));
 
-    *schema = std::make_shared<arrow::Schema>(helper->schema_vector);
-    std::cout << "===== schema =====\n"
-              << (*schema)->ToString() << "\n==========\n";
-
-    for (auto &builder : helper->builders)
-        ARROW_RETURN_NOT_OK(reserve_builder(builder.get(), nrows));
-
-    *conversion_helper = std::move(helper);
-
-    return arrow::Status::OK();
-}
-
-arrow::Status process_column(
-    const std::unique_ptr<conversion_helper_t> &helper,
-    const std::string &cassandra_type,
-    const std::string &name,
-    const std::shared_ptr<arrow::DataType> &data_type,
-    arrow::MemoryPool *pool)
-{
-    DEBUG_ONLY(std::cout << "Creating column \"" << name << "\" with type " << cassandra_type << '\n');
-    helper->types.push_back(cassandra_type);
-    helper->schema_vector.push_back(arrow::field(name, data_type));
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, data_type, &builder));
-    helper->builders.push_back(std::move(builder));
-    return arrow::Status::OK();
+    for (auto &col : *metadata->regular_columns()->array())
+        regular_cols.push_back(std::make_shared<column_t>(
+            col->name()->body(),
+            col->column_type()->body(),
+            pool));
 }
 
 arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker)
@@ -150,41 +142,60 @@ arrow::Status process_row(
     const std::unique_ptr<conversion_helper_t> &helper,
     arrow::MemoryPool *pool)
 {
-    // counter for which index in the global builders array we are in
-    // we skip the partition key header
-    int idx = 1;
-
-    auto builder = dynamic_cast<arrow::TimestampBuilder *>(helper->builders[idx].get());
+    // get the row timestamp info
+    const auto &builder = helper->partition_key->ts_builder;
     if (!row->_is_null_liveness_info())
     {
-        uint64_t delta_timestamp = row->liveness_info()->delta_timestamp()->val();
-        builder->UnsafeAppend(helper->metadata->min_timestamp()->val() + delta_timestamp + deserialization_helper_t::TIMESTAMP_EPOCH);
+        uint64_t delta = row->liveness_info()->delta_timestamp()->val();
+        builder->UnsafeAppend(helper->get_timestamp(delta));
     }
     else
         builder->UnsafeAppendNull();
-    idx++;
 
-    for (auto &cell : *row->clustering_blocks()->values())
+    // ignore timestamps, which aren't stored for clustering cols
+    for (int i = 0; i < row->clustering_blocks()->values()->size(); ++i)
     {
-        ARROW_RETURN_NOT_OK(append_scalar(helper->types[idx], helper->builders[idx].get(), cell, pool));
-        idx++;
+        auto &cell = (*row->clustering_blocks()->values())[i];
+        auto &col = helper->clustering_cols[i];
+        ARROW_RETURN_NOT_OK(append_scalar(col->cassandra_type, col->builder.get(), cell, pool));
     }
 
+    // add each regular column in a separate thread
     const int &n_regular = deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR);
     std::vector<std::future<arrow::Status>> col_threads;
     col_threads.reserve(n_regular);
 
     // parse each of the row's cells
-    for (int i = 0; i < n_regular; ++i, ++idx)
+    // TODO handle static columns
+    for (int i = 0; i < n_regular; ++i)
     {
-        auto cell_ptr = std::move((*row->cells())[i]);
-        auto builder_ptr = helper->builders[idx].get();
-        std::string_view coltype = helper->types[idx];
+        auto cell_ptr = (*row->cells())[i].get();
+        auto &col = helper->regular_cols[i];
         const bool is_multi_cell = deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i);
         if (is_multi_cell)
-            col_threads.push_back(std::async(append_complex, coltype, builder_ptr, dynamic_cast<sstable_data_t::complex_cell_t *>(cell_ptr.get()), pool));
+            col_threads.push_back(std::async(
+                append_complex,
+                col->cassandra_type,
+                col->builder.get(),
+                dynamic_cast<sstable_data_t::complex_cell_t *>(cell_ptr),
+                pool));
         else
-            col_threads.push_back(std::async(append_scalar, coltype, builder_ptr, dynamic_cast<sstable_data_t::simple_cell_t *>(cell_ptr.get())->value(), pool));
+        {
+            auto simple_cell = dynamic_cast<sstable_data_t::simple_cell_t *>(cell_ptr);
+            if (!simple_cell->_is_null_delta_timestamp())
+            {
+                uint64_t delta = simple_cell->delta_timestamp()->val();
+                col->ts_builder->UnsafeAppend(helper->get_timestamp(delta));
+            }
+            else
+                col->ts_builder->UnsafeAppendNull();
+            col_threads.push_back(std::async(
+                append_scalar,
+                col->cassandra_type,
+                col->builder.get(),
+                simple_cell->value(),
+                pool));
+        }
     }
 
     for (auto &future : col_threads)
@@ -228,7 +239,6 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     }
     else if (conversions::is_reversed(coltype))
         return append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool);
-
     else if (coltype == "org.apache.cassandra.db.marshal.DecimalType") // decimal
     {
         auto builder = (arrow::StructBuilder *)builder_ptr;
@@ -286,6 +296,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         return builder->Append(date);
     }
 
+    // handle "primitive" types with a macro
 #define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                   \
     else if (coltype == "org.apache.cassandra.db.marshal." #cassandra_type "Type") \
     {                                                                              \
