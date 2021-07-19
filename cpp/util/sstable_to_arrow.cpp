@@ -77,7 +77,7 @@ arrow::Status initialize_schema(std::shared_ptr<sstable_statistics_t> statistics
     auto &statistics_ptr = (*statistics->toc()->array())[2];
     auto statistics_data = dynamic_cast<sstable_statistics_t::statistics_t *>(statistics_ptr->body());
     assert(statistics_data != nullptr);
-    helper->statistics = statistics;
+    helper->statistics = statistics_data;
 
     auto metadata = get_serialization_header(statistics);
     assert(metadata != nullptr);

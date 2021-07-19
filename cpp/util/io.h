@@ -18,7 +18,13 @@
         exit(1);               \
     }
 
-arrow::Status send_data(std::shared_ptr<arrow::Table> table);
+#define SIZE_TO_BE(value)                                            \
+    ((sizeof(size_t) == 2) ? htobe16(value)                          \
+                           : ((sizeof(size_t) == 4) ? htobe32(value) \
+                                                    : htobe64(value)))
+
+arrow::Status send_tables(const std::vector<std::shared_ptr<arrow::Table>> &tables);
+arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd);
 arrow::Status write_parquet(std::shared_ptr<arrow::Table> table, arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 #endif

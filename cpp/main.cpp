@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
 
     if ((flags & NO_NETWORK_FLAG) == 0)
     {
-        if (!send_data(final_table).ok())
+        if (!send_tables(finished_tables).ok())
         {
             std::cerr << "error sending data\n";
             return 1;

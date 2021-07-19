@@ -9,7 +9,7 @@ const int PORT = 9143;
  * @param table the Arrow Table containing the SSTable data
  * @return arrow::Status 
  */
-arrow::Status send_data(std::shared_ptr<arrow::Table> table)
+arrow::Status send_tables(const std::vector<std::shared_ptr<arrow::Table>> &tables)
 {
     int sockfd;
     FAIL_ON_STATUS(sockfd = socket(AF_INET, SOCK_STREAM, 0), "socket failed");
@@ -34,17 +34,33 @@ arrow::Status send_data(std::shared_ptr<arrow::Table> table)
 
     struct sockaddr_in cli_addr;
     socklen_t clilen = sizeof(cli_addr);
-    int newsockfd;
-    FAIL_ON_STATUS(newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen), "error on accept");
+    int cli_sockfd;
+    FAIL_ON_STATUS(cli_sockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen), "error on accept");
 
     char buffer[256];
     memset(buffer, 0x00, 256);
     std::cout << "waiting for message\n";
-    FAIL_ON_STATUS(read(newsockfd, buffer, 255), "error reading from socket");
+    FAIL_ON_STATUS(read(cli_sockfd, buffer, 255), "error reading from socket");
 
-    arrow::Result<std::shared_ptr<arrow::io::BufferOutputStream>> maybe_ostream;
-    ARROW_RETURN_NOT_OK(maybe_ostream = arrow::io::BufferOutputStream::Create());
-    auto ostream = *maybe_ostream;
+    // char *bytes = htobebytes(tables.size(), sizeof(size_t));
+    size_t ntables = SIZE_TO_BE(tables.size());
+    FAIL_ON_STATUS(write(cli_sockfd, (char *)&ntables, sizeof(size_t)), "failed writing number of tables");
+    for (auto table : tables)
+        send_table(table, cli_sockfd);
+
+    DEBUG_ONLY(std::cout << "closing sockets\n");
+
+    close(cli_sockfd);
+    close(sockfd);
+
+    DEBUG_ONLY(std::cout << "closed sockets\n");
+
+    return arrow::Status::OK();
+}
+
+arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd)
+{
+    ARROW_ASSIGN_OR_RAISE(auto ostream, arrow::io::BufferOutputStream::Create());
 
     DEBUG_ONLY(std::cout << "making stream writer\n");
     ARROW_ASSIGN_OR_RAISE(auto writer, arrow::ipc::MakeStreamWriter(ostream, table->schema()));
@@ -64,14 +80,10 @@ arrow::Status send_data(std::shared_ptr<arrow::Table> table)
     ARROW_ASSIGN_OR_RAISE(auto bytes, ostream->Finish())
     DEBUG_ONLY(std::cout << "buffer size (number of bytes written): " << bytes->size() << '\n');
 
-    FAIL_ON_STATUS(write(newsockfd, (char *)bytes->data(), bytes->size()), "error writing to socket");
-
-    DEBUG_ONLY(std::cout << "closing sockets\n");
-
-    close(newsockfd);
-    close(sockfd);
-
-    DEBUG_ONLY(std::cout << "closed sockets\n");
+    // char *table_size = htobebytes(bytes->size(), sizeof(size_t));
+    size_t table_size = SIZE_TO_BE(bytes->size());
+    FAIL_ON_STATUS(write(cli_sockfd, (char *)&table_size, sizeof(size_t)), "error writing size to socket");
+    FAIL_ON_STATUS(write(cli_sockfd, (char *)bytes->data(), bytes->size()), "error writing to socket");
 
     return arrow::Status::OK();
 }
