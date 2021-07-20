@@ -7,8 +7,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
-                "-n",
-                "/workspaces/sstable-to-arrow/test/res/store/shopping_cart-b5f93010e66e11eb91f49116fc548b6b"
+                "/workspaces/sstable-to-arrow/test/res/static-testing/classes-ad254eb0e8da11eba69e9116fc548b6b/"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",

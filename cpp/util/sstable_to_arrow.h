@@ -9,7 +9,6 @@
 #include <chrono>
 #include <string_view>
 
-#include "deserialization_helper.h"
 #include "clustering_blocks.h"
 #include "sstable_data.h"
 #include "sstable_statistics.h"
@@ -21,7 +20,7 @@ public:
     std::string cassandra_type;
     std::shared_ptr<arrow::Field> field;
     std::unique_ptr<arrow::ArrayBuilder> builder;
-    std::unique_ptr<arrow::TimestampBuilder> ts_builder;
+    std::unique_ptr<arrow::ArrayBuilder> ts_builder;
 
     column_t(
         const std::string &name_,
@@ -33,18 +32,11 @@ public:
         const std::string &name_,
         const std::string &cassandra_type_,
         std::shared_ptr<arrow::DataType> type_,
-        arrow::MemoryPool *pool)
-        : cassandra_type(cassandra_type_),
-          field(arrow::field(name_, type_)),
-          ts_builder(std::make_unique<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool))
-    {
-        auto status = arrow::MakeBuilder(pool, field->type(), &builder);
-        if (!status.ok())
-        {
-            std::cerr << "error making builder for column " << field->name() << '\n';
-            exit(1);
-        }
-    }
+        arrow::MemoryPool *pool);
+
+    // allocate enough memory for nrows elements in both the value and timestamp
+    // builders
+    arrow::Status reserve(uint32_t nrows);
 };
 
 class conversion_helper_t
@@ -61,14 +53,14 @@ public:
     sstable_statistics_t::serialization_header_t *metadata;
     sstable_statistics_t::statistics_t *statistics;
 
-    uint64_t get_timestamp(uint64_t delta);
-    arrow::Status add_column(
-        const std::string &cassandra_type,
-        const std::string &name,
-        const std::shared_ptr<arrow::DataType> &data_type,
-        arrow::MemoryPool *pool);
-    std::shared_ptr<arrow::Schema> schema();
-    size_t num_cols();
+    // get the actual timestamp based on the epoch, the minimum timestamp in
+    // this SSTable, and the given delta
+    uint64_t get_timestamp(uint64_t delta) const;
+    size_t num_data_cols() const;
+    size_t num_ts_cols() const;
+    arrow::Status reserve();
+    std::shared_ptr<arrow::Schema> schema() const;
+    arrow::Result<std::shared_ptr<arrow::Table>> to_table() const;
 };
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
@@ -82,13 +74,26 @@ arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows
 // Add each cell within the row given by `unfiltered`
 arrow::Status process_row(
     sstable_data_t::row_t *row,
+    bool is_static,
     const std::unique_ptr<conversion_helper_t> &helper,
     arrow::MemoryPool *pool);
 
+arrow::Status append_cell(
+    kaitai::kstruct *cell,
+    const std::unique_ptr<conversion_helper_t> &helper,
+    std::shared_ptr<column_t> col,
+    arrow::MemoryPool *pool);
+
 arrow::Status append_complex(
-    std::string_view coltype,
-    arrow::ArrayBuilder *builder_ptr,
+    std::shared_ptr<column_t> col,
+    const std::unique_ptr<conversion_helper_t> &helper,
     const sstable_data_t::complex_cell_t *cell,
+    arrow::MemoryPool *pool);
+
+arrow::Status append_simple(
+    std::shared_ptr<column_t> col,
+    const std::unique_ptr<conversion_helper_t> &helper,
+    sstable_data_t::simple_cell_t *cell,
     arrow::MemoryPool *pool);
 
 arrow::Status append_scalar(
@@ -96,6 +101,11 @@ arrow::Status append_scalar(
     arrow::ArrayBuilder *builder_ptr,
     std::string_view bytes,
     arrow::MemoryPool *pool);
+
+arrow::Status append_ts(
+    arrow::TimestampBuilder *builder,
+    const std::unique_ptr<conversion_helper_t> &helper,
+    sstable_data_t::simple_cell_t *cell);
 
 arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker);
 

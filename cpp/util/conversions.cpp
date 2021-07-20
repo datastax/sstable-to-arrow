@@ -27,10 +27,10 @@ const std::unordered_map<std::string_view, struct cassandra_type> type_info{
     {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary()}},       // blob
     // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
-    {"org.apache.cassandra.db.marshal.DateType", {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // old version of TimestampType
-    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0, arrow::struct_(decimal_fields)}}, // decimal, custom implementation
-    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}},                 // double
-    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0, arrow::fixed_size_list(arrow::int64(), 3)}},  // duration
+    {"org.apache.cassandra.db.marshal.DateType", {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}},              // old version of TimestampType
+    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0, arrow::struct_(decimal_fields)}},              // decimal, custom implementation
+    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}},                              // double
+    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0, arrow::fixed_size_list(arrow::int64(), 3)}}, // duration
     // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
     {"org.apache.cassandra.db.marshal.FloatType", {"float", 4, arrow::float32()}}, // float
@@ -110,9 +110,9 @@ void get_map_child_types(const std::string_view &type, std::string_view *key_typ
 }
 
 /**
- * Checks if the currently selected cell has multiple child cells (usually a collection like a list, map, set, etc)
- * These are usually referred to as complex cells
- */
+     * Checks if the currently selected cell has multiple child cells (usually a collection like a list, map, set, etc)
+     * These are usually referred to as complex cells
+     */
 bool is_multi_cell(const std::string_view &coltype)
 {
     if (is_reversed(coltype))
@@ -139,22 +139,20 @@ IS_TYPE_WITH_PARAMETERS(tuple)
 
 #undef IS_TYPE_WITH_PARAMETERS
 
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type)
+std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, bool replace_with_timestamp)
 {
     auto type_ptr = type_info.find(type);
     if (type_ptr != type_info.end())
-        return type_ptr->second.arrow_type;
-
-    // TODO currently treating sets and lists identically
+        return replace_with_timestamp ? arrow::timestamp(arrow::TimeUnit::MICRO) : type_ptr->second.arrow_type;
 
     auto maybe_tree = parse_nested_type(type);
     auto tree = *maybe_tree;
 
-    if (is_map(type))
-    {
+    if (is_reversed(type))
+        return get_arrow_type(get_child_type(type));
+    else if (is_map(type))
         return arrow::map(get_arrow_type(tree->children->front()->str), get_arrow_type(tree->children->back()->str));
-    }
-    else if (is_set(type) || is_list(type)) // currently treating sets and lists identically
+    else if (is_set(type) || is_list(type)) // TODO currently treating sets and lists identically
         return arrow::list(get_arrow_type(get_child_type(type)));
     else if (is_composite(type))
     {
@@ -162,10 +160,6 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type)
         for (int i = 0; i < tree->children->size(); ++i)
             vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str)));
         return arrow::struct_(vec);
-    }
-    else if (is_reversed(type))
-    {
-        return get_arrow_type(get_child_type(type));
     }
 
     DEBUG_ONLY(std::cout << "type not found or supported: " << type << '\n');

@@ -14,6 +14,9 @@
 namespace conversions
 {
 
+static const uint64_t TIMESTAMP_EPOCH = 1442880000000000;
+static const uint64_t DELETION_TIME_EPOCH = 1442880000;
+
 struct cassandra_type
 {
     std::string_view cql_name;
@@ -48,7 +51,7 @@ bool is_map(const std::string_view &type);
 bool is_set(const std::string_view &type);
 bool is_tuple(const std::string_view &type);
 
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type);
+std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, bool replace_with_timestamp = false);
 arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_view &type);
 
 } // namespace conversions
