@@ -6,7 +6,7 @@ A project for parsing SSTables, used by the Apache Cassandra database, via the [
 
 ## Description
 
-The big picture goal is to allow GPU-accelerated analytic queries on the Cassandra database. This would enable our clients to do more analysis using the data and open the path to future developments.
+The big picture goal is to allow GPU-accelerated analytic queries on the Cassandra database. This would enable clients to do more analysis using the data and open the path to future developments.
 
 1. Currently, the only "easy" way to do this is to load the database using the Cassandra driver (most likely in Python), and then convert it to a `pandas` DataFrame for calculations. Then we can convert the `pd.DataFrame` to a `cudf.DataFrame` for GPU acceleration.
 
@@ -28,51 +28,7 @@ The big picture goal is to allow GPU-accelerated analytic queries on the Cassand
 
 ## Getting started
 
-The instructions below apply to the `cpp` directory.
-
-This project can be run through a Docker container via
-```bash
-docker build -t sstable-to-arrow .
-# to view output interactively, run:
-docker run --rm -itp 9143:9143 --name sstable-to-arrow sstable-to-arrow <PATH_TO_SSTABLE_DIRECTORY>
-```
-With the VS Code [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension installed, you can also run `Open Folder in Container` from the command palette and select this folder to run the project within a docker container.
-
-If not using Docker, you can manually build the project as follows, though installation of dependencies may vary from machine to machine.
-
-1. This project depends on [Kaitai Struct](`https://kaitai.io/#download`), the [Kaitai Struct C++/STL runtime library](https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime), and [Apache Arrow for C++](http://arrow.apache.org/docs/cpp/cmake.html). (Note: if you are manually building Arrow and using other Arrow features like the filesystem interface `arrow::fs`, make sure to check [if you need to include any optional components](http://arrow.apache.org/docs/developers/cpp/building.html#optional-components).)
-    * This requires `-DARROW_COMPUTE=ON` (and `-DARROW_CUDA=ON` in the future).
-
-2. Get an SSTable. If you don't have one on hand, you can create one using CQL and the Cassandra Docker image using the steps below. See [the quickstart](https://cassandra.apache.org/quickstart/) for more info.
-
-```bash
-docker network create cassandra
-docker run --rm -d --name cassandra --hostname cassandra --network cassandra cassandra:3.11
-# run a CQL query to create the data. you may need to wait for the server to start up before running this
-docker run --rm --network cassandra -v "<LOCAL_PATH_TO_CQL_FILE>:/scripts/data.cql" -e CQLSH_HOST=cassandra -e CQLSH_PORT=9042 nuvo/docker-cqlsh
-# to open a CQL shell on the container, run:
-# docker run --rm -it --network cassandra nuvo/docker-cqlsh cqlsh cassandra 9042 --cqlversion='3.4.4'
-docker exec cassandra /opt/cassandra/bin/nodetool flush
-docker cp cassandra:/var/lib/cassandra/data/<YOUR_KEYSPACE> ./res
-# clean up
-docker kill cassandra
-docker network rm cassandra
-```
-
-3. Compile as follows:
-
-```bash
-mkdir build
-cd build
-cmake ..
-make
-```
-
-4. Run:
-
-```bash
-./sstable_to_arrow <PATH_TO_SSTABLE_DIRECTORY>
-```
+See [`cpp/README.md`](cpp/README.md).
 
 ## Visualizations
 
@@ -80,12 +36,13 @@ The visualizations are currently quite rudimentary due to limitations of kaitai 
 
 ## TODO (Caveats)
 
-- implement types
-    - dates, decimals, frozen types, nested collections
-- make sure tombstone markers are implemented correctly
-- build via cmake? to make things easier
-- deduplication?
-- timing / load testing
-- collect statistics on speed of different approaches
-- test with larger datasets (bigger vs larger than memory)
-
+- sstable-to-arrow does not do deduping and sends each SSTable as an Arrow Table. The user must configure a cuDF per sstable and use the GPU to merge the sstables based on last write wins semantics. sstable-to-arrow exposes internal cassandra timestamps and tombstones so that merging can be done at the cuDF layer.
+- Some information, including the names of the partition key and clustering columns, can't actually be deduced from the SSTable files and require the schema to be stored in the system tables.
+- Cassandra stores data in memtables and commitlog before flushing to sstables, analytics performed via only sstable-to-arrow will potentially be stale / not real-time.
+- Currently, the parser has only been tested with SSTables written by Cassandra OSS 3.11, which should be identical to SSTables written by Cassandra 3.x.
+- The system is set up to scan entire sstables (not read specific partitions). More work will be needed if we ever do predicate pushdown.
+- The following cql types are not supported: `counter`, `frozen`, and user-defined types.
+- `varint`s can only store up to 8 bytes. Attempting to read a table with larger `varint`s will crash.
+- The parser can only read tables with up to 64 columns.
+- `decimal`s are converted into an 8-byte floating point value because neither C++ nor Arrow has native support for arbitrary-precision integers or decimals like of the Java `BigInteger` or `BigDecimal` classes. This means that operations on decimal columns will use floating point arithmetic, which may be inexact.
+- `set`s are treated as lists since Arrow has no equivalent of a set.
