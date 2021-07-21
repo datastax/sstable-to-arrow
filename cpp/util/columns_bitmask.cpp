@@ -2,21 +2,14 @@
 
 // see Columns::deserializeSubset https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/Columns.java#L524
 // From UnfilteredSerializer::deserializeRowBody https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L562
-
 columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
-    long long encoded = vint_t(ks).val();
+    bitmask = vint_t(ks).val();
 
-    // auto superset = deserialization_helper_t::get_vec_ptr();
-    int superset_count = deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR);
-
-    if (encoded == 0)
+    int superset_count = deserialization_helper_t::get_n_cols(deserialization_helper_t::curkind);
+    if (superset_count >= 64)
     {
-        // return superset
-    }
-    else if (superset_count >= 64)
-    {
-        int delta = encoded;
+        int delta = bitmask;
         int column_count = superset_count - delta;
         if (column_count < superset_count / 2) // encode the columns that are set
         {
@@ -27,7 +20,7 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
                 // add stuff
             }
         }
-        else // more columns are set than absent, so `encoded` stores the absent columns
+        else // more columns are set than absent, so `bitmask` stores the absent columns
         {
             int idx = 0;
             int skipped = 0;
@@ -48,6 +41,6 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
     }
     else
     {
-        // get column info
+        deserialization_helper_t::set_bitmask(bitmask);
     }
 }

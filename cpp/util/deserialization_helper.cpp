@@ -12,6 +12,7 @@
 
 int deserialization_helper_t::idx = 0;
 int deserialization_helper_t::curkind = 0;
+uint64_t deserialization_helper_t::bitmask = 0;
 
 const std::vector<std::shared_ptr<std::vector<std::string>>> deserialization_helper_t::colkinds = {
     std::make_shared<std::vector<std::string>>(),
@@ -79,35 +80,59 @@ bool deserialization_helper_t::is_multi_cell()
  * restrictions with Kaitai Struct
  */
 
+void deserialization_helper_t::set_bitmask(uint64_t bitmask_)
+{
+    bitmask = bitmask_;
+}
+
 // Increment the index of this helper (hover over the next cell)
 int deserialization_helper_t::inc()
 {
-    idx++;
+    for (int i = idx + 1; i < get_n_cols(curkind); ++i)
+    {
+        // if this column is not missing
+        if (!(bitmask & (1 << i)))
+        {
+            idx = i;
+            break;
+        }
+    }
     return 0;
 }
+
 // Indicate that we are processing a static row
 int deserialization_helper_t::set_static()
 {
     DEBUG_ONLY(std::cout << "begin processing static row\n";)
-    idx = 0;
     curkind = STATIC;
+    idx = -1;
+    inc(); // skip any missing columns at start
     return 0;
 }
+
 // Indicate that we are processing a regular row
 int deserialization_helper_t::set_regular()
 {
     DEBUG_ONLY(std::cout << "begin processing regular row\n");
-    idx = 0;
     curkind = REGULAR;
+    idx = -1;
+    inc(); // skip any missing columns at start
     return 0;
 }
-// get the number of columns stored in this sstable (aka the "superset" of columns)
-// might not be the actual number of cells stored in this row
-// see columns_bitmask.cpp
-int deserialization_helper_t::get_n_cols()
+
+// get the number of columns stored in this row
+int deserialization_helper_t::get_n_cells_in_row()
 {
-    return get_n_cols(curkind);
+    int superset_size = get_n_cols(curkind);
+    int total = superset_size;
+    // if some columns are missing
+    if (curkind == REGULAR && bitmask != 0)
+        for (int mask = 0; mask < superset_size; ++mask)
+            if (bitmask & (1 << mask))
+                --total;
+    return total;
 }
+
 // Get the size of the current cell value in bytes
 int deserialization_helper_t::get_col_size()
 {

@@ -6,7 +6,9 @@ column_t::column_t(
     const std::string &name_,
     const std::string &cassandra_type_,
     std::shared_ptr<arrow::DataType> type_,
-    arrow::MemoryPool *pool) : cassandra_type(cassandra_type_), field(arrow::field(name_, type_))
+    arrow::MemoryPool *pool,
+    bool complex_ts_allowed)
+    : cassandra_type(cassandra_type_), field(arrow::field(name_, type_))
 {
     auto status = arrow::MakeBuilder(pool, field->type(), &builder);
     if (!status.ok())
@@ -17,7 +19,8 @@ column_t::column_t(
 
     // TODO currently calling get_arrow_type twice, potentially expensive
     // see if there is easier way to replace
-    status = arrow::MakeBuilder(pool, conversions::get_arrow_type(cassandra_type, true), &ts_builder);
+    auto ts_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, true) : arrow::timestamp(arrow::TimeUnit::MICRO);
+    status = arrow::MakeBuilder(pool, ts_type, &ts_builder);
     if (!status.ok())
     {
         std::cerr << "error making timestamp builder for column " << field->name() << '\n';
@@ -45,7 +48,9 @@ conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> s
     partition_key = std::make_shared<column_t>(
         "partition key",
         metadata->partition_key_type()->body(),
-        pool);
+        pool,
+        false); // false -> we don't create nested fields for the timestamps,
+                // since we use this column to store the row timestamp
 
     // clustering columns
     for (auto &col : *metadata->clustering_key_types()->array())
@@ -220,11 +225,11 @@ arrow::Status process_row(
     // get the row timestamp info
     auto ts_builder = dynamic_cast<arrow::TimestampBuilder *>(helper->partition_key->ts_builder.get());
     if (row->_is_null_liveness_info())
-        ts_builder->UnsafeAppendNull();
+        ts_builder->AppendNull();
     else
     {
         uint64_t delta = row->liveness_info()->delta_timestamp()->val();
-        ts_builder->UnsafeAppend(helper->get_timestamp(delta));
+        ts_builder->Append(helper->get_timestamp(delta));
     }
 
     // ignore timestamps for clustering cols since they don't have them
@@ -249,10 +254,10 @@ arrow::Status process_row(
         }
     }
 
-    for (int i = 0; i < helper->static_cols.size(); ++i)
+    for (int i = 0, cell_idx = 0; i < helper->static_cols.size(); ++i)
     {
-        if (is_static)
-            ARROW_RETURN_NOT_OK(append_cell((*row->cells())[i].get(), helper, helper->static_cols[i], pool));
+        if (is_static && does_cell_exist(row, i))
+            ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->static_cols[i], pool));
         else
         {
             ARROW_RETURN_NOT_OK(helper->static_cols[i]->builder->AppendNull());
@@ -261,15 +266,15 @@ arrow::Status process_row(
     }
 
     // parse each of the row's cells
-    for (int i = 0; i < helper->regular_cols.size(); ++i)
+    for (int i = 0, cell_idx = 0; i < helper->regular_cols.size(); ++i)
     {
-        if (is_static)
+        if (!is_static && does_cell_exist(row, i)) // this cell is not missing
+            ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->regular_cols[i], pool));
+        else
         {
             ARROW_RETURN_NOT_OK(helper->regular_cols[i]->builder->AppendNull());
             ARROW_RETURN_NOT_OK(helper->regular_cols[i]->ts_builder->AppendNull());
         }
-        else
-            ARROW_RETURN_NOT_OK(append_cell((*row->cells())[i].get(), helper, helper->regular_cols[i], pool));
     }
 
     return arrow::Status::OK();
@@ -498,4 +503,10 @@ sstable_statistics_t::serialization_header_t *get_serialization_header(std::shar
     const auto &toc = *statistics->toc()->array();
     const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file
     return dynamic_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());
+}
+
+// idx is the index of the desired column in the superset of columns contained in this SSTable
+bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx)
+{
+    return row->_is_null_columns_bitmask() || (row->columns_bitmask()->bitmask & (1 << idx)) == 0;
 }

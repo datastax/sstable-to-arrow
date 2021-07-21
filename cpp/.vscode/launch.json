@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
-                "/workspaces/sstable-to-arrow/test/res/static-testing/classes-ad254eb0e8da11eba69e9116fc548b6b/"
+                "/workspaces/sstable-to-arrow/test/res/iot-1/baselines/iot-3d6072d0e03d11eb8174df5483c2a0ca/"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",

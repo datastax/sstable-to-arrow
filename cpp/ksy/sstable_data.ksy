@@ -1,11 +1,11 @@
 # Kaitai Struct declaration for SSTable
 # See https://thelastpickle.com/blog/2016/03/04/introductiont-to-the-apache-cassandra-3-storage-engine.html
 
-# note that this file uses a bit of hacking using `deserialization_helper` to access data about the schema,
-# which gets loaded from `sstable_statistics.ksy`
-# kaitai doesn't like if we try to access properties of an opaque type (one that's
-# manually implemented outside of kaitai) unless we cast it, so we make the imperative `deserialization_helper` functions
-# return 0 and set that to the size of a kaitai field with the id tmp_, tmp1_, etc.
+# note that this file uses a bit of hacking using `deserialization_helper` to access data from
+# another file, namely the `sstable_statistics.ksy` file, which contains schema information.
+# Kaitai doesn't like if we try to access properties of an opaque type (one that's
+# manually implemented outside of Kaitai) unless we cast it, so we make the `deserialization_helper` functions
+# return 0 and set that to the size of a Kaitai field with the id tmp_, etc.
 # these fields are used only for getting the parser to work properly and do not contain any data
 
 meta:
@@ -53,24 +53,15 @@ types:
 
   unfiltered:
     seq:
-      # enum class row_flags {
-      #     // Signal the end of the partition. Nothing follows a <flags> field with that flag.
-      #     END_OF_PARTITION = 0x01,
-      #     // Whether the encoded unfiltered is a marker or a row. All following flags apply only to rows.
-      #     IS_MARKER = 0x02,
-      #     // Whether the encoded row has a timestamp (i.e. its liveness_info is not empty).
-      #     HAS_TIMESTAMP = 0x04,
-      #     // Whether the encoded row has some expiration info (i.e. if its liveness_info contains TTL and local_deletion).
-      #     HAS_TTL = 0x08,
-      #     // Whether the encoded row has some deletion info.
-      #     HAS_DELETION = 0x10,
-      #     // Whether the encoded row has all of the columns from the header present.
-      #     HAS_ALL_COLUMNS = 0x20,
-      #     // Whether the encoded row has some complex deletion for at least one of its complex columns.
-      #     HAS_COMPLEX_DELETION = 0x40,
-      #     // If present, another byte is read containing the "extended flags" below.
-      #     EXTENSION_FLAG = 0x80
-      # };
+      # https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L77
+      # END_OF_PARTITION     = 0x01; // Signal the end of the partition. Nothing follows a <flags> field with that flag.
+      # IS_MARKER            = 0x02; // Whether the encoded unfiltered is a marker or a row. All following markers applies only to rows.
+      # HAS_TIMESTAMP        = 0x04; // Whether the encoded row has a timestamp (i.e. if row.partitionKeyLivenessInfo().hasTimestamp() == true).
+      # HAS_TTL              = 0x08; // Whether the encoded row has some expiration info (i.e. if row.partitionKeyLivenessInfo().hasTTL() == true).
+      # HAS_DELETION         = 0x10; // Whether the encoded row has some deletion info.
+      # HAS_ALL_COLUMNS      = 0x20; // Whether the encoded row has all of the columns from the header present.
+      # HAS_COMPLEX_DELETION = 0x40; // Whether the encoded row has some complex deletion for at least one of its columns.
+      # EXTENSION_FLAG       = 0x80; // If present, another byte is read containing the "extended flags" above.
       - id: flags
         type: u1
       - id: body
@@ -87,7 +78,7 @@ types:
     seq:
       - id: extended_flags
         type: u1
-        if: (_parent.flags & 0x80) != 0 # EXTENSION_FLAG from https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L77
+        if: (_parent.flags & 0x80) != 0 # EXTENSION_FLAG set
         doc: |
           Included if the EXTENSION_FLAG is set in the flags
           Always set for a static row or if there is a "shadowable" deletion
@@ -99,14 +90,17 @@ types:
       - id: row_body_size
         type: vint
         doc: |
+          The size of this row in bytes. See
           https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L270
 
       - id: previous_unfiltered_size
         type: vint
+        doc: The size of the previous row in bytes
 
       - id: liveness_info
         type: liveness_info
         if: (_parent.flags & 0x04) != 0 # HAS_TIMESTAMP set
+        doc: Optional field containing the row timestamp and TTL.
 
       - id: deletion_time
         type: delta_deletion_time
@@ -119,6 +113,7 @@ types:
           Compare columns in this row to set of all columns in Memtable
           Encodes which columns missing when less than 64 columns; otherwise more complex
 
+      # tell the deserialization helper whether this row is static or regular
       - id: tmp_
         size: "((_parent.flags & 0x80 == 0) or (extended_flags & 0x01 == 0)) ? _root.deserialization_helper.set_regular.as<u4> : _root.deserialization_helper.set_static.as<u4>"
 
@@ -129,7 +124,8 @@ types:
             true: complex_cell
             false: simple_cell(false) # "false" means "not a child of a complex cell"
         repeat: expr
-        repeat-expr: _root.deserialization_helper.get_n_cols.as<u4>
+        repeat-expr: _root.deserialization_helper.get_n_cells_in_row.as<u4>
+        doc: The cells of this row. Check `columns_bitmask` to see which columns are present.
 
     doc: |
       See UnfilteredSerializer https://github.com/apache/cassandra/blob/cassandra-3.0/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L30
@@ -168,7 +164,7 @@ types:
 
   simple_cell:
     params:
-      - id: complex
+      - id: is_complex
         type: b1
     seq:
       - id: flags
@@ -188,7 +184,7 @@ types:
 
       - id: path
         type: cell_path
-        if: complex
+        if: is_complex
 
         # TODO maybe process this differently directly into arrow instead of processing it after?
         # doesn't change order of complexity, maybe constant factor optimization
@@ -197,7 +193,7 @@ types:
         if: (flags & 0x04) == 0 # only if does not have empty value
 
       - id: tmp_
-        if: not complex
+        if: not is_complex
         size: _root.deserialization_helper.inc.as<u4>
 
     doc: |
@@ -214,7 +210,7 @@ types:
       For collections, this is:
       - an auto-generated timeuuid for lists
       - the current map key for maps
-      - the actual value for sets (the complex_cell_item.value is empty in this case)
+      - the actual value for sets (the actual cell value is empty in this case)
 
   complex_cell:
     seq:

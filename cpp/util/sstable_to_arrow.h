@@ -22,17 +22,20 @@ public:
     std::unique_ptr<arrow::ArrayBuilder> builder;
     std::unique_ptr<arrow::ArrayBuilder> ts_builder;
 
+    // this constructor infers the arrow::DataType from the Cassandra type
     column_t(
         const std::string &name_,
         const std::string &cassandra_type_,
-        arrow::MemoryPool *pool)
-        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_), pool) {}
+        arrow::MemoryPool *pool,
+        bool complex_ts_allowed = true)
+        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_), pool, complex_ts_allowed) {}
 
     column_t(
         const std::string &name_,
         const std::string &cassandra_type_,
         std::shared_ptr<arrow::DataType> type_,
-        arrow::MemoryPool *pool);
+        arrow::MemoryPool *pool,
+        bool complex_ts_allowed);
 
     // allocate enough memory for nrows elements in both the value and timestamp
     // builders
@@ -110,5 +113,7 @@ arrow::Status append_ts(
 arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker);
 
 sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics);
+
+bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx);
 
 #endif

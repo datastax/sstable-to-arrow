@@ -149,16 +149,17 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, bo
     auto tree = *maybe_tree;
 
     if (is_reversed(type))
-        return get_arrow_type(get_child_type(type));
+        return get_arrow_type(get_child_type(type), replace_with_timestamp);
     else if (is_map(type))
-        return arrow::map(get_arrow_type(tree->children->front()->str), get_arrow_type(tree->children->back()->str));
+        // we keep the key type but recursively replace the value type with timestamps
+        return arrow::map(get_arrow_type(tree->children->front()->str), get_arrow_type(tree->children->back()->str, replace_with_timestamp));
     else if (is_set(type) || is_list(type)) // TODO currently treating sets and lists identically
-        return arrow::list(get_arrow_type(get_child_type(type)));
+        return arrow::list(get_arrow_type(get_child_type(type), replace_with_timestamp));
     else if (is_composite(type))
     {
         arrow::FieldVector vec;
         for (int i = 0; i < tree->children->size(); ++i)
-            vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str)));
+            vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str, replace_with_timestamp)));
         return arrow::struct_(vec);
     }
 
