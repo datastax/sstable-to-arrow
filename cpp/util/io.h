@@ -9,6 +9,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <parquet/arrow/writer.h>
+#include <iostream>
 #include "timer.h"
 
 #define FAIL_ON_STATUS(x, msg) \

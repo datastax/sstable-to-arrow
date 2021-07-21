@@ -22,7 +22,7 @@ add_executable(sstable_to_arrow
     util/modified_utf8.cpp util/modified_utf8.h
     util/vint.cpp util/vint.h
     util/sstable_to_arrow.cpp util/sstable_to_arrow.h
-    util/timer.cpp util/timer.h
+    util/timer.h # see if we can find better debugging options
     util/conversions.cpp util/conversions.h
     util/io.cpp util/io.h
     ${PROJECT_BINARY_DIR}/deletion_time.cpp ${PROJECT_BINARY_DIR}/deletion_time.h
