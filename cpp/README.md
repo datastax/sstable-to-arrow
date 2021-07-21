@@ -53,9 +53,17 @@ make # or: ninja
 ./sstable_to_arrow <PATH_TO_SSTABLE_DIRECTORY>
 ```
 
+This will listen for a connection on port 9143. It expects the client to send a
+message first, and then it will send data in the following format:
+
+1. The number of Arrow Tables being transferred, an 8-byte big-endian unsigned integer
+2. For each table:
+    1. Its size in bytes as an 8-byte big-endian unsigned integer
+    2. The contents of the table in Arrow IPC Stream Format
+
 ## Limitations and caveats
 
-- sstable-to-arrow does not do deduping and sends each SSTable as an Arrow Table. The user must configure a cuDF per sstable and use the GPU to merge the sstables based on last write wins semantics. sstable-to-arrow exposes internal cassandra timestamps and tombstones so that merging can be done at the cuDF layer.
+- sstable-to-arrow does not do deduping and sends each SSTable as an Arrow Table. The user must configure a cuDF per sstable and use the GPU to merge the sstables based on last write wins semantics. sstable-to-arrow exposes internal cassandra timestamps so that merging can be done at the cuDF layer. Support for tombstones is currently under development.
 - Some information, including the names of the partition key and clustering columns, can't actually be deduced from the SSTable files and require the schema to be stored in the system tables.
 - Cassandra stores data in memtables and commitlog before flushing to sstables, analytics performed via only sstable-to-arrow will potentially be stale / not real-time.
 - Currently, the parser has only been tested with SSTables written by Cassandra OSS 3.11, which should be identical to SSTables written by Cassandra 3.x.
@@ -65,3 +73,11 @@ make # or: ninja
 - The parser can only read tables with up to 64 columns.
 - `decimal`s are converted into an 8-byte floating point value because neither C++ nor Arrow has native support for arbitrary-precision integers or decimals like of the Java `BigInteger` or `BigDecimal` classes. This means that operations on decimal columns will use floating point arithmetic, which may be inexact.
 - `set`s are treated as lists since Arrow has no equivalent of a set.
+
+## TODO
+
+- Fix limitations above
+    - Add support for tombstones
+- Improve error handling system and logging system
+- Add documentation
+- Better flags
