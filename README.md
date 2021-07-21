@@ -20,29 +20,11 @@ The big picture goal is to allow GPU-accelerated analytic queries on the Cassand
 
 ## Overview
 
-- `ksy/` contains the Kaitai Struct declarations for the various SSTable classes.
-- `util/` contains different "opaque types" (types defined outside of kaitai) used by the Kaitai Struct classes, as well as classes to help parse and transform the data.
-- `res/cql/` contains CQL queries that generate some useful sample data.
-- `res/data/` contains a few actual SSTable files for convenience.
-- `visualization/` contains modified Kaitai Struct files for visualizing the various data formats via exporting to `graphviz`.
+- `cpp/` contains the source code for `sstable-to-arrow`.
+- `java/` contains the code for reading SSTables using Cassandra and is no longer under development.
+- `test/` contains CQL queries that generate some useful sample data as well as some helper scripts to profile the different approaches.
+- `visualization/` contains modified Kaitai Struct files for visualizing the various data formats via exporting to `graphviz`. The visualizations are currently quite rudimentary due to limitations of kaitai exporting to graphviz. It doesn't support kaitai opaque types and also doesn't show conditional fields. The current `visualization/*_modified.dot` files are modified by hand, and the `visualization/*.ksy` files are not meant to parse actual files but rather just to generate boilerplate graphviz code for the diagrams.
 
 ## Getting started
 
 See [`cpp/README.md`](cpp/README.md).
-
-## Visualizations
-
-The visualizations are currently quite rudimentary due to limitations of kaitai exporting to graphviz. It doesn't support kaitai opaque types and also doesn't show conditional fields. The current `visualization/*_modified.dot` files are edited by hand, and the `visualization/*.ksy` files are not meant to parse actual files but rather just to generate boilerplate graphviz code for the diagrams.
-
-## TODO (Caveats)
-
-- sstable-to-arrow does not do deduping and sends each SSTable as an Arrow Table. The user must configure a cuDF per sstable and use the GPU to merge the sstables based on last write wins semantics. sstable-to-arrow exposes internal cassandra timestamps and tombstones so that merging can be done at the cuDF layer.
-- Some information, including the names of the partition key and clustering columns, can't actually be deduced from the SSTable files and require the schema to be stored in the system tables.
-- Cassandra stores data in memtables and commitlog before flushing to sstables, analytics performed via only sstable-to-arrow will potentially be stale / not real-time.
-- Currently, the parser has only been tested with SSTables written by Cassandra OSS 3.11, which should be identical to SSTables written by Cassandra 3.x.
-- The system is set up to scan entire sstables (not read specific partitions). More work will be needed if we ever do predicate pushdown.
-- The following cql types are not supported: `counter`, `frozen`, and user-defined types.
-- `varint`s can only store up to 8 bytes. Attempting to read a table with larger `varint`s will crash.
-- The parser can only read tables with up to 64 columns.
-- `decimal`s are converted into an 8-byte floating point value because neither C++ nor Arrow has native support for arbitrary-precision integers or decimals like of the Java `BigInteger` or `BigDecimal` classes. This means that operations on decimal columns will use floating point arithmetic, which may be inexact.
-- `set`s are treated as lists since Arrow has no equivalent of a set.

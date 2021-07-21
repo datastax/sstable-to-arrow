@@ -1,5 +1,12 @@
 # sstable-to-arrow
 
+This folder contains the source code for sstable-to-arrow.
+
+- `ksy/` contains the Kaitai Struct declarations for the various SSTable classes.
+- `util/` contains different "opaque types" (types defined outside of kaitai) used by the Kaitai Struct classes, as well as classes to help parse and transform the data.
+
+Be warned that error handling and logging are extremely rudimentary.
+
 ## How to run
 
 This project can be run through a Docker container via
@@ -45,3 +52,16 @@ make # or: ninja
 ```bash
 ./sstable_to_arrow <PATH_TO_SSTABLE_DIRECTORY>
 ```
+
+## Limitations and caveats
+
+- sstable-to-arrow does not do deduping and sends each SSTable as an Arrow Table. The user must configure a cuDF per sstable and use the GPU to merge the sstables based on last write wins semantics. sstable-to-arrow exposes internal cassandra timestamps and tombstones so that merging can be done at the cuDF layer.
+- Some information, including the names of the partition key and clustering columns, can't actually be deduced from the SSTable files and require the schema to be stored in the system tables.
+- Cassandra stores data in memtables and commitlog before flushing to sstables, analytics performed via only sstable-to-arrow will potentially be stale / not real-time.
+- Currently, the parser has only been tested with SSTables written by Cassandra OSS 3.11, which should be identical to SSTables written by Cassandra 3.x.
+- The system is set up to scan entire sstables (not read specific partitions). More work will be needed if we ever do predicate pushdown.
+- The following cql types are not supported: `counter`, `frozen`, and user-defined types.
+- `varint`s can only store up to 8 bytes. Attempting to read a table with larger `varint`s will crash.
+- The parser can only read tables with up to 64 columns.
+- `decimal`s are converted into an 8-byte floating point value because neither C++ nor Arrow has native support for arbitrary-precision integers or decimals like of the Java `BigInteger` or `BigDecimal` classes. This means that operations on decimal columns will use floating point arithmetic, which may be inexact.
+- `set`s are treated as lists since Arrow has no equivalent of a set.
