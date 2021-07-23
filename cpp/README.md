@@ -64,9 +64,9 @@ message first, and then it will send data in the following format:
 ## Limitations and caveats
 
 - sstable-to-arrow does not do deduping and sends each SSTable as an Arrow Table. The user must configure a cuDF per sstable and use the GPU to merge the sstables based on last write wins semantics. sstable-to-arrow exposes internal cassandra timestamps so that merging can be done at the cuDF layer. Support for tombstones is currently under development.
-- Some information, including the names of the partition key and clustering columns, can't actually be deduced from the SSTable files and require the schema to be stored in the system tables.
-- Cassandra stores data in memtables and commitlog before flushing to sstables, analytics performed via only sstable-to-arrow will potentially be stale / not real-time.
-- Currently, the parser has only been tested with SSTables written by Cassandra OSS 3.11, which should be identical to SSTables written by Cassandra 3.x.
+- Some information, namely the names of the partition key and clustering columns, can't actually be deduced from the SSTable files, so they are represented in the table as simply `partition key` and `clustering key`.
+- Cassandra stores data in memtables and commitlog before flushing to sstables, so analytics performed via only sstable-to-arrow will potentially be stale / not real-time.
+- Currently, the parser has only been tested with SSTables written by Cassandra OSS 3.11. These *should* be identical to SSTables written by Cassandra 3.x.
 - The system is set up to scan entire sstables (not read specific partitions). More work will be needed if we ever do predicate pushdown.
 - The following cql types are not supported: `counter`, `frozen`, and user-defined types.
 - `varint`s can only store up to 8 bytes. Attempting to read a table with larger `varint`s will crash.
