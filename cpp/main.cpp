@@ -369,7 +369,7 @@ void get_file_paths(const std::string &path, sstable_map_t &sstables)
         else if (ftype == "CompressionInfo")
             sstables[num]->compression_info_path = full_path;
     }
-    free(table_dir);
+    closedir(table_dir);
 }
 
 void open_stream(const std::string &path, std::ifstream *ifs)
