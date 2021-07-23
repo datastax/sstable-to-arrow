@@ -27,6 +27,16 @@ an Arrow record batch (i.e. a table) between processes. The IPC format is
 identical to the in-memory format, which eliminates any extra copying or
 de/serialization costs.
 
+## Getting started
+
+1. Clone this repository `git clone https://github.com/datastax/sstable-to-arrow.git`
+2. Navigate to this directory `cd sstable-to-arrow/client`
+3. Create a new virtualenv inside this directory `python -m venv ./sstable_to_arrow_venv`
+4. Activate the virtualenv with `source ./sstable_to_arrow_venv/bin/activate`
+5. Install the requirements by running `pip install -r requirements.txt`
+6. Launch the sstable-to-arrow server from [`../cpp`](../cpp)
+7. Run `python with_cuda.py` if your system has CUDA support, otherwise run `python no_cuda.py`
+
 ## Next steps
 
 - improve support for different types and cases in current implementation
