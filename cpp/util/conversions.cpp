@@ -139,27 +139,27 @@ IS_TYPE_WITH_PARAMETERS(tuple)
 
 #undef IS_TYPE_WITH_PARAMETERS
 
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, bool replace_with_timestamp)
+std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, const get_arrow_type_options &options)
 {
     auto type_ptr = type_info.find(type);
     if (type_ptr != type_info.end())
-        return replace_with_timestamp ? arrow::timestamp(arrow::TimeUnit::MICRO) : type_ptr->second.arrow_type;
+        return options.replace_with != nullptr ? options.replace_with : type_ptr->second.arrow_type;
 
     auto maybe_tree = parse_nested_type(type);
     auto tree = *maybe_tree;
 
     if (is_reversed(type))
-        return get_arrow_type(get_child_type(type), replace_with_timestamp);
+        return get_arrow_type(get_child_type(type), options);
     else if (is_map(type))
         // we keep the key type but recursively replace the value type with timestamps
-        return arrow::map(get_arrow_type(tree->children->front()->str), get_arrow_type(tree->children->back()->str, replace_with_timestamp));
+        return arrow::map(get_arrow_type(tree->children->front()->str), get_arrow_type(tree->children->back()->str, options));
     else if (is_set(type) || is_list(type)) // TODO currently treating sets and lists identically
-        return arrow::list(get_arrow_type(get_child_type(type), replace_with_timestamp));
+        return arrow::list(get_arrow_type(get_child_type(type), options));
     else if (is_composite(type))
     {
         arrow::FieldVector vec;
         for (int i = 0; i < tree->children->size(); ++i)
-            vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str, replace_with_timestamp)));
+            vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str, options)));
         return arrow::struct_(vec);
     }
 

@@ -11,7 +11,7 @@
 meta:
   id: sstable_data
   endian: be
-  ks-opaque-types: true # the only opaque type used is `vint` for Cassandra's variable integer encoding
+  ks-opaque-types: true # a number of opaque types from the `util` folder are used
   imports:
     - deletion_time
 
@@ -152,6 +152,7 @@ types:
         if: (_parent._parent.flags & 0x08) != 0 # HAS_TTL flag on `unfiltered`
         doc: delta from EncodingStats.minLocalDeletionTime
 
+  # different order from deletion_time
   delta_deletion_time:
     seq:
       - id: delta_marked_for_delete_at
@@ -160,7 +161,7 @@ types:
 
       - id: delta_local_deletion_time
         type: vint
-        doc: delta from EncodingStats.minLocalDeletionTime.
+        doc: delta from EncodingStats.minLocalDeletionTime
 
   simple_cell:
     params:

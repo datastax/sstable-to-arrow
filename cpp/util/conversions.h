@@ -51,7 +51,11 @@ bool is_map(const std::string_view &type);
 bool is_set(const std::string_view &type);
 bool is_tuple(const std::string_view &type);
 
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, bool replace_with_timestamp = false);
+struct get_arrow_type_options {
+    std::shared_ptr<arrow::DataType> replace_with{nullptr};
+};
+
+std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, const get_arrow_type_options &options = get_arrow_type_options{});
 arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_view &type);
 
 } // namespace conversions

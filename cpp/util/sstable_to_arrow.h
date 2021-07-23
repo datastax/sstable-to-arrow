@@ -13,66 +13,15 @@
 #include "sstable_data.h"
 #include "sstable_statistics.h"
 #include "timer.h"
-
-class column_t
-{
-public:
-    std::string cassandra_type;
-    std::shared_ptr<arrow::Field> field;
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    std::unique_ptr<arrow::ArrayBuilder> ts_builder;
-
-    // this constructor infers the arrow::DataType from the Cassandra type
-    column_t(
-        const std::string &name_,
-        const std::string &cassandra_type_,
-        arrow::MemoryPool *pool,
-        bool complex_ts_allowed = true)
-        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_), pool, complex_ts_allowed) {}
-
-    column_t(
-        const std::string &name_,
-        const std::string &cassandra_type_,
-        std::shared_ptr<arrow::DataType> type_,
-        arrow::MemoryPool *pool,
-        bool complex_ts_allowed);
-
-    // allocate enough memory for nrows elements in both the value and timestamp
-    // builders
-    arrow::Status reserve(uint32_t nrows);
-};
-
-class conversion_helper_t
-{
-public:
-    conversion_helper_t(std::shared_ptr<sstable_statistics_t> statistics, arrow::MemoryPool *pool);
-
-    std::shared_ptr<column_t> partition_key;
-    std::vector<std::shared_ptr<column_t>> clustering_cols;
-    std::vector<std::shared_ptr<column_t>> static_cols;
-    std::vector<std::shared_ptr<column_t>> regular_cols;
-
-    // metadata from the Statistics.db file
-    sstable_statistics_t::serialization_header_t *metadata;
-    sstable_statistics_t::statistics_t *statistics;
-
-    // get the actual timestamp based on the epoch, the minimum timestamp in
-    // this SSTable, and the given delta
-    uint64_t get_timestamp(uint64_t delta) const;
-    size_t num_data_cols() const;
-    size_t num_ts_cols() const;
-    arrow::Status reserve();
-    std::shared_ptr<arrow::Schema> schema() const;
-    arrow::Result<std::shared_ptr<arrow::Table>> to_table() const;
-};
+#include "conversion_helper.h"
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
-arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Table> *table, arrow::MemoryPool *pool = arrow::default_memory_pool());
-
-// Recursively allocate memory for `nrows` elements in `builder` and its child
-// builders.
-arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows);
+arrow::Status vector_to_columnar_table(
+    std::shared_ptr<sstable_statistics_t> statistics,
+    std::shared_ptr<sstable_data_t> sstable,
+    std::shared_ptr<arrow::Table> *table,
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 // Add each cell within the row given by `unfiltered`
 arrow::Status process_row(
@@ -81,39 +30,60 @@ arrow::Status process_row(
     const std::unique_ptr<conversion_helper_t> &helper,
     arrow::MemoryPool *pool);
 
+// delegates to either append_simple or append_complex
 arrow::Status append_cell(
     kaitai::kstruct *cell,
     const std::unique_ptr<conversion_helper_t> &helper,
     std::shared_ptr<column_t> col,
     arrow::MemoryPool *pool);
 
+// Takes a collection of values in a complex cell and appends them to the corresponding arrow builder.
 arrow::Status append_complex(
     std::shared_ptr<column_t> col,
     const std::unique_ptr<conversion_helper_t> &helper,
     const sstable_data_t::complex_cell_t *cell,
     arrow::MemoryPool *pool);
 
+// Adds the timestamp information in a cell as well as the value to the corresponding arrow builder.
 arrow::Status append_simple(
     std::shared_ptr<column_t> col,
     const std::unique_ptr<conversion_helper_t> &helper,
     sstable_data_t::simple_cell_t *cell,
     arrow::MemoryPool *pool);
 
+/**
+ * @brief Appends a scalar value to an Arrow ArrayBuilder corresponding to a certain CQL type given by `coltype`.
+ * 
+ * @param coltype the CQL data type of the column
+ * @param builder_ptr a pointer to the arrow ArrayBuilder
+ * @param bytes a buffer containing the bytes from the SSTable
+ */
 arrow::Status append_scalar(
     std::string_view coltype,
     arrow::ArrayBuilder *builder_ptr,
     std::string_view bytes,
     arrow::MemoryPool *pool);
 
-arrow::Status append_ts(
-    arrow::TimestampBuilder *builder,
+// appends the cell's timestamp or null if it doesn't exist to `builder`.
+arrow::Status append_ts_if_exists(
+    column_t::ts_builder_t *builder,
+    const std::unique_ptr<conversion_helper_t> &helper,
+    sstable_data_t::simple_cell_t *cell);
+// appends the cell's local deletion time or null if it doesn't exist to `builder`.
+arrow::Status append_local_del_time_if_exists(
+    column_t::local_del_time_builder_t *builder,
+    const std::unique_ptr<conversion_helper_t> &helper,
+    sstable_data_t::simple_cell_t *cell);
+// appends the cell's TTL or null if it doesn't exist to `builder`.
+arrow::Status append_ttl_if_exists(
+    column_t::ttl_builder_t *builder,
     const std::unique_ptr<conversion_helper_t> &helper,
     sstable_data_t::simple_cell_t *cell);
 
+// handle tombstones
 arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker);
 
-sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics);
-
+// check if `row` has the column specified by an `idx` referring to the overall SSTable.
 bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx);
 
 #endif

@@ -24,6 +24,7 @@ add_executable(sstable_to_arrow
     util/sstable_to_arrow.cpp util/sstable_to_arrow.h
     util/timer.h # see if we can find better debugging options
     util/conversions.cpp util/conversions.h
+    util/conversion_helper.cpp util/conversion_helper.h
     util/io.cpp util/io.h
     ${PROJECT_BINARY_DIR}/deletion_time.cpp ${PROJECT_BINARY_DIR}/deletion_time.h
     ${PROJECT_BINARY_DIR}/sstable_data.cpp ${PROJECT_BINARY_DIR}/sstable_data.h
