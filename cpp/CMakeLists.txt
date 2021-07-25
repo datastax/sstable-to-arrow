@@ -16,22 +16,22 @@ find_package(Arrow REQUIRED)
 find_package(Threads REQUIRED)
 
 add_executable(sstable_to_arrow
-    util/clustering_blocks.cpp util/clustering_blocks.h
-    util/columns_bitmask.cpp util/columns_bitmask.h
-    util/deserialization_helper.cpp util/deserialization_helper.h
-    util/modified_utf8.cpp util/modified_utf8.h
-    util/vint.cpp util/vint.h
-    util/sstable_to_arrow.cpp util/sstable_to_arrow.h
-    util/timer.h # see if we can find better debugging options
-    util/conversions.cpp util/conversions.h
-    util/conversion_helper.cpp util/conversion_helper.h
-    util/io.cpp util/io.h
+    opaque/clustering_blocks.cpp opaque/clustering_blocks.h
+    opaque/columns_bitmask.cpp opaque/columns_bitmask.h
+    opaque/deserialization_helper.cpp opaque/deserialization_helper.h
+    opaque/modified_utf8.cpp opaque/modified_utf8.h
+    opaque/vint.cpp opaque/vint.h
     ${PROJECT_BINARY_DIR}/deletion_time.cpp ${PROJECT_BINARY_DIR}/deletion_time.h
     ${PROJECT_BINARY_DIR}/sstable_data.cpp ${PROJECT_BINARY_DIR}/sstable_data.h
     ${PROJECT_BINARY_DIR}/sstable_index.cpp ${PROJECT_BINARY_DIR}/sstable_index.h
     ${PROJECT_BINARY_DIR}/sstable_statistics.cpp ${PROJECT_BINARY_DIR}/sstable_statistics.h
     ${PROJECT_BINARY_DIR}/sstable_summary.cpp ${PROJECT_BINARY_DIR}/sstable_summary.h
     ${PROJECT_BINARY_DIR}/sstable_compression_info.cpp ${PROJECT_BINARY_DIR}/sstable_compression_info.h
+    util/sstable_to_arrow.cpp util/sstable_to_arrow.h
+    util/timer.h # see if we can find better debugging options
+    util/conversions.cpp util/conversions.h
+    util/conversion_helper.cpp util/conversion_helper.h
+    util/io.cpp util/io.h
     main.cpp main.h
     )
 
@@ -42,7 +42,7 @@ target_link_libraries(sstable_to_arrow PRIVATE parquet)
 target_link_libraries(sstable_to_arrow PRIVATE lz4)
 
 target_include_directories(sstable_to_arrow PUBLIC "${PROJECT_BINARY_DIR}")
-target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/util")
+target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/util" "${CMAKE_SOURCE_DIR}/opaque")
 
 option(PROFILE_GPROF "enable the -pg flag when linking to enable profiling with the gprof tool" OFF)
 if(PROFILE_GPROF)
