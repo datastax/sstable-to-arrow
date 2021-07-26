@@ -89,15 +89,13 @@ arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd)
 }
 
 /**
- * @brief Write an arrow data to a parquet file.
+ * @brief Write arrow data to a parquet file.
  * 
- * @param table 
- * @param pool 
- * @return arrow::Status 
+ * @param table the arrow table to write
  */
-arrow::Status write_parquet(std::shared_ptr<arrow::Table> table, arrow::MemoryPool *pool)
+arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Table> table, arrow::MemoryPool *pool)
 {
     std::shared_ptr<arrow::io::FileOutputStream> outfile;
-    PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open("table.parquet"));
+    PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(path));
     return parquet::arrow::WriteTable(*table, pool, outfile, 3);
 }

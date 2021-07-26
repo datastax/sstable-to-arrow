@@ -1,31 +1,42 @@
 #include "main.h"
 
-const char fpath_separator =
-#ifdef _WIN32
-    '\\';
-#else
-    '/';
-#endif
-
-const int NO_NETWORK_FLAG = 0x01;
-const int WRITE_PARQUET_FLAG = 0x02;
-int flags;
-
-typedef std::map<int, std::shared_ptr<struct sstable_t>> sstable_map_t;
-
 int main(int argc, char *argv[])
 {
     read_options(argc, argv);
-
-    if (argc < 2)
+    if (global_flags.errors.size() > 0)
     {
-        std::cerr << "must specify path to table directory\n";
+        std::cerr << "invalid arguments:\n";
+        for (std::string &err : global_flags.errors)
+        {
+            std::cerr << err << '\n';
+        }
         return 1;
     }
 
-    sstable_map_t sstables;
-    const std::string table_dir = argv[optind];
-    get_file_paths(table_dir, sstables);
+    if (global_flags.index_only)
+    {
+        std::shared_ptr<sstable_index_t> index;
+        read_sstable_file(global_flags.index_path, &index);
+        debug_index(index);
+    }
+    if (global_flags.statistics_only)
+    {
+        std::shared_ptr<sstable_statistics_t> index;
+        read_sstable_file(global_flags.statistics_path, &index);
+        debug_statistics(index);
+    }
+    if (global_flags.summary_only)
+    {
+        std::shared_ptr<sstable_summary_t> index;
+        read_sstable_file(global_flags.summary_path, &index);
+        debug_summary(index);
+    }
+
+    if (!global_flags.read_sstable_dir)
+        return 0;
+
+    std::map<int, std::shared_ptr<sstable_t>> sstables;
+    get_file_paths(global_flags.sstable_dir_path, sstables);
 
     std::vector<std::shared_ptr<arrow::Table>> finished_tables(sstables.size());
 
@@ -50,16 +61,16 @@ int main(int argc, char *argv[])
     }
     auto final_table = final_table_result.ValueOrDie();
 
-    if ((flags & WRITE_PARQUET_FLAG) != 0)
+    if (global_flags.write_parquet)
     {
-        if (!write_parquet(final_table).ok())
+        if (!write_parquet(global_flags.parquet_dst_path, final_table).ok())
         {
             std::cerr << "error writing to parquet\n";
             return 1;
         }
     }
 
-    if ((flags & NO_NETWORK_FLAG) == 0)
+    if (global_flags.listen)
     {
         if (!send_tables(finished_tables).ok())
         {
@@ -71,7 +82,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-arrow::Status process_sstable(std::shared_ptr<struct sstable_t> sstable)
+arrow::Status process_sstable(std::shared_ptr<sstable_t> sstable)
 {
     std::thread data(read_data, sstable);
     std::thread index(read_sstable_file<sstable_index_t>, sstable->index_path, &sstable->index);
@@ -111,7 +122,7 @@ void read_data(std::shared_ptr<struct sstable_t> sstable)
     std::cout << "[PROFILE read_data]: " << (end - start) << "us\n";
 }
 
-std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstable_compression_info_t> compression_info, const std::string &data_path)
+std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstable_compression_info_t> compression_info, const boost::filesystem::path &data_path)
 {
     std::ifstream ifs;
     open_stream(data_path, &ifs);
@@ -177,7 +188,7 @@ std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstabl
 }
 
 template <typename T>
-void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj)
+void read_sstable_file(const boost::filesystem::path &path, std::shared_ptr<T> *sstable_obj)
 {
     std::ifstream ifs;
     open_stream(path, &ifs);
@@ -187,7 +198,7 @@ void read_sstable_file(const std::string &path, std::shared_ptr<T> *sstable_obj)
 
 // overload for statistics file, which requires the stream to persist
 template <>
-void read_sstable_file(const std::string &path, std::shared_ptr<sstable_statistics_t> *sstable_obj)
+void read_sstable_file(const boost::filesystem::path &path, std::shared_ptr<sstable_statistics_t> *sstable_obj)
 {
     // These streams are static because kaitai "instances" (a section of the
     // binary file specified by an offset) are lazy and will only read when the
@@ -286,46 +297,12 @@ void debug_index(std::shared_ptr<sstable_index_t> index)
     }
 }
 
-// ==================== HELPER FUNCTIONS ====================
-
-void read_options(int argc, char *argv[])
+void debug_summary(std::shared_ptr<sstable_summary_t> summary)
 {
-    int opt;
-    std::shared_ptr<sstable_summary_t> summary;
-    std::shared_ptr<sstable_statistics_t> statistics;
-    std::shared_ptr<sstable_index_t> index;
-    while ((opt = getopt(argc, argv, ":t:m:i:np")) != -1)
-    {
-
-        switch (opt)
-        {
-        case 'm':
-            read_sstable_file(optarg, &summary);
-            return;
-        case 't':
-            read_sstable_file(optarg, &statistics);
-            return;
-        case 'i':
-            read_sstable_file(optarg, &index);
-            return;
-        case 'n': // turn off sending via network
-            flags |= NO_NETWORK_FLAG;
-            break;
-        case 'p':
-            flags |= WRITE_PARQUET_FLAG;
-            break;
-        default:
-            break;
-        }
-    }
+    std::cout << "TODO implement summary debugger\n";
 }
 
-bool ends_with(const std::string &s, const std::string &end)
-{
-    if (end.size() > s.size())
-        return false;
-    return std::equal(end.rbegin(), end.rend(), s.rbegin());
-}
+constexpr int MAX_FILEPATH_SIZE = 45;
 
 /**
  * @brief Get the file paths of each SSTable file in a folder
@@ -334,47 +311,51 @@ bool ends_with(const std::string &s, const std::string &end)
  * path.
  * @param path the path to the folder containing the SSTable files
  */
-void get_file_paths(const std::string &path, sstable_map_t &sstables)
+void get_file_paths(const boost::filesystem::path &dir_path, std::map<int, std::shared_ptr<sstable_t>> &sstables)
 {
-    DIR *table_dir = opendir(path.c_str());
-    struct dirent *dent;
-    char fmt[5];
-    int num;
-    char ftype_[25];
-    while ((dent = readdir(table_dir)) != nullptr)
-    {
-        std::string fname = dent->d_name;
-        if (!ends_with(fname, ".db"))
-            continue;
+    using namespace boost::filesystem;
 
-        if (sscanf(dent->d_name, "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
+    char fmt[5];
+    uint32_t num;
+    char ftype_[25];
+    for (const directory_entry &file : directory_iterator(dir_path))
+    {
+        path p = file.path();
+        if (p.extension() != ".db")
+        {
+            std::cout << "skipping unrecognized file " << p << '\n';
+            continue;
+        }
+
+        assert(p.filename().size() < MAX_FILEPATH_SIZE);
+        if (sscanf(p.filename().c_str(), "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
         {
             std::cerr << "Error reading formatted filename\n";
             continue;
         }
-        std::string ftype = ftype_;
-        std::string full_path = path + fpath_separator + dent->d_name;
+        std::string_view ftype(ftype_);
 
         if (sstables.count(num) == 0)
             sstables[num] = std::make_shared<sstable_t>();
 
         if (ftype == "Data")
-            sstables[num]->data_path = full_path;
+            sstables[num]->data_path = p;
         else if (ftype == "Statistics")
-            sstables[num]->statistics_path = full_path;
+            sstables[num]->statistics_path = p;
         else if (ftype == "Index")
-            sstables[num]->index_path = full_path;
+            sstables[num]->index_path = p;
         else if (ftype == "Summary")
-            sstables[num]->summary_path = full_path;
+            sstables[num]->summary_path = p;
         else if (ftype == "CompressionInfo")
-            sstables[num]->compression_info_path = full_path;
+            sstables[num]->compression_info_path = p;
     }
-    closedir(table_dir);
 }
 
-void open_stream(const std::string &path, std::ifstream *ifs)
+// ==================== HELPER FUNCTIONS ====================
+
+void open_stream(const boost::filesystem::path &path, std::ifstream *ifs)
 {
-    *ifs = std::ifstream(path, std::ifstream::binary);
+    *ifs = std::ifstream(path.c_str(), std::ifstream::binary);
     if (!ifs->is_open())
     {
         std::cerr << "could not open file \"" << path << "\"\n";
