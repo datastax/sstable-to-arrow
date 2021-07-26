@@ -78,10 +78,7 @@ long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
     // check if this data type has a fixed length
     auto it = type_info.find(coltype);
     if (it == type_info.end())
-    {
-        std::cerr << "unrecognized type: " << coltype << '\n';
-        exit(1);
-    }
+        throw std::runtime_error("unrecognized type when getting col size: " + std::string(coltype));
     long long len;
     if (it->second.fixed_len != 0)
         len = it->second.fixed_len;
@@ -163,8 +160,7 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, co
         return arrow::struct_(vec);
     }
 
-    DEBUG_ONLY(std::cout << "type not found or supported: " << type << '\n');
-    exit(1);
+    throw std::runtime_error("type not found or supported when getting arrow type: " + std::string(type));
 }
 
 arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_view &type)

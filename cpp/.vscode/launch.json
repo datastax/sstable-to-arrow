@@ -7,7 +7,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
-                "/workspaces/sstable-to-arrow/cpp/build/store/inventory-4ba478f0e98e11eba69e9116fc548b6b"
+                "-m",
+                "./store/inventory-4ba478f0e98e11eba69e9116fc548b6b/md-7-big-TOC.txt"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <map>
 #include <lz4.h>
+#include <stdexcept>
 
 #include "sstable_statistics.h"
 #include "sstable_data.h"
