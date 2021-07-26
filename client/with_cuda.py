@@ -23,7 +23,7 @@ def read_u8(sock):
 def fetch_data():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((HOST, PORT))
-        sock.sendall(b'hello world\n')
+        sock.sendall(b'hello world')
         num_tables = read_u8(sock)
         table_buffers = []
         for i in range(num_tables):
@@ -34,14 +34,14 @@ def fetch_data():
     return table_buffers
 
 buffers = fetch_data()
-tables = [pa.ipc.open_stream(buf).read_all() for buf in buffers]
-print(f'read {tables}')
-
-# turn the first arrow table into a cuDF
-gdf = cudf.DataFrame.from_arrow(table)
+if len(buffers) != 1:
+    print("This demo only works for a single IOT table. Remove this message if you are working with sstable-to-arrow on your own")
+gdf = cudf.DataFrame.from_arrow(pa.ipc.open_stream(buffers[0]).read_all())
 
 bc = BlazingContext()
 bc.create_table("gpu_table", gdf)
 bc.describe_table("gpu_table")
+print("running query \"SELECT * FROM gpu_table\"")
+bc.explain("SELECT * FROM gpu_table")
 result = bc.sql("SELECT * FROM gpu_table")
 print(result)

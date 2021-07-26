@@ -22,7 +22,7 @@ def read_u8(sock):
 def fetch_data():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((HOST, PORT))
-        sock.sendall(b'hello world\n')
+        sock.sendall(b'hello world')
         num_tables = read_u8(sock)
         table_buffers = []
         for i in range(num_tables):
@@ -33,6 +33,9 @@ def fetch_data():
     return table_buffers
 
 buffers = fetch_data()
-tables = [pa.ipc.open_stream(buf).read_all() for buf in buffers]
-for i, table in enumerate(tables):
-    print(f'TABLE {i}' table.to_pandas())
+if len(buffers) != 1:
+    print("This demo only works for a single IOT table. Remove this message if you are working with sstable-to-arrow on your own")
+print("This demo doesn't use CUDA, so it won't be able to the performance benefits of using a GPU.")
+df = pa.ipc.open_stream(buffers[0]).read_all().to_pandas()
+print(df)
+print('mean of sensor_value:', df['sensor_value'].mean())
