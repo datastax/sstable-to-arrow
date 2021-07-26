@@ -11,9 +11,7 @@ Be warned that error handling and logging are extremely rudimentary.
 
 This project can be run through a Docker container via
 ```bash
-docker build -t sstable-to-arrow .
-# the following assumes that Docker can access the filesystem you're running this on
-docker run --rm -itp 9143:9143 --name sstable-to-arrow sstable-to-arrow <PATH_TO_SSTABLE_DIRECTORY>
+docker run --rm -itp 9143:9143 -v /path/to/sstable/directory:/mnt/sstables --name sstable-to-arrow datastaxlabs/sstable-to-arrow /mnt/sstables
 ```
 With the VS Code [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension installed, you can also open this folder in VS Code, run `Open Folder in Container` from the command palette, and select this folder to run the project within a Docker container.
 

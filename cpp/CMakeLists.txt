@@ -7,13 +7,14 @@ project(sstable_to_arrow VERSION 0.1.0)
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
 find_package(Arrow REQUIRED)
 find_package(Threads REQUIRED)
+find_package(Boost REQUIRED filesystem)
 
 add_executable(sstable_to_arrow
     opaque/clustering_blocks.cpp opaque/clustering_blocks.h
@@ -38,7 +39,7 @@ add_executable(sstable_to_arrow
 target_link_libraries(sstable_to_arrow PRIVATE
     kaitai_struct_cpp_stl_runtime
     arrow_shared
-    boost_filesystem
+    ${Boost_LIBRARIES}
     Threads::Threads
     parquet
     lz4)
