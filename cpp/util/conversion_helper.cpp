@@ -47,6 +47,19 @@ arrow::Status column_t::finish(std::shared_ptr<arrow::Array> *ptr)
     return arrow::Status::OK();
 }
 
+void column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema)
+{
+    append_to_schema(schema, field->name());
+}
+
+void column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name)
+{
+    *schema = field;
+    *(schema + 1) = arrow::field("_ts_" + ts_name, ts_builder->type());
+    *(schema + 2) = arrow::field("_del_time_" + ts_name, local_del_time_builder->type());
+    *(schema + 3) = arrow::field("_ttl_" + ts_name, ttl_builder->type());
+}
+
 arrow::Status column_t::append_null()
 {
     for (auto &builder_ptr : {builder.get(), ts_builder.get(), local_del_time_builder.get(), ttl_builder.get()})
@@ -67,12 +80,12 @@ conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> s
 
     // partition key
     partition_key = std::make_shared<column_t>(
-        "partition key",
+        "partition_key",
         metadata->partition_key_type()->body());
 
     // clustering columns
-    std::string clustering_key_name = "clustering key ";
-    int i = 0;
+    std::string clustering_key_name = "clustering_key_";
+    int i = 0; // count clustering columns
     for (auto &col : *metadata->clustering_key_types()->array())
         clustering_cols.push_back(std::make_shared<column_t>(
             clustering_key_name + std::to_string(i++), // TODO expensive string concatentation
@@ -94,8 +107,12 @@ conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> s
 arrow::Status conversion_helper_t::init(arrow::MemoryPool *pool)
 {
     // false -> we don't create nested fields for the timestamps,
-    // since we use this column to store the row timestamp
+    // since we use this column to store the row liveness info
     ARROW_RETURN_NOT_OK(partition_key->init(pool, false));
+    partition_key_local_del_time = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::SECOND), pool);
+    partition_key_marked_for_deletion_at = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool);
+    row_local_del_time = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::SECOND), pool);
+    row_marked_for_deletion_at = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool);
 
     for (auto &col : clustering_cols)
         ARROW_RETURN_NOT_OK(col->init(pool));
@@ -113,22 +130,29 @@ arrow::Status conversion_helper_t::reserve()
 {
     size_t nrows = statistics->number_of_rows() + 5; // for security
     ARROW_RETURN_NOT_OK(partition_key->reserve(nrows));
+    ARROW_RETURN_NOT_OK(partition_key_local_del_time->Reserve(nrows));
+    ARROW_RETURN_NOT_OK(partition_key_marked_for_deletion_at->Reserve(nrows));
+    ARROW_RETURN_NOT_OK(row_local_del_time->Reserve(nrows));
+    ARROW_RETURN_NOT_OK(row_marked_for_deletion_at->Reserve(nrows));
     for (auto group : {clustering_cols, static_cols, regular_cols})
         for (auto col : group)
             ARROW_RETURN_NOT_OK(col->reserve(nrows));
     return arrow::Status::OK();
 }
 
+// timestamps are stored in microseconds
 uint64_t conversion_helper_t::get_timestamp(uint64_t delta) const
 {
     return metadata->min_timestamp()->val() + conversions::TIMESTAMP_EPOCH + delta;
 }
 
+// deletion time is stored in seconds
 uint64_t conversion_helper_t::get_local_del_time(uint64_t delta) const
 {
     return metadata->min_local_deletion_time()->val() + conversions::DELETION_TIME_EPOCH + delta;
 }
 
+// TTL is stored in seconds
 uint64_t conversion_helper_t::get_ttl(uint64_t delta) const
 {
     return metadata->min_ttl()->val() + delta;
@@ -143,18 +167,28 @@ size_t conversion_helper_t::num_data_cols() const
 size_t conversion_helper_t::num_ts_cols() const
 {
     // +3 is the row timestamp/local_del_time/ttl
-    return 3 + static_cols.size() * 3 + regular_cols.size() * 3;
+    // +4 is 2 columns each for the partition and row deletion time
+    // ignore clustering columns with no timestamp
+    return 3 + 4 + static_cols.size() * 3 + regular_cols.size() * 3;
+}
+
+size_t conversion_helper_t::num_cols() const
+{
+    return num_data_cols() + num_ts_cols();
 }
 
 std::shared_ptr<arrow::Schema> conversion_helper_t::schema() const
 {
-    arrow::FieldVector schema_vec(num_data_cols() + num_ts_cols());
-    size_t i = 0;
+    arrow::FieldVector schema_vec(num_cols());
 
-    schema_vec[i++] = partition_key->field;
-    schema_vec[i++] = arrow::field("_ts_row", partition_key->ts_builder->type());
-    schema_vec[i++] = arrow::field("_del_time_row", partition_key->local_del_time_builder->type());
-    schema_vec[i++] = arrow::field("_ttl_row", partition_key->ttl_builder->type());
+    partition_key->append_to_schema(schema_vec.data(), "row_liveness");
+    size_t i = 4;
+
+    std::cout << "TESTING " << partition_key_local_del_time->type()->ToString() << '\n';
+    schema_vec[i++] = arrow::field("_local_del_time_partition", partition_key_local_del_time->type());
+    schema_vec[i++] = arrow::field("_marked_for_del_at_partition", partition_key_marked_for_deletion_at->type());
+    schema_vec[i++] = arrow::field("_local_del_time_row", row_local_del_time->type());
+    schema_vec[i++] = arrow::field("_marked_for_delete_at_row", row_marked_for_deletion_at->type());
 
     // clustering columns don't have timestamps
     for (auto &col : clustering_cols)
@@ -164,10 +198,8 @@ std::shared_ptr<arrow::Schema> conversion_helper_t::schema() const
     {
         for (auto &col : group)
         {
-            schema_vec[i++] = col->field;
-            schema_vec[i++] = arrow::field("_ts_" + col->field->name(), col->ts_builder->type());
-            schema_vec[i++] = arrow::field("_del_time_" + col->field->name(), col->local_del_time_builder->type());
-            schema_vec[i++] = arrow::field("_ttl_" + col->field->name(), col->ttl_builder->type());
+            col->append_to_schema(&schema_vec[i]);
+            i += 4;
         }
     }
 
@@ -176,11 +208,16 @@ std::shared_ptr<arrow::Schema> conversion_helper_t::schema() const
 
 arrow::Result<std::shared_ptr<arrow::Table>> conversion_helper_t::to_table() const
 {
-    arrow::ArrayVector finished_arrays(num_data_cols() + num_ts_cols());
+    arrow::ArrayVector finished_arrays(num_cols());
 
     partition_key->finish(&finished_arrays[0]);
 
     size_t i = 4;
+    partition_key_local_del_time->Finish(&finished_arrays[i++]);
+    partition_key_marked_for_deletion_at->Finish(&finished_arrays[i++]);
+    row_local_del_time->Finish(&finished_arrays[i++]);
+    row_marked_for_deletion_at->Finish(&finished_arrays[i++]);
+
     for (auto &col : clustering_cols)
         ARROW_RETURN_NOT_OK(col->builder->Finish(&finished_arrays[i++]));
 
@@ -193,7 +230,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> conversion_helper_t::to_table() con
         }
     }
 
-    assert(i == num_data_cols() + num_ts_cols());
+    assert(i == num_cols());
     return arrow::Table::Make(schema(), finished_arrays);
 }
 

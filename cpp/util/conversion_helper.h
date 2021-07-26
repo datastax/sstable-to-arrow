@@ -36,6 +36,8 @@ public:
     // allocate enough memory for nrows elements in both the value and timestamp
     // builders
     arrow::Status reserve(uint32_t nrows);
+    void append_to_schema(std::shared_ptr<arrow::Field> *schema);
+    void append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name);
     arrow::Status finish(std::shared_ptr<arrow::Array> *ptr);
     arrow::Status append_null();
 };
@@ -45,7 +47,11 @@ class conversion_helper_t
 public:
     conversion_helper_t(std::shared_ptr<sstable_statistics_t> statistics);
 
-    std::shared_ptr<column_t> partition_key;
+    std::shared_ptr<column_t> partition_key; // also stores row liveness info
+    std::shared_ptr<arrow::TimestampBuilder> row_local_del_time;
+    std::shared_ptr<arrow::TimestampBuilder> row_marked_for_deletion_at;
+    std::shared_ptr<arrow::TimestampBuilder> partition_key_local_del_time;
+    std::shared_ptr<arrow::TimestampBuilder> partition_key_marked_for_deletion_at;
     std::vector<std::shared_ptr<column_t>> clustering_cols;
     std::vector<std::shared_ptr<column_t>> static_cols;
     std::vector<std::shared_ptr<column_t>> regular_cols;
@@ -64,6 +70,7 @@ public:
 
     size_t num_data_cols() const;
     size_t num_ts_cols() const;
+    size_t num_cols() const;
     arrow::Status reserve();
     std::shared_ptr<arrow::Schema> schema() const;
     arrow::Result<std::shared_ptr<arrow::Table>> to_table() const;

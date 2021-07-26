@@ -13,7 +13,7 @@ seq:
   - id: marked_for_delete_at
     type: u8
     doc: |
-      Timestamp of deletion
+      Timestamp of deletion in microseconds since UNIX epoch
       Data with smaller timestamp considered deleted
 
 doc: |

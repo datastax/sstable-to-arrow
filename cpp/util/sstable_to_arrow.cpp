@@ -16,32 +16,10 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
     for (auto &partition : *sstable->partitions())
     {
         auto partition_key = partition->header()->key();
-        auto deletion_time = partition->header()->deletion_time();
+        auto local_deletion_time = partition->header()->deletion_time()->local_deletion_time();
+        auto marked_for_delete_at = partition->header()->deletion_time()->marked_for_delete_at();
 
-        auto marked_for_delete_at = deletion_time->marked_for_delete_at();
-        auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
-        uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-
-        if (us >= marked_for_delete_at)
-        {
-            ARROW_RETURN_NOT_OK(append_scalar(partition_key_type, partition_key_col->builder.get(), partition_key, pool));
-
-            auto ts_builder = dynamic_cast<column_t::ts_builder_t *>(partition_key_col->ts_builder.get());
-            ARROW_RETURN_NOT_OK(ts_builder->Append(marked_for_delete_at));
-            auto local_del_time_builder = dynamic_cast<column_t::local_del_time_builder_t *>(partition_key_col->local_del_time_builder.get());
-            ARROW_RETURN_NOT_OK(local_del_time_builder->Append(deletion_time->local_deletion_time()));
-            auto ttl_builder = dynamic_cast<column_t::ttl_builder_t *>(partition_key_col->ttl_builder.get());
-            ARROW_RETURN_NOT_OK(ttl_builder->AppendNull());
-
-            // fill all of the other columns with nulls
-            for (auto &col : helper->clustering_cols)
-                ARROW_RETURN_NOT_OK(col->append_null());
-            for (auto &group : {helper->static_cols, helper->regular_cols})
-                for (auto &col : group)
-                    ARROW_RETURN_NOT_OK(col->append_null());
-
-            continue;
-        }
+        bool no_rows = true;
 
         // for a partition that is not deleted,
         // loop through the rows and tombstones
@@ -53,11 +31,55 @@ arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> sta
                 process_marker(dynamic_cast<sstable_data_t::range_tombstone_marker_t *>(unfiltered->body()));
             else // row
             {
+                no_rows = false;
+                // append partition key
                 ARROW_RETURN_NOT_OK(append_scalar(partition_key_type, partition_key_col->builder.get(), partition_key, pool));
+                // append partition deletion info
+                if (local_deletion_time == conversions::LOCAL_DELETION_TIME_NULL)
+                    ARROW_RETURN_NOT_OK(helper->partition_key_local_del_time->AppendNull());
+                else
+                    ARROW_RETURN_NOT_OK(helper->partition_key_local_del_time->Append(local_deletion_time));
+
+                if (marked_for_delete_at == conversions::MARKED_FOR_DELETE_AT_NULL)
+                    ARROW_RETURN_NOT_OK(helper->partition_key_marked_for_deletion_at->AppendNull());
+                else
+                    ARROW_RETURN_NOT_OK(helper->partition_key_marked_for_deletion_at->Append(marked_for_delete_at));
                 auto row = dynamic_cast<sstable_data_t::row_t *>(unfiltered->body());
                 bool is_static = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0);
                 process_row(row, is_static, helper, pool);
             }
+        }
+
+        // if there are no rows (only one "end of partition" unfiltered),
+        // we create a filler row containing the partition deletion information
+        if (no_rows)
+        {
+            ARROW_RETURN_NOT_OK(append_scalar(partition_key_type, partition_key_col->builder.get(), partition_key, pool));
+
+            if (local_deletion_time == conversions::LOCAL_DELETION_TIME_NULL)
+                ARROW_RETURN_NOT_OK(helper->partition_key_local_del_time->AppendNull());
+            else
+                ARROW_RETURN_NOT_OK(helper->partition_key_local_del_time->Append(local_deletion_time));
+
+            if (marked_for_delete_at == conversions::MARKED_FOR_DELETE_AT_NULL)
+                ARROW_RETURN_NOT_OK(helper->partition_key_marked_for_deletion_at->AppendNull());
+            else
+                ARROW_RETURN_NOT_OK(helper->partition_key_marked_for_deletion_at->Append(marked_for_delete_at));
+
+            ARROW_RETURN_NOT_OK(partition_key_col->ts_builder->AppendNull());
+            ARROW_RETURN_NOT_OK(partition_key_col->local_del_time_builder->AppendNull());
+            ARROW_RETURN_NOT_OK(partition_key_col->ttl_builder->AppendNull());
+            ARROW_RETURN_NOT_OK(helper->row_local_del_time->AppendNull());
+            ARROW_RETURN_NOT_OK(helper->row_marked_for_deletion_at->AppendNull());
+
+            // fill all of the other columns with nulls
+            for (auto &col : helper->clustering_cols)
+                ARROW_RETURN_NOT_OK(col->append_null());
+            for (auto &group : {helper->static_cols, helper->regular_cols})
+                for (auto &col : group)
+                    ARROW_RETURN_NOT_OK(col->append_null());
+
+            continue;
         }
     }
 
@@ -87,10 +109,16 @@ arrow::Status process_row(
     const std::unique_ptr<conversion_helper_t> &helper,
     arrow::MemoryPool *pool)
 {
+    // append row deletion time info
     if (row->_is_null_deletion_time())
     {
-        std::cout << "found row with null deletion time\n";
-        // TODO do something?
+        ARROW_RETURN_NOT_OK(helper->row_local_del_time->AppendNull());
+        ARROW_RETURN_NOT_OK(helper->row_marked_for_deletion_at->AppendNull());
+    }
+    else
+    {
+        ARROW_RETURN_NOT_OK(helper->row_local_del_time->Append(helper->get_local_del_time(row->deletion_time()->delta_local_deletion_time()->val())));
+        ARROW_RETURN_NOT_OK(helper->row_marked_for_deletion_at->Append(helper->get_timestamp(row->deletion_time()->delta_marked_for_delete_at()->val())));
     }
 
     // get the row timestamp info, which is stored in the builders of the partition key column

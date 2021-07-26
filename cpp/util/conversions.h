@@ -16,6 +16,8 @@ namespace conversions
 
 static const uint64_t TIMESTAMP_EPOCH = 1442880000000000;
 static const uint64_t DELETION_TIME_EPOCH = 1442880000;
+static const uint64_t LOCAL_DELETION_TIME_NULL = 0x7fffffff;
+static const uint64_t MARKED_FOR_DELETE_AT_NULL = 0x8000000000000000;
 
 struct cassandra_type
 {
