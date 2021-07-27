@@ -7,11 +7,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/sstable_to_arrow",
             "args": [
-                "-m",
-                "./store/inventory-4ba478f0e98e11eba69e9116fc548b6b/md-7-big-TOC.txt"
+                "-h",
+                "replace this array with the CLI arguments you want to debug with"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
+            "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

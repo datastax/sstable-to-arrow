@@ -1,5 +1,7 @@
+.vscode/launch.json
+.vscode/c_cpp_properties.json
+.vscode/settings.json
 build/
-sstable_to_arrow
 
 # cmake stuff
 CMakeLists.txt.user
