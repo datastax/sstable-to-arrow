@@ -8,6 +8,13 @@
 #include <map>
 #include <iostream>
 
+#define DEBUG_ONLY(msg)           \
+    do                            \
+    {                             \
+        if (global_flags.verbose) \
+            std::cout << (msg);   \
+    } while (0)
+
 struct flags
 {
     bool summary_only = false;    // m
@@ -19,13 +26,14 @@ struct flags
     bool include_metadata = true; // c
     bool for_cudf = false;        // g
     bool show_help = false;       // h
+    bool use_sample_data = false; // s
     bool read_sstable_dir = true;
 
-    std::string sstable_dir_path;
-    std::string summary_path;
-    std::string statistics_path;
-    std::string index_path;
-    std::string parquet_dst_path;
+    boost::filesystem::path sstable_dir_path;
+    boost::filesystem::path summary_path;
+    boost::filesystem::path statistics_path;
+    boost::filesystem::path index_path;
+    boost::filesystem::path parquet_dst_path;
     std::vector<std::string> errors;
 };
 
@@ -63,6 +71,9 @@ const std::string help_msg =
     "                                 rid of duplicates (compact)\n"
     "                           -g    convert types that aren't supported by\n"
     "                                 cudf to hex strings\n"
+    "                           -s    read sample data; overwrites any given path\n"
     "                           -h    show this help message\n";
+
+const boost::filesystem::path sample_data_path{"/home/sample_data/baselines/iot-5b608090e03d11ebb4c1d335f841c590"};
 
 #endif

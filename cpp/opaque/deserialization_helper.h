@@ -14,7 +14,7 @@
 #include <iostream>
 
 #include "vint.h"
-#include "timer.h"
+#include "opts.h"
 #include "conversions.h"
 
 class deserialization_helper_t : public kaitai::kstruct

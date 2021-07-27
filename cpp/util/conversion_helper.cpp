@@ -274,7 +274,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> conversion_helper_t::to_table() con
 
 arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows)
 {
-    DEBUG_ONLY(std::cout << "reserving for " << builder->type()->ToString() << '\n');
+    DEBUG_ONLY("reserving for " + builder->type()->ToString() + '\n');
     ARROW_RETURN_NOT_OK(builder->Reserve(nrows));
     for (int i = 0; i < builder->num_children(); ++i)
         ARROW_RETURN_NOT_OK(reserve_builder(builder->child(i), nrows));

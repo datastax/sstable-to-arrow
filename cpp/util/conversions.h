@@ -8,7 +8,6 @@
 #include <arrow/api.h>
 #include <vector>
 #include <stack>
-#include "timer.h"
 #include "vint.h"
 #include "opts.h"
 

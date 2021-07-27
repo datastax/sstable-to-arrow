@@ -48,12 +48,12 @@ arrow::Status send_tables(const std::vector<std::shared_ptr<arrow::Table>> &tabl
     for (auto table : tables)
         send_table(table, cli_sockfd);
 
-    DEBUG_ONLY(std::cout << "closing sockets\n");
+    DEBUG_ONLY("closing sockets\n");
 
     close(cli_sockfd);
     close(sockfd);
 
-    DEBUG_ONLY(std::cout << "closed sockets\n");
+    DEBUG_ONLY("closed sockets\n");
 
     return arrow::Status::OK();
 }
@@ -62,23 +62,23 @@ arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd)
 {
     ARROW_ASSIGN_OR_RAISE(auto ostream, arrow::io::BufferOutputStream::Create());
 
-    DEBUG_ONLY(std::cout << "making stream writer\n");
+    DEBUG_ONLY("making stream writer\n");
     ARROW_ASSIGN_OR_RAISE(auto writer, arrow::ipc::MakeStreamWriter(ostream, table->schema()));
 
     ARROW_RETURN_NOT_OK(writer->WriteTable(*table, -1));
     DEBUG_ONLY(
-        std::cout << "writer stats:"
-                  << "\n\tnum dictionary batches: " << writer->stats().num_dictionary_batches
-                  << "\n\tnum dictionary deltas: " << writer->stats().num_dictionary_deltas
-                  << "\n\tnum messages: " << writer->stats().num_messages
-                  << "\n\tnum record batches: " << writer->stats().num_record_batches
-                  << "\n\tnum replaced dictionaries: " << writer->stats().num_replaced_dictionaries
-                  << '\n');
+        "writer stats:\n\tnum dictionary batches: " +
+        std::to_string(writer->stats().num_dictionary_batches) +
+        "\n\tnum dictionary deltas: " + std::to_string(writer->stats().num_dictionary_deltas) +
+        "\n\tnum messages: " + std::to_string(writer->stats().num_messages) +
+        "\n\tnum record batches: " + std::to_string(writer->stats().num_record_batches) +
+        "\n\tnum replaced dictionaries: " + std::to_string(writer->stats().num_replaced_dictionaries) +
+        '\n');
     ARROW_RETURN_NOT_OK(writer->Close());
 
-    DEBUG_ONLY(std::cout << "finishing stream\n");
+    DEBUG_ONLY("finishing stream\n");
     ARROW_ASSIGN_OR_RAISE(auto bytes, ostream->Finish())
-    DEBUG_ONLY(std::cout << "buffer size (number of bytes written): " << bytes->size() << '\n');
+    DEBUG_ONLY("buffer size (number of bytes written): " + std::to_string(bytes->size()) + '\n');
 
     // char *table_size = htobebytes(bytes->size(), sizeof(size_t));
     size_t table_size = SIZE_TO_BE(bytes->size());

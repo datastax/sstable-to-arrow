@@ -60,7 +60,7 @@ const std::unordered_map<std::string_view, cassandra_type> type_info{
 
 long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
 {
-    DEBUG_ONLY(std::cout << "getting col size of " << coltype << '\n');
+    DEBUG_ONLY("getting col size of " + std::string(coltype) + '\n');
     if (coltype.rfind(reversedtype, 0) == 0)
         return get_col_size(get_child_type(coltype), ks);
     if (is_multi_cell(coltype))
@@ -69,7 +69,7 @@ long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
         // size marked as a varint instead of the expected value
         // TODO confirm this is the case
         long long len = vint_t(ks).val();
-        DEBUG_ONLY(std::cout << "length of child cell: " << len << '\n');
+        DEBUG_ONLY("length of child cell: " + std::to_string(len) + '\n');
         return len;
     }
 
@@ -83,7 +83,7 @@ long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
     // otherwise read the length as a varint
     else
         len = vint_t(ks).val();
-    DEBUG_ONLY(std::cout << "length: " << len << '\n');
+    DEBUG_ONLY("length: " + std::to_string(len) + '\n');
     return len;
 }
 

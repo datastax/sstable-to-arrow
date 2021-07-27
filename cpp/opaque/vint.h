@@ -3,9 +3,6 @@
 
 #include <kaitai/kaitaistruct.h>
 #include <kaitai/kaitaistream.h>
-#include <iostream>
-#include <iomanip>
-#include "timer.h"
 
 class vint_t : public kaitai::kstruct
 {

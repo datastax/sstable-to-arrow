@@ -18,7 +18,6 @@ vint_t::vint_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
             val_ |= c & 0xff;
         }
     }
-    DEBUG_ONLY(std::cout << "read vint " << std::hex << val_ << std::dec << '\n');
 }
 
 // TODO

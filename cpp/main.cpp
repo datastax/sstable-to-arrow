@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
     {
         try
         {
-            arrow::Status _s = write_parquet(global_flags.parquet_dst_path, final_table);
+            arrow::Status _s = write_parquet(global_flags.parquet_dst_path.string(), final_table);
             if (!_s.ok())
                 throw std::runtime_error(_s.ToString());
         }
@@ -145,7 +145,6 @@ void read_data(std::shared_ptr<sstable_t> sstable)
     {
         read_sstable_file(sstable->statistics_path, &sstable->statistics);
         process_serialization_header(get_serialization_header(sstable->statistics));
-        DEBUG_ONLY(debug_statistics(sstable->statistics));
 
         auto start_ts = std::chrono::high_resolution_clock::now();
         auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();

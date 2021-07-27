@@ -7,7 +7,7 @@ void read_options(int argc, char *const argv[])
     using namespace boost::filesystem;
 
     int opt;
-    while ((opt = getopt(argc, argv, ":m:t:i:p:dvcgh")) != -1)
+    while ((opt = getopt(argc, argv, ":m:t:i:p:dvcghs")) != -1)
     {
         switch (opt)
         {
@@ -59,6 +59,15 @@ void read_options(int argc, char *const argv[])
         case 'h':
             global_flags.show_help = true;
             break;
+        case 's':
+            global_flags.use_sample_data = true;
+            if (!exists(sample_data_path))
+            {
+                global_flags.errors.push_back("could not find sample data");
+                break;
+            }
+            global_flags.sstable_dir_path = sample_data_path;
+            break;
         case ':':
             global_flags.errors.push_back("missing argument for option " + std::to_string(optopt));
             break;
@@ -71,9 +80,12 @@ void read_options(int argc, char *const argv[])
         }
     }
 
-    global_flags.read_sstable_dir = !(global_flags.summary_only || global_flags.statistics_only || global_flags.index_only);
+    global_flags.read_sstable_dir = !(
+        global_flags.summary_only ||
+        global_flags.statistics_only ||
+        global_flags.index_only);
 
-    if (global_flags.read_sstable_dir)
+    if (global_flags.read_sstable_dir && !global_flags.use_sample_data)
     {
         if (optind == argc)
             global_flags.errors.push_back("must specify path to directory containing sstable files");

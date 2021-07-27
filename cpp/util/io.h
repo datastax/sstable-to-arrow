@@ -10,7 +10,7 @@
 #include <netinet/in.h>
 #include <parquet/arrow/writer.h>
 #include <iostream>
-#include "timer.h"
+#include "opts.h"
 
 #define FAIL_ON_STATUS(x, msg) \
     if ((x) < 0)               \

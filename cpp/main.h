@@ -20,7 +20,6 @@
 #include "sstable_compression_info.h"
 #include "sstable_to_arrow.h"
 #include "deserialization_helper.h"
-#include "timer.h"
 #include "io.h"
 #include "opts.h"
 

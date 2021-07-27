@@ -12,7 +12,6 @@
 #include "clustering_blocks.h"
 #include "sstable_data.h"
 #include "sstable_statistics.h"
-#include "timer.h"
 #include "conversion_helper.h"
 #include "opts.h"
 

@@ -361,8 +361,6 @@ arrow::Status append_simple(std::shared_ptr<column_t> col, const std::unique_ptr
 
 arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, std::string_view bytes, arrow::MemoryPool *pool)
 {
-    DEBUG_ONLY(std::cout << "appending to vector: " << coltype << " (builder capacity " << builder_ptr->capacity() << ")\n");
-
     // for all other types, we parse the data using kaitai, which might end up
     // being a performance bottleneck
     // TODO look into potential uses of memcpy for optimization
