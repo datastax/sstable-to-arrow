@@ -36,12 +36,13 @@ def fetch_data():
 buffers = fetch_data()
 if len(buffers) != 1:
     print("This demo only works for a single IOT table. Remove this message if you are working with sstable-to-arrow on your own")
-gdf = cudf.DataFrame.from_arrow(pa.ipc.open_stream(buffers[0]).read_all())
+gdf = cudf.DataFrame.from_arrow(pa.ipc.open_stream(buffers[0]).read_all().flatten())
 
 bc = BlazingContext()
 bc.create_table("gpu_table", gdf)
 bc.describe_table("gpu_table")
-print("running query \"SELECT * FROM gpu_table\"")
-bc.explain("SELECT * FROM gpu_table")
-result = bc.sql("SELECT * FROM gpu_table")
+query = "SELECT * FROM gpu_table"
+print('running query ' + query)
+print(bc.explain(query))
+result = bc.sql(query)
 print(result)
