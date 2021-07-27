@@ -4,6 +4,7 @@
 #include <arrow/api.h>
 #include "conversions.h"
 #include "sstable_statistics.h"
+#include "opts.h"
 
 class column_t
 {
@@ -36,9 +37,9 @@ public:
     // allocate enough memory for nrows elements in both the value and timestamp
     // builders
     arrow::Status reserve(uint32_t nrows);
-    void append_to_schema(std::shared_ptr<arrow::Field> *schema);
-    void append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name);
-    arrow::Status finish(std::shared_ptr<arrow::Array> *ptr);
+    uint8_t append_to_schema(std::shared_ptr<arrow::Field> *schema) const;
+    uint8_t append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name) const;
+    arrow::Result<uint8_t> finish(std::shared_ptr<arrow::Array> *ptr);
     arrow::Status append_null();
 };
 
@@ -67,6 +68,7 @@ public:
     uint64_t get_timestamp(uint64_t delta) const;
     uint64_t get_local_del_time(uint64_t delta) const;
     uint64_t get_ttl(uint64_t delta) const;
+    arrow::Status append_partition_deletion_time(uint32_t local_deletion_time, uint64_t marked_for_delete_at);
 
     size_t num_data_cols() const;
     size_t num_ts_cols() const;

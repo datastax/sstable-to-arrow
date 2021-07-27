@@ -57,6 +57,13 @@ arrow::Status append_simple(
     sstable_data_t::simple_cell_t *cell,
     arrow::MemoryPool *pool);
 
+
+template <typename T>
+arrow::Status initialize_ts_map_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr, arrow::MapBuilder **builder_ptr, T **item_ptr);
+
+template <typename T>
+arrow::Status initialize_ts_list_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr, arrow::ListBuilder **builder_ptr, T **item_ptr);
+
 /**
  * @brief Appends a scalar value to an Arrow ArrayBuilder corresponding to a certain CQL type given by `coltype`.
  * 
