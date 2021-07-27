@@ -2,7 +2,7 @@
 #define SSTABLE_TO_ARROW_H_
 
 #include <iostream>
-
+#include <boost/algorithm/hex.hpp>
 #include <arrow/api.h>
 #include <thread>
 #include <future>

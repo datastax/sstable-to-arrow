@@ -20,11 +20,13 @@ const std::vector<std::string_view> multi_cell_types{
     conversions::maptype,
     conversions::settype};
 
-const std::unordered_map<std::string_view, struct cassandra_type> type_info{
+// see https://docs.rapids.ai/api/cudf/stable/basics.html
+// for a list of types that cudf supports
+const std::unordered_map<std::string_view, cassandra_type> type_info{
     {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0, arrow::utf8()}},        // ascii
     {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1, arrow::boolean()}}, // boolean
     {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 0, arrow::int8()}},       // tinyint
-    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary()}},       // blob
+    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary(), false}},       // blob
     // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
     {"org.apache.cassandra.db.marshal.DateType", {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}},              // old version of TimestampType
@@ -38,7 +40,7 @@ const std::unordered_map<std::string_view, struct cassandra_type> type_info{
     {"org.apache.cassandra.db.marshal.InetAddressType", {"inet", 0, arrow::dense_union(inet_fields)}}, // inet
     {"org.apache.cassandra.db.marshal.Int32Type", {"int", 4, arrow::int32()}},                         // int
     {"org.apache.cassandra.db.marshal.IntegerType", {"varint", 0, arrow::int64()}},                    // varint
-    {"org.apache.cassandra.db.marshal.LexicalUUIDType", {"", 16, arrow::fixed_size_binary(16)}},
+    {"org.apache.cassandra.db.marshal.LexicalUUIDType", {"", 16, arrow::fixed_size_binary(16), false}},
     // TODO ListType
     {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8, arrow::int64()}}, // bigint
     // TODO MapType
@@ -48,17 +50,13 @@ const std::unordered_map<std::string_view, struct cassandra_type> type_info{
     {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 0, arrow::int16()}},                                // smallint
     {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 0, arrow::date32()}},                              // date, represented as 32-bit unsigned
     {"org.apache.cassandra.db.marshal.TimeType", {"time", 0, arrow::time64(arrow::TimeUnit::NANO)}},               // time
-    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16, arrow::fixed_size_binary(16)}},              // timeuuid
+    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16, arrow::fixed_size_binary(16), false}},              // timeuuid
     {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // timestamp
     // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
     {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0, arrow::utf8()}},                 // text, varchar
-    {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16, arrow::fixed_size_binary(16)}}, // uuid
+    {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16, arrow::fixed_size_binary(16), false}}, // uuid
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
-
-std::unordered_map<std::string_view, int> size_memo;
-
-node::node(const std::string_view &str_) : str(str_), children(std::make_shared<std::vector<std::shared_ptr<struct node>>>()) {}
 
 long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
 {
@@ -138,12 +136,22 @@ IS_TYPE_WITH_PARAMETERS(tuple)
 
 std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, const get_arrow_type_options &options)
 {
-    auto type_ptr = type_info.find(type);
-    if (type_ptr != type_info.end())
-        return options.replace_with != nullptr ? options.replace_with : type_ptr->second.arrow_type;
+    try
+    {
+        auto _t = type_info.at(type);
+        // doesn't throw means type is a "primitive"
+        if (options.replace_with != nullptr)
+            return options.replace_with;
+        if (global_flags.for_cudf && !_t.cudf_supported)
+            return arrow::utf8(); // pass unsupported types as hexadecimal strings
+        return _t.arrow_type;
+    }
+    catch (const std::out_of_range &err)
+    {
+        // pass
+    }
 
-    auto maybe_tree = parse_nested_type(type);
-    auto tree = *maybe_tree;
+    auto tree = *parse_nested_type(type);
 
     if (is_reversed(type))
         return get_arrow_type(get_child_type(type), options);
@@ -163,9 +171,9 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, co
     throw std::runtime_error("type not found or supported when getting arrow type: " + std::string(type));
 }
 
-arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_view &type)
+arrow::Result<std::shared_ptr<node>> parse_nested_type(const std::string_view &type)
 {
-    std::stack<std::shared_ptr<struct node>> stack;
+    std::stack<std::shared_ptr<node>> stack;
     size_t prev_start = 0;
     char prev = '\0';
     for (size_t j = 0; j < type.size(); ++j)
@@ -176,7 +184,7 @@ arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_
         if (type[j] == '(')
         {
             std::string_view str(&type[prev_start], j - prev_start);
-            stack.push(std::make_shared<struct node>(str));
+            stack.push(std::make_shared<node>(str));
             prev_start = j + 1;
         }
 
@@ -193,7 +201,7 @@ arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_
             {
                 auto parent = stack.top(); // reference to current parent type
                 const std::string_view str(&type[prev_start], j - prev_start);
-                parent->children->push_back(std::make_shared<struct node>(str));
+                parent->children->push_back(std::make_shared<node>(str));
             }
             prev_start = j + 1;
         }

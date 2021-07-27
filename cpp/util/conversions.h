@@ -10,6 +10,7 @@
 #include <stack>
 #include "timer.h"
 #include "vint.h"
+#include "opts.h"
 
 namespace conversions
 {
@@ -24,15 +25,19 @@ struct cassandra_type
     std::string_view cql_name;
     size_t fixed_len;
     std::shared_ptr<arrow::DataType> arrow_type;
+    bool cudf_supported = true;
 };
 
 // used for parsing complex types
 struct node
 {
     std::string_view str;
-    std::shared_ptr<std::vector<std::shared_ptr<struct node>>> children;
-    node(const std::string_view &str_);
+    std::shared_ptr<std::vector<std::shared_ptr<node>>> children;
+    node(const std::string_view &str_)
+        : str(str_), children(std::make_shared<std::vector<std::shared_ptr<node>>>()) {}
 };
+
+extern const std::unordered_map<std::string_view, cassandra_type> type_info;
 
 // special types that take type parameters
 extern const std::string_view compositetype, listtype, maptype, settype, tupletype, reversedtype;
@@ -58,7 +63,7 @@ struct get_arrow_type_options {
 };
 
 std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, const get_arrow_type_options &options = get_arrow_type_options{});
-arrow::Result<std::shared_ptr<struct node>> parse_nested_type(const std::string_view &type);
+arrow::Result<std::shared_ptr<node>> parse_nested_type(const std::string_view &type);
 
 } // namespace conversions
 

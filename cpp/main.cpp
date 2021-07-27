@@ -3,6 +3,12 @@
 int main(int argc, char *argv[])
 {
     read_options(argc, argv);
+    if (global_flags.show_help)
+    {
+        std::cout << help_msg << '\n';
+        return 0;
+    }
+
     if (global_flags.errors.size() > 0)
     {
         std::cerr << "invalid arguments:\n";
@@ -273,6 +279,7 @@ void read_sstable_file(const boost::filesystem::path &path, std::shared_ptr<ssta
 
 void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
 {
+    std::cout << "========== statistics file ==========\n";
     auto body = get_serialization_header(statistics);
     std::cout << "\npartition key type: " << body->partition_key_type()->body() << '\n';
 
@@ -299,9 +306,12 @@ void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
 
 void debug_data(std::shared_ptr<sstable_data_t> sstable)
 {
+    std::cout << "========== data file ==========\n";
     for (auto &partition : *sstable->partitions())
     {
-        std::cout << "\n========== partition ==========\nkey: " << partition->header()->key() << '\n';
+        std::cout << "\n========== partition ==========\n"
+                     "key: "
+                  << partition->header()->key() << '\n';
 
         for (auto &unfiltered : *partition->unfiltereds())
         {
@@ -343,20 +353,14 @@ void debug_data(std::shared_ptr<sstable_data_t> sstable)
 
 void debug_index(std::shared_ptr<sstable_index_t> index)
 {
-    for (std::unique_ptr<sstable_index_t::index_entry_t> &entry : *index->entries())
-    {
-        std::cout
-            << "key: " << entry->key() << '\n'
-            << "position: " << entry->position()->val() << '\n';
-
-        if (entry->promoted_index_length()->val() > 0)
-            std::cout << "promoted index exists\n";
-    }
+    std::cout << "========== index file ==========\n"
+                 "a description of the index file has not yet been implemented\n";
 }
 
 void debug_summary(std::shared_ptr<sstable_summary_t> summary)
 {
-    std::cout << "TODO implement summary debugger\n";
+    std::cout << "========== summary file ==========\n"
+                 "a description of the summary file has not yet been implemented\n";
 }
 
 constexpr int MAX_FILEPATH_SIZE = 45;

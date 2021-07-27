@@ -444,6 +444,25 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         return builder->Append(date);
     }
 
+    // if the current type is not cudf supported, it should have been
+    // treated as a string by conversions::get_arrow_type,
+    // so the builder here should also be a string builder,
+    // to which we append the raw bytes as hexadecimal
+    try
+    {
+        conversions::cassandra_type _t = conversions::type_info.at(coltype);
+        if (global_flags.for_cudf && !_t.cudf_supported)
+        {
+            auto builder = dynamic_cast<arrow::StringBuilder *>(builder_ptr);
+            return builder->Append(boost::algorithm::hex(buffer));
+        }
+        // otherwise continue on below and append as normal
+    }
+    catch (const std::out_of_range &err)
+    {
+        // pass if we don't find the type
+    }
+
     // handle "primitive" types with a macro
 #define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                   \
     else if (coltype == "org.apache.cassandra.db.marshal." #cassandra_type "Type") \
@@ -452,6 +471,9 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         return builder->Append(ks.read_##read_size());                             \
     }
 
+    if (false)
+    {
+    }
     APPEND_TO_BUILDER(Ascii, String, bytes_full)
     APPEND_TO_BUILDER(Boolean, Boolean, u1)
     APPEND_TO_BUILDER(Byte, Int8, s1)
