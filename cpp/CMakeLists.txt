@@ -44,8 +44,10 @@ target_link_libraries(sstable_to_arrow PRIVATE
     parquet
     lz4)
 
-target_include_directories(sstable_to_arrow PUBLIC "${PROJECT_BINARY_DIR}")
-target_include_directories(sstable_to_arrow PUBLIC "${CMAKE_SOURCE_DIR}/util" "${CMAKE_SOURCE_DIR}/opaque")
+target_include_directories(sstable_to_arrow PUBLIC
+    "${PROJECT_BINARY_DIR}"
+    "${CMAKE_SOURCE_DIR}/util"
+    "${CMAKE_SOURCE_DIR}/opaque")
 
 option(PROFILE_GPROF "enable the -pg flag when linking to enable profiling with the gprof tool" OFF)
 if(PROFILE_GPROF)

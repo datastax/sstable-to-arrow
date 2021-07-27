@@ -9,13 +9,15 @@ Be warned that error handling and logging are extremely rudimentary.
 
 ## How to run
 
-This project can be run through a Docker container via
+This project can be run through a [Docker](https://www.docker.com/) container via
 ```bash
+# replace /path/to/sstable/directory with the path to the directory with your sstables
 docker run --rm -itp 9143:9143 -v /path/to/sstable/directory:/mnt/sstables --name sstable-to-arrow datastaxlabs/sstable-to-arrow /mnt/sstables
 ```
+
 With the VS Code [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension installed, you can also open this folder in VS Code, run `Open Folder in Container` from the command palette, and select this folder to run the project within a Docker container.
 
-If not using Docker, you can manually build the project as follows, though installation of dependencies may vary from machine to machine.
+If not using Docker, you can manually build the project as follows, though installation of dependencies may vary from machine to machine. You can see the [Dockerfile](Dockerfile) for example commands on a Linux machine.
 
 1. This project depends on [Kaitai Struct](`https://kaitai.io/#download`), the [Kaitai Struct C++/STL runtime library](https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime), and [Apache Arrow for C++](http://arrow.apache.org/docs/cpp/cmake.html). If you are manually building Arrow and using other Arrow features like the filesystem interface `arrow::fs`, make sure to check [if you need to include any optional components](http://arrow.apache.org/docs/developers/cpp/building.html#optional-components). **This project requires `-DARROW_PARQUET=ON`.** See the `RUN` commands in the [`Dockerfile`](Dockerfile) for an example.
 
@@ -74,8 +76,9 @@ message first, and then it will send data in the following format:
 
 ## TODO
 
-- Fix limitations above
+- Fix or improve limitations above
     - Add support for tombstones
 - Improve error handling system and logging system
 - Add documentation
-- Better flags
+- Integrate with S3
+- Include bindings that can be called from Python
