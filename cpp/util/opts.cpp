@@ -7,7 +7,7 @@ void read_options(int argc, char *const argv[])
     using namespace boost::filesystem;
 
     int opt;
-    while ((opt = getopt(argc, argv, ":m:t:i:p:vdn")) != -1)
+    while ((opt = getopt(argc, argv, ":m:t:i:p:vdnc")) != -1)
     {
         switch (opt)
         {
@@ -50,6 +50,9 @@ void read_options(int argc, char *const argv[])
             break;
         case 'n': // turn off sending via network
             global_flags.listen = false;
+            break;
+        case 'c':
+            global_flags.include_metadata = false;
             break;
         case ':':
             global_flags.errors.push_back("missing argument for option " + std::to_string(optopt));

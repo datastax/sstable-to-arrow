@@ -18,6 +18,7 @@ struct flags
     bool verbose = false;
     bool detailed = false;
     bool read_sstable_dir = true;
+    bool include_metadata = true;
 
     std::string sstable_dir_path;
     std::string summary_path;

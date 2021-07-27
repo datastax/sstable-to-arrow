@@ -14,6 +14,7 @@
 #include "sstable_statistics.h"
 #include "timer.h"
 #include "conversion_helper.h"
+#include "opts.h"
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
@@ -22,6 +23,11 @@ arrow::Status vector_to_columnar_table(
     std::shared_ptr<sstable_data_t> sstable,
     std::shared_ptr<arrow::Table> *table,
     arrow::MemoryPool *pool = arrow::default_memory_pool());
+
+arrow::Status process_partition(
+    const std::unique_ptr<sstable_data_t::partition_t> &partition,
+    std::unique_ptr<conversion_helper_t> &helper,
+    arrow::MemoryPool *pool);
 
 // Add each cell within the row given by `unfiltered`
 arrow::Status process_row(
