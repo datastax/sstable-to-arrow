@@ -38,4 +38,5 @@ if len(buffers) != 1:
 print("This demo doesn't use CUDA, so it won't be able to the performance benefits of using a GPU.")
 df = pa.ipc.open_stream(buffers[0]).read_all().to_pandas()
 print(df)
-print('mean of sensor_value:', df['sensor_value'].mean())
+col = df['sensor_value'][df['sensor_value'] != float('-inf')]
+print('mean of sensor_value:', col.mean())
