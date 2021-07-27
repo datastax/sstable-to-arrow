@@ -7,7 +7,7 @@ void read_options(int argc, char *const argv[])
     using namespace boost::filesystem;
 
     int opt;
-    while ((opt = getopt(argc, argv, ":m:t:i:p:dvcghs")) != -1)
+    while ((opt = getopt(argc, argv, ":m:t:i:p:dvcxhs")) != -1)
     {
         switch (opt)
         {
@@ -53,7 +53,7 @@ void read_options(int argc, char *const argv[])
         case 'c':
             global_flags.include_metadata = false;
             break;
-        case 'g':
+        case 'x':
             global_flags.for_cudf = true;
             break;
         case 'h':

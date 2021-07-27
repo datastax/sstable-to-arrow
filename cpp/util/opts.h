@@ -24,7 +24,7 @@ struct flags
     bool listen = true;           // d
     bool verbose = false;         // v
     bool include_metadata = true; // c
-    bool for_cudf = false;        // g
+    bool for_cudf = false;        // x
     bool show_help = false;       // h
     bool use_sample_data = false; // s
     bool read_sstable_dir = true;
@@ -69,7 +69,7 @@ const std::string help_msg =
     "                           -v    verbose output for debugging\n"
     "                           -c    don't include metadata; does not get\n"
     "                                 rid of duplicates (compact)\n"
-    "                           -g    convert types that aren't supported by\n"
+    "                           -x    convert types that aren't supported by\n"
     "                                 cudf to hex strings\n"
     "                           -s    read sample data; overwrites any given path\n"
     "                           -h    show this help message\n";
