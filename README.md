@@ -1,5 +1,9 @@
 # SSTable to Arrow
 
+[![forthebadge](https://forthebadge.com/images/badges/check-it-out.svg)](https://forthebadge.com)
+
+[![forthebadge](https://forthebadge.com/images/badges/made-with-c-plus-plus.svg)](https://forthebadge.com)
+
 A project for parsing SSTables, used by the Apache Cassandra database, via the [Kaitai Struct](https://kaitai.io/) declarative language.
 
 ![general layout of the Cassandra Data.db file](visualization/results/data.png)
@@ -16,15 +20,16 @@ The big picture goal is to allow GPU-accelerated analytic queries on the Cassand
 
 4. At the current stage (this project), to prepare for future parallelization using `CUDA` and to avoid the overhead of using JVM and spinning up Cassandra, we decided to try and read the SSTable files with our own implementation using C++. To read the complex SSTable binary files, we decided to use the [Kaitai Struct](https://kaitai.io/) library to write declarative format specifications using `.ksy` (essentially `YAML`) files. This will greatly decrease the cost of maintaining different database formats in the future and help with migration issues as it is easier to document. It also has the benefit of working across languages, including being able to compile to graphviz for some cool visualizations (see above).
 
-5. The next step will be to actually introduce GPU parallelization using CUDA while reading the SSTable files. Hopefully this will only take a few changes to the current codebase, adding optimizations where necessary.
+5. The next step will be to introduce GPU parallelization using CUDA while reading the SSTable files.
 
 ## Overview
 
 - `cpp/` contains the source code for `sstable-to-arrow`.
 - `java/` contains the code for reading SSTables using Cassandra and is no longer under development.
 - `test/` contains CQL queries that generate some useful sample data as well as some helper scripts to profile the different approaches.
+- `client/` contains sample Python clients to read the tables from the server
 - `visualization/` contains modified Kaitai Struct files for visualizing the various data formats via exporting to `graphviz`. The visualizations are currently quite rudimentary due to limitations of kaitai exporting to graphviz. It doesn't support kaitai opaque types and also doesn't show conditional fields. The current `visualization/*_modified.dot` files are modified by hand, and the `visualization/*.ksy` files are not meant to parse actual files but rather just to generate boilerplate graphviz code for the diagrams.
 
-## Getting started
+## Getting started + limitations + upcoming features
 
 See [`cpp/README.md`](cpp/README.md).
