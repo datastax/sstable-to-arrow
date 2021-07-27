@@ -41,6 +41,8 @@ void read_options(int argc, char *const argv[])
         case 'p':
             global_flags.write_parquet = true;
             global_flags.parquet_dst_path = optarg;
+            global_flags.listen = false;
+            global_flags.include_metadata = false;
             break;
         case 'd': // turn off sending via network
             global_flags.listen = false;
