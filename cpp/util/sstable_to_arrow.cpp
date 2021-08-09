@@ -2,28 +2,16 @@
 
 #include "sstable_to_arrow.h"
 
-arrow::Status vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, std::shared_ptr<arrow::Table> *table, arrow::MemoryPool *pool)
+arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, arrow::MemoryPool *pool)
 {
-    auto start_ts = std::chrono::high_resolution_clock::now();
-    auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
-
     auto helper = std::make_unique<conversion_helper_t>(statistics);
     ARROW_RETURN_NOT_OK(helper->init(pool));
 
     for (const auto &partition : *sstable->partitions())
-        process_partition(partition, helper, pool);
+        ARROW_RETURN_NOT_OK(process_partition(partition, helper, pool));
 
     // finish the arrays and store them into a vector
-    ARROW_ASSIGN_OR_RAISE(*table, helper->to_table());
-
-    std::cout << "\n===== table =====\n"
-              << (*table)->ToString() << "==========\n";
-
-    auto end_ts = std::chrono::high_resolution_clock::now();
-    auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
-    std::cout << "[PROFILE conversion]: " << (end - start) << "us\n";
-
-    return arrow::Status::OK();
+    return helper->to_table();
 }
 
 arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_t> &partition, std::unique_ptr<conversion_helper_t> &helper, arrow::MemoryPool *pool)
@@ -91,6 +79,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
 
 arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker)
 {
+    (void)marker;
     std::cout << "MARKER FOUND\n";
     return arrow::Status::OK();
 }
@@ -166,7 +155,7 @@ arrow::Status process_row(
         // all clustering cols should be present in a row (only tombstones have
         // null values in the clustering cols)
         assert(row->clustering_blocks()->values()->size() == helper->clustering_cols.size());
-        for (int i = 0; i < row->clustering_blocks()->values()->size(); ++i)
+        for (size_t i = 0; i < row->clustering_blocks()->values()->size(); ++i)
         {
             auto &cell = (*row->clustering_blocks()->values())[i];
             auto &col = helper->clustering_cols[i];
@@ -179,7 +168,7 @@ arrow::Status process_row(
     // i is the index in the SSTable's static columns,
     // while cell_idx is the index in the row's vector of cells, since some
     // columns might be missing
-    for (int i = 0, cell_idx = 0; i < helper->static_cols.size(); ++i)
+    for (size_t i = 0, cell_idx = 0; i < helper->static_cols.size(); ++i)
     {
         if (is_static && does_cell_exist(row, i))
             ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->static_cols[i], pool));
@@ -189,7 +178,7 @@ arrow::Status process_row(
 
     // handle regular columns
     // see above re `i` and `cell_idx`
-    for (int i = 0, cell_idx = 0; i < helper->regular_cols.size(); ++i)
+    for (size_t i = 0, cell_idx = 0; i < helper->regular_cols.size(); ++i)
     {
         if (!is_static && does_cell_exist(row, i))
             ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->regular_cols[i], pool));
@@ -374,7 +363,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
 
         auto maybe_tree = conversions::parse_nested_type(coltype);
         auto tree = *maybe_tree;
-        for (int i = 0; i < tree->children->size(); ++i)
+        for (size_t i = 0; i < tree->children->size(); ++i)
         {
             uint16_t child_size = ks.read_u2be();
             auto data = ks.read_bytes(child_size);

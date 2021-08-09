@@ -29,6 +29,9 @@ de/serialization costs.
 
 ## Getting started
 
+See [this blog post](https://www.datastax.com/blog/analyzing-cassandra-data-using-gpus-part-2)
+for detailed instructions.
+
 1. Clone this repository `git clone https://github.com/datastax/sstable-to-arrow.git`
 2. Navigate to this directory `cd sstable-to-arrow/client`
 3. Create a new virtualenv inside this directory `python -m venv ./sstable_to_arrow_venv`

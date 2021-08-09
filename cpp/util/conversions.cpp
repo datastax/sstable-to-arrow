@@ -163,7 +163,7 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, co
     else if (is_composite(type))
     {
         arrow::FieldVector vec;
-        for (int i = 0; i < tree->children->size(); ++i)
+        for (size_t i = 0; i < tree->children->size(); ++i)
             vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str, options)));
         return arrow::struct_(vec);
     }
@@ -218,6 +218,8 @@ arrow::Result<std::shared_ptr<node>> parse_nested_type(const std::string_view &t
 
         prev = type[j];
     }
+
+    return std::make_shared<node>(type);
 }
 
 } // namespace conversions

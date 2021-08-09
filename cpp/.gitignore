@@ -1,7 +1,10 @@
 .vscode/launch.json
 .vscode/c_cpp_properties.json
 .vscode/settings.json
+.idea/
 build/
+cmake-build-debug/
+cmake-build-release/
 
 # cmake stuff
 CMakeLists.txt.user

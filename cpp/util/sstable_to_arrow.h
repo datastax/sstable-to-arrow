@@ -17,10 +17,9 @@
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
-arrow::Status vector_to_columnar_table(
+arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
     std::shared_ptr<sstable_statistics_t> statistics,
     std::shared_ptr<sstable_data_t> sstable,
-    std::shared_ptr<arrow::Table> *table,
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 arrow::Status process_partition(
@@ -55,7 +54,6 @@ arrow::Status append_simple(
     const std::unique_ptr<conversion_helper_t> &helper,
     sstable_data_t::simple_cell_t *cell,
     arrow::MemoryPool *pool);
-
 
 template <typename T>
 arrow::Status initialize_ts_map_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr, arrow::MapBuilder **builder_ptr, T **item_ptr);

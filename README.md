@@ -22,6 +22,8 @@ The big picture goal is to allow GPU-accelerated analytic queries on the Cassand
 
 5. The next step will be to introduce GPU parallelization using CUDA while reading the SSTable files.
 
+See [this blog post](https://www.datastax.com/blog/analyzing-cassandra-data-using-gpus-part-1) for more details.
+
 ## Overview
 
 - `cpp/` contains the source code for `sstable-to-arrow`.

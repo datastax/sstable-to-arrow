@@ -3,6 +3,7 @@
 
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+#include <arrow/filesystem/api.h>
 #include <getopt.h>
 #include <memory>
 #include <map>
@@ -28,6 +29,9 @@ struct flags
     bool show_help = false;       // h
     bool use_sample_data = false; // s
     bool read_sstable_dir = true;
+    bool is_s3 = false;
+
+    std::shared_ptr<arrow::fs::S3FileSystem> s3fs;
 
     boost::filesystem::path sstable_dir_path;
     boost::filesystem::path summary_path;

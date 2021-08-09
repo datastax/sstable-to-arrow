@@ -89,9 +89,13 @@ void read_options(int argc, char *const argv[])
     {
         if (optind == argc)
             global_flags.errors.push_back("must specify path to directory containing sstable files");
-        else if (!is_directory(argv[optind]))
-            global_flags.errors.push_back("the sstable directory path given is not a path to a directory");
         else
-            global_flags.sstable_dir_path = argv[optind];
+        {
+            global_flags.is_s3 = boost::istarts_with(argv[optind], "S3://");
+            if (!global_flags.is_s3 && !is_directory(argv[optind]))
+                global_flags.errors.push_back("the sstable directory path given is not a path to a directory");
+            else
+                global_flags.sstable_dir_path = argv[optind];
+        }
     }
 }

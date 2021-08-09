@@ -31,6 +31,7 @@ add_executable(sstable_to_arrow
     util/sstable_to_arrow.cpp util/sstable_to_arrow.h
     util/opts.cpp util/opts.h # see if we can find better debugging options
     util/conversions.cpp util/conversions.h
+    util/inspect_files.cpp util/inspect_files.h
     util/conversion_helper.cpp util/conversion_helper.h
     util/io.cpp util/io.h
     main.cpp main.h
@@ -48,6 +49,12 @@ target_include_directories(sstable_to_arrow PUBLIC
     "${PROJECT_BINARY_DIR}"
     "${CMAKE_SOURCE_DIR}/util"
     "${CMAKE_SOURCE_DIR}/opaque")
+
+if(MSVC)
+    target_compile_options(sstable_to_arrow PRIVATE /W4 /WX)
+else()
+    target_compile_options(sstable_to_arrow PRIVATE -Wall -Wextra -pedantic)
+endif()
 
 option(PROFILE_GPROF "enable the -pg flag when linking to enable profiling with the gprof tool" OFF)
 if(PROFILE_GPROF)

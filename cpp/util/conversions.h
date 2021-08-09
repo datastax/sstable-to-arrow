@@ -3,7 +3,6 @@
 
 #include <kaitai/kaitaistream.h>
 #include <string_view>
-#include <string_view>
 #include <unordered_map>
 #include <arrow/api.h>
 #include <vector>

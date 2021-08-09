@@ -1,133 +1,140 @@
 #include "main.h"
 
+#define EXIT_NOT_OK(expr, msg)                                  \
+    do                                                          \
+    {                                                           \
+        arrow::Status _s = (expr);                              \
+        if (!_s.ok())                                           \
+        {                                                       \
+            std::cerr << (msg) << ": " << _s.message() << '\n'; \
+            return 1;                                           \
+        }                                                       \
+    } while (0)
+
+const int MAX_FILEPATH_SIZE = 45;
+
 int main(int argc, char *argv[])
 {
     read_options(argc, argv);
-    if (global_flags.show_help)
-    {
-        std::cout << help_msg << '\n';
-        return 0;
-    }
 
     if (global_flags.errors.size() > 0)
     {
         std::cerr << "invalid arguments:\n";
-        for (std::string &err : global_flags.errors)
+        for (const std::string &err : global_flags.errors)
             std::cerr << err << '\n';
         return 1;
     }
 
-    try
-    {
-        if (global_flags.index_only)
-        {
-            std::shared_ptr<sstable_index_t> index;
-            read_sstable_file(global_flags.index_path, &index);
-            if (index == nullptr)
-                throw std::runtime_error("error reading index file");
-            debug_index(index);
-        }
-        if (global_flags.statistics_only)
-        {
-            std::shared_ptr<sstable_statistics_t> statistics;
-            read_sstable_file(global_flags.statistics_path, &statistics);
-            if (statistics == nullptr)
-                throw std::runtime_error("error reading statistics file");
-            debug_statistics(statistics);
-        }
-        if (global_flags.summary_only)
-        {
-            std::shared_ptr<sstable_summary_t> summary;
-            read_sstable_file(global_flags.summary_path, &summary);
-            if (summary == nullptr)
-                throw std::runtime_error("error reading summary file");
-            debug_summary(summary);
-        }
-    }
-    catch (const std::exception &err)
-    {
-        std::cerr << "error loading sstable file: " << err.what() << '\n';
-        return 1;
-    }
+    EXIT_NOT_OK(run_arguments(), "error running arguments");
 
     if (!global_flags.read_sstable_dir)
         return 0;
 
+    s3_connection conn;
+    if (!conn.ok())
+    {
+        std::cerr << "error connecting to S3\n";
+        return 1;
+    }
+
     std::map<int, std::shared_ptr<sstable_t>> sstables;
-    get_file_paths(global_flags.sstable_dir_path, sstables);
+    if (global_flags.is_s3)
+        EXIT_NOT_OK(get_file_paths_from_s3(global_flags.sstable_dir_path.string(), sstables), "error loading from S3");
+    else
+        get_file_paths(global_flags.sstable_dir_path, sstables);
+
+    if (sstables.empty())
+    {
+        std::cerr << "no sstables found\n";
+        return 1;
+    }
 
     std::vector<std::shared_ptr<arrow::Table>> finished_tables(sstables.size());
 
     int i = 0;
-    for (auto it = sstables.begin(); it != sstables.end(); ++it)
+    for (auto &entry : sstables)
     {
-        std::cout << "\n\n========== Reading SSTable #" << it->first << " ==========\n";
-        try
-        {
-            arrow::Status _s = process_sstable(it->second);
-            if (!_s.ok())
-                throw std::runtime_error(_s.ToString());
-            arrow::Status status = vector_to_columnar_table(it->second->statistics, it->second->data, &finished_tables[i++]);
-            if (!status.ok())
-                throw std::runtime_error(status.ToString());
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "error converting SSTable data to Arrow Table: " << e.what() << '\n';
-            return 1;
-        }
-    }
+        std::cout << "\n\n========== Reading SSTable #" << entry.first << " ==========\n";
+        EXIT_NOT_OK(load_sstable_files(entry.second), "error loading sstable files");
 
-    auto final_table_result = arrow::ConcatenateTables(finished_tables, arrow::ConcatenateTablesOptions{true});
-    if (!final_table_result.ok())
-    {
-        std::cerr << "error concatenating sstables: " << final_table_result.status().ToString() << "\n";
-        return 1;
+        auto start_ts = std::chrono::high_resolution_clock::now();
+        auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
+
+        auto result = vector_to_columnar_table(entry.second->statistics, entry.second->data);
+
+        auto end_ts = std::chrono::high_resolution_clock::now();
+        auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
+        std::cout << "[PROFILE conversion]: " << (end - start) << "us\n";
+
+        EXIT_NOT_OK(result.status(), "error converting sstable");
+        finished_tables[i++] = result.ValueOrDie();
     }
-    auto final_table = final_table_result.ValueOrDie();
 
     if (global_flags.write_parquet)
     {
-        try
-        {
-            arrow::Status _s = write_parquet(global_flags.parquet_dst_path.string(), final_table);
-            if (!_s.ok())
-                throw std::runtime_error(_s.ToString());
-        }
-        catch (const std::exception &err)
-        {
-            std::cerr << "error writing to parquet: " << err.what() << '\n';
-            return 1;
-        }
+        EXIT_NOT_OK(write_parquet(global_flags.parquet_dst_path.string(), finished_tables), "error writing to parquet");
     }
 
     if (global_flags.listen)
     {
-        try
-        {
-            arrow::Status _s = send_tables(finished_tables);
-            if (!_s.ok())
-                throw std::runtime_error(_s.ToString());
-        }
-        catch (const std::exception &err)
-        {
-            std::cerr << "error sending data: " << err.what() << '\n';
-            return 1;
-        }
+        EXIT_NOT_OK(send_tables(finished_tables), "error running I/O operations");
     }
 
     return 0;
 }
 
-arrow::Status process_sstable(std::shared_ptr<sstable_t> sstable)
+arrow::Status run_arguments()
 {
-    std::thread data(read_data, sstable);
-    std::thread index(read_sstable_file<sstable_index_t>, sstable->index_path, &sstable->index);
-    std::thread summary(read_sstable_file<sstable_summary_t>, sstable->summary_path, &sstable->summary);
+    if (global_flags.show_help)
+    {
+        std::cout << help_msg << '\n';
+    }
+    else if (global_flags.statistics_only)
+    {
+        ARROW_ASSIGN_OR_RAISE(auto statistics, read_sstable_file<sstable_statistics_t>(global_flags.statistics_path));
+        debug_statistics(statistics);
+    }
+    else if (global_flags.index_only)
+    {
+        ARROW_ASSIGN_OR_RAISE(auto index, read_sstable_file<sstable_index_t>(global_flags.index_path));
+        debug_index(index);
+    }
+    else if (global_flags.summary_only)
+    {
+        ARROW_ASSIGN_OR_RAISE(auto summary, read_sstable_file<sstable_summary_t>(global_flags.summary_path));
+        debug_summary(summary);
+    }
+    return arrow::Status::OK();
+}
 
-    data.join();
-    index.join();
-    summary.join();
+s3_connection::s3_connection()
+{
+    std::cout << "opening connection to s3\n";
+    m_ok = arrow::fs::EnsureS3Initialized().ok();
+}
+
+s3_connection::~s3_connection()
+{
+    std::cout << "closing connection to s3\n";
+    m_ok = arrow::fs::FinalizeS3().ok();
+}
+
+bool s3_connection::ok() const
+{
+    return m_ok;
+}
+
+arrow::Status load_sstable_files(std::shared_ptr<sstable_t> sstable)
+{
+    // auto data_thread = std::async(read_data, sstable);
+    // auto index_thread = std::async([&sstable]()
+    //                                { return read_sstable_file<sstable_index_t>(sstable->index_path); });
+    // auto summary_thread = std::async([&sstable]()
+    //                                  { return read_sstable_file<sstable_summary_t>(sstable->summary_path); });
+
+    ARROW_RETURN_NOT_OK(read_data(sstable));
+    ARROW_ASSIGN_OR_RAISE(sstable->index, read_sstable_file<sstable_index_t>(sstable->index_path));
+    ARROW_ASSIGN_OR_RAISE(sstable->summary, read_sstable_file<sstable_summary_t>(sstable->summary_path));
 
     if (sstable->statistics == nullptr || sstable->data == nullptr || sstable->index == nullptr || sstable->summary == nullptr)
         return arrow::Status::Invalid("Failed parsing SSTable");
@@ -139,77 +146,64 @@ arrow::Status process_sstable(std::shared_ptr<sstable_t> sstable)
 // These functions use kaitai to parse sstable files into C++
 // objects.
 
-void read_data(std::shared_ptr<sstable_t> sstable)
+arrow::Status read_data(std::shared_ptr<sstable_t> sstable)
 {
-    try
+    ARROW_ASSIGN_OR_RAISE(sstable->statistics, read_sstable_file<sstable_statistics_t>(sstable->statistics_path));
+    init_deserialization_helper(get_serialization_header(sstable->statistics));
+
+    auto start_ts = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
+
+    if (sstable->compression_info_path != "") // if the SSTable is compressed
     {
-        read_sstable_file(sstable->statistics_path, &sstable->statistics);
-        process_serialization_header(get_serialization_header(sstable->statistics));
-
-        auto start_ts = std::chrono::high_resolution_clock::now();
-        auto start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
-
-        if (sstable->compression_info_path != "") // if the SSTable is compressed
-        {
-            read_sstable_file(sstable->compression_info_path, &sstable->compression_info);
-            sstable->data = read_decompressed_sstable(sstable->compression_info, sstable->data_path);
-        }
-        else
-            read_sstable_file(sstable->data_path, &sstable->data);
-
-        auto end_ts = std::chrono::high_resolution_clock::now();
-        auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
-
-        std::cout << "[PROFILE read_data]: " << (end - start) << "us\n";
+        ARROW_ASSIGN_OR_RAISE(sstable->compression_info, read_sstable_file<sstable_compression_info_t>(sstable->compression_info_path));
+        ARROW_ASSIGN_OR_RAISE(sstable->data, read_decompressed_sstable(sstable->compression_info, sstable->data_path));
     }
-    catch (const std::exception &err)
+    else
     {
-        sstable->data = nullptr;
-        return;
+        ARROW_ASSIGN_OR_RAISE(sstable->data, read_sstable_file<sstable_data_t>(sstable->data_path));
     }
+
+    auto end_ts = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
+    std::cout << "[PROFILE read_data]: " << (end - start) << "us\n";
+
+    return arrow::Status::OK();
 }
 
-std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstable_compression_info_t> compression_info, const boost::filesystem::path &data_path)
+arrow::Result<std::shared_ptr<sstable_data_t>> read_decompressed_sstable(const std::shared_ptr<sstable_compression_info_t> &compression_info, const boost::filesystem::path &data_path)
 {
-    std::ifstream ifs;
-    try
-    {
-        open_stream(data_path, &ifs);
-    }
-    catch (const std::exception &e)
-    {
-        return nullptr;
-    }
+    ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(data_path));
 
     // get the number of compressed bytes
-    ifs.seekg(0, std::ios::end);
-    int32_t src_size = static_cast<int32_t>(ifs.tellg()); // the total size of the uncompressed file
+    istream->seekg(0, std::ios::end);
+    int64_t src_size = static_cast<size_t>(istream->tellg()); // the total size of the uncompressed file
     std::cout << "compressed size: " << src_size << "\n";
     if (src_size < 0)
         throw std::runtime_error("error reading compressed data file");
-    uint32_t nchunks = compression_info->chunk_count();
+    size_t nchunks = compression_info->chunk_count();
 
     std::vector<char> decompressed;
 
     const auto &offsets = *compression_info->chunk_offsets();
-    uint32_t chunk_length = compression_info->chunk_length();
+    size_t chunk_length = compression_info->chunk_length();
 
-    uint64_t total_decompressed_size = 0;
+    size_t total_decompressed_size = 0;
     // loop through chunks to get total decompressed size (written by Cassandra)
-    for (int i = 0; i < nchunks; ++i)
+    for (size_t i = 0; i < nchunks; ++i)
     {
-        ifs.seekg(offsets[i]);
+        istream->seekg(offsets[i]);
         int32_t decompressed_size =
-            ((ifs.get() & 0xff) << 0x00) |
-            ((ifs.get() & 0xff) << 0x08) |
-            ((ifs.get() & 0xff) << 0x10) |
-            ((ifs.get() & 0xff) << 0x18);
+            ((istream->get() & 0xff) << 0x00) |
+            ((istream->get() & 0xff) << 0x08) |
+            ((istream->get() & 0xff) << 0x10) |
+            ((istream->get() & 0xff) << 0x18);
         total_decompressed_size += decompressed_size;
     }
     std::cout << "total decompressed size: " << total_decompressed_size << '\n';
     decompressed.resize(total_decompressed_size);
 
-    for (int i = 0; i < nchunks; ++i) // read each chunk at a time
+    for (size_t i = 0; i < nchunks; ++i) // read each chunk at a time
     {
         uint64_t offset = offsets[i];
         // get size based on offset with special case for last chunk
@@ -219,150 +213,56 @@ std::shared_ptr<sstable_data_t> read_decompressed_sstable(std::shared_ptr<sstabl
 
         // skip 4 bytes written by Cassandra at beginning of each chunk and 4
         // bytes at end for Adler32 checksum
-        ifs.seekg(offset + 4, std::ios::beg);
-        ifs.read(buffer.data(), chunk_size - 8);
+        istream->seekg(offset + 4, std::ios::beg);
+        istream->read(buffer.data(), chunk_size - 8);
 
         int ntransferred = LZ4_decompress_safe(
             buffer.data(), &decompressed[i * chunk_length],
             chunk_size - 8, chunk_length);
 
         if (ntransferred < 0)
-            throw std::runtime_error("decompression of block " + std::to_string(i) + " failed with error code " + std::to_string(ntransferred));
+            return arrow::Status::SerializationError("decompression of block " + std::to_string(i) + " failed with error code " + std::to_string(ntransferred));
     }
 
+    // TODO see if can do it in a different way than putting the whole thing in a string
     std::string decompressed_data(decompressed.data(), decompressed.size());
     kaitai::kstream ks(decompressed_data);
     return std::make_shared<sstable_data_t>(&ks);
 }
 
 template <typename T>
-void read_sstable_file(const boost::filesystem::path &path, std::shared_ptr<T> *sstable_obj)
+arrow::Result<std::shared_ptr<T>> read_sstable_file(const boost::filesystem::path &path)
 {
-    std::ifstream ifs;
     try
     {
-        open_stream(path, &ifs);
-        kaitai::kstream ks(&ifs);
-        *sstable_obj = std::make_shared<T>(&ks);
+        ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(path));
+        kaitai::kstream ks(istream.get());
+        return std::make_shared<T>(&ks);
     }
     catch (const std::exception &err)
     {
-        *sstable_obj = nullptr;
+        return arrow::Status::SerializationError("error reading sstable file \"" + path.string() + "\": " + err.what());
     }
 }
 
-// overload for statistics file, which requires the stream to persist
 template <>
-void read_sstable_file(const boost::filesystem::path &path, std::shared_ptr<sstable_statistics_t> *sstable_obj)
+arrow::Result<std::shared_ptr<sstable_statistics_t>> read_sstable_file(const boost::filesystem::path &path)
 {
-    // These streams are static because kaitai "instances" (a section of the
-    // binary file specified by an offset) are lazy and will only read when the
-    // value is accessed, and we still need to access these instances outside of
-    // this function in order to read the serialization header data.
-    static std::ifstream ifs;
     try
     {
-        open_stream(path, &ifs);
-        static kaitai::kstream ks(&ifs);
-        *sstable_obj = std::make_shared<sstable_statistics_t>(&ks);
+        // TODO see if there is a better way to do this than static lifetime
+        ARROW_ASSIGN_OR_RAISE(static auto istream, open_stream(path));
+        istream->seekg(0, std::istream::end);
+        std::cout << "num bytes: " << istream->tellg() << '\n';
+        istream->seekg(0, std::istream::beg);
+        static kaitai::kstream ks(istream.get());
+        return std::make_shared<sstable_statistics_t>(&ks);
     }
     catch (const std::exception &err)
     {
-        *sstable_obj = nullptr;
+        return arrow::Status::SerializationError("error reading sstable file \"" + path.string() + "\": " + err.what());
     }
 }
-
-// ==================== DEBUG SSTABLE FILES ====================
-// These functions print some important data retrieved from the
-// sstable files.
-
-void debug_statistics(std::shared_ptr<sstable_statistics_t> statistics)
-{
-    std::cout << "========== statistics file ==========\n";
-    auto body = get_serialization_header(statistics);
-    std::cout << "\npartition key type: " << body->partition_key_type()->body() << '\n';
-
-    std::cout
-        << "min ttl: " << body->min_ttl()->val() << '\n'
-        << "min timestamp: " << body->min_timestamp()->val() << '\n'
-        << "min local deletion time: " << body->min_local_deletion_time()->val() << '\n';
-
-    std::cout << "\n=== clustering keys (" << body->clustering_key_types()->length()->val() << ") ===\n";
-    int i = 0;
-    for (auto &type : *body->clustering_key_types()->array())
-        std::cout << "type: " << type->body() << '\n';
-
-    std::cout << "\n=== static columns (" << body->static_columns()->length()->val() << ") ===\n";
-    i = 0;
-    for (auto &column : *body->static_columns()->array())
-        std::cout << column->name()->body() << "\t| " << column->column_type()->body() << '\n';
-
-    std::cout << "\n=== regular columns (" << body->regular_columns()->length()->val() << ") ===\n";
-    i = 0;
-    for (auto &column : *body->regular_columns()->array())
-        std::cout << column->name()->body() << "\t| " << column->column_type()->body() << '\n';
-}
-
-void debug_data(std::shared_ptr<sstable_data_t> sstable)
-{
-    std::cout << "========== data file ==========\n";
-    for (auto &partition : *sstable->partitions())
-    {
-        std::cout << "\n========== partition ==========\n"
-                     "key: "
-                  << partition->header()->key() << '\n';
-
-        for (auto &unfiltered : *partition->unfiltereds())
-        {
-            if ((unfiltered->flags() & 0x01) != 0)
-                break;
-
-            if ((unfiltered->flags() & 0x02) != 0) // range tombstone marker
-            {
-                std::cout << "range tombstone marker\n";
-                sstable_data_t::range_tombstone_marker_t *marker = (sstable_data_t::range_tombstone_marker_t *)unfiltered->body();
-            }
-            else
-            {
-                std::cout << "\n=== row ===\n";
-                sstable_data_t::row_t *row = (sstable_data_t::row_t *)unfiltered->body();
-                for (auto &cell : *row->clustering_blocks()->values())
-                    std::cout << "clustering cell: " << cell << '\n';
-
-                for (int i = 0; i < deserialization_helper_t::get_n_cols(deserialization_helper_t::REGULAR); ++i)
-                {
-                    if (deserialization_helper_t::is_multi_cell(deserialization_helper_t::REGULAR, i))
-                    {
-                        std::cout << "=== complex cell ===\n";
-                        sstable_data_t::complex_cell_t *cell = (sstable_data_t::complex_cell_t *)(*row->cells())[i].get();
-                        for (const auto &simple_cell : *cell->simple_cells())
-                            std::cout << "child path, value as string: " << simple_cell->path()->value() << " | " << simple_cell->value() << '\n';
-                    }
-                    else
-                    {
-                        sstable_data_t::simple_cell_t *cell = (sstable_data_t::simple_cell_t *)(*row->cells())[i].get();
-                        std::cout << "=== simple cell value as string: " << cell->value() << " ===\n";
-                    }
-                }
-            }
-        }
-    }
-    std::cout << "done reading data\n\n";
-}
-
-void debug_index(std::shared_ptr<sstable_index_t> index)
-{
-    std::cout << "========== index file ==========\n"
-                 "a description of the index file has not yet been implemented\n";
-}
-
-void debug_summary(std::shared_ptr<sstable_summary_t> summary)
-{
-    std::cout << "========== summary file ==========\n"
-                 "a description of the summary file has not yet been implemented\n";
-}
-
-constexpr int MAX_FILEPATH_SIZE = 45;
 
 /**
  * @brief Get the file paths of each SSTable file in a folder
@@ -373,56 +273,100 @@ constexpr int MAX_FILEPATH_SIZE = 45;
  */
 void get_file_paths(const boost::filesystem::path &dir_path, std::map<int, std::shared_ptr<sstable_t>> &sstables)
 {
-    using namespace boost::filesystem;
+    namespace fs = boost::filesystem;
+    for (const fs::directory_entry &file : fs::directory_iterator(dir_path))
+        if (fs::is_regular_file(file.path()))
+            add_file_to_sstables(file.path().string(), file.path().filename().string(), sstables);
+}
 
+arrow::Status get_file_paths_from_s3(const std::string &uri, std::map<int, std::shared_ptr<sstable_t>> &sstables)
+{
+    // get the bucket uri and the actual path to the file
+    size_t pos = uri.find('/', 5);
+    std::string bucket_uri{
+        pos == std::string::npos
+            ? uri
+            : uri.substr(0, pos)};
+    std::string path = uri.substr(5);
+
+    ARROW_RETURN_NOT_OK(arrow::fs::EnsureS3Initialized());
+
+    // create the S3 filesystem
+    ARROW_ASSIGN_OR_RAISE(auto options, arrow::fs::S3Options::FromUri(bucket_uri));
+    ARROW_ASSIGN_OR_RAISE(global_flags.s3fs, arrow::fs::S3FileSystem::Make(options));
+
+    // get the list of files in the directory pointed to by `path`
+    arrow::fs::FileSelector selector;
+    selector.base_dir = path;
+    ARROW_ASSIGN_OR_RAISE(auto file_info, global_flags.s3fs->GetFileInfo(selector));
+
+    for (auto &info : file_info)
+        if (info.IsFile())
+            add_file_to_sstables(info.path(), info.base_name(), sstables);
+
+    return arrow::Status::OK();
+}
+
+void add_file_to_sstables(const std::string &full_path, const std::string &file_name, std::map<int, std::shared_ptr<sstable_t>> &sstables)
+{
     char fmt[5];
-    uint32_t num;
-    char ftype_[25];
-    for (const directory_entry &file : directory_iterator(dir_path))
+    int num;
+    char db_type_buf[20]; // longest sstable file type specifier is "CompressionInfo"
+
+    if (!boost::iends_with(file_name, ".db") || (file_name.size() > MAX_FILEPATH_SIZE))
     {
-        path p = file.path();
-        if (p.extension() != ".db")
-        {
-            std::cout << "skipping unrecognized file " << p << '\n';
-            continue;
-        }
-
-        assert(p.filename().size() < MAX_FILEPATH_SIZE);
-        if (sscanf(p.filename().c_str(), "%2c-%d-big-%[^.]", fmt, &num, ftype_) != 3) // number of arguments filled
-        {
-            std::cerr << "Error reading formatted filename\n";
-            continue;
-        }
-        std::string_view ftype(ftype_);
-
-        if (sstables.count(num) == 0)
-            sstables[num] = std::make_shared<sstable_t>();
-
-        if (ftype == "Data")
-            sstables[num]->data_path = p;
-        else if (ftype == "Statistics")
-            sstables[num]->statistics_path = p;
-        else if (ftype == "Index")
-            sstables[num]->index_path = p;
-        else if (ftype == "Summary")
-            sstables[num]->summary_path = p;
-        else if (ftype == "CompressionInfo")
-            sstables[num]->compression_info_path = p;
+        std::cout << "skipping unrecognized file " << file_name << '\n';
+        return;
     }
+
+    if (sscanf(file_name.data(), "%2c-%d-big-%19[^.]", fmt, &num, db_type_buf) != 3) // number of arguments filled
+    {
+        std::cout << "Error reading formatted filename " << file_name << ", skipping\n";
+        return;
+    }
+
+    std::string_view db_type(db_type_buf);
+
+    if (sstables.count(num) == 0)
+        sstables[num] = std::make_shared<sstable_t>();
+
+    if (db_type == "Data")
+        sstables[num]->data_path = full_path;
+    else if (db_type == "Statistics")
+        sstables[num]->statistics_path = full_path;
+    else if (db_type == "Index")
+        sstables[num]->index_path = full_path;
+    else if (db_type == "Summary")
+        sstables[num]->summary_path = full_path;
+    else if (db_type == "CompressionInfo")
+        sstables[num]->compression_info_path = full_path;
+    else
+        std::cout << "skipping unrecognized file " << file_name << '\n';
 }
 
 // ==================== HELPER FUNCTIONS ====================
 
-void open_stream(const boost::filesystem::path &path, std::ifstream *ifs)
+arrow::Result<std::shared_ptr<std::istream>> open_stream(const boost::filesystem::path &path)
 {
-    *ifs = std::ifstream(path.c_str(), std::ifstream::binary);
-    if (!ifs->is_open())
-        throw std::runtime_error("could not open file \"" + path.string() + '\"');
+    if (global_flags.is_s3)
+    {
+        ARROW_ASSIGN_OR_RAISE(auto input_stream, global_flags.s3fs->OpenInputFile(path.string()));
+        ARROW_ASSIGN_OR_RAISE(auto file_size, input_stream->GetSize());
+        ARROW_ASSIGN_OR_RAISE(auto buffer, input_stream->Read(file_size));
+        return std::make_shared<std::istringstream>(buffer->ToString(), std::istringstream::binary);
+    }
+    else
+    {
+        auto ss = std::make_shared<std::ifstream>(path.c_str(), std::ifstream::binary);
+        if (!ss->is_open())
+            return arrow::Status::IOError("could not open file \"" + path.string() + '\"');
+        return ss;
+    }
 }
 
 // Initialize the deserialization helper using the schema from the serialization
-// header stored in the statistics file. This must be called before `read_data`.
-void process_serialization_header(sstable_statistics_t::serialization_header_t *serialization_header)
+// header stored in the statistics file.
+void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header)
 {
     // Set important constants for the serialization helper and initialize vectors to store
     // types of clustering columns

@@ -93,9 +93,12 @@ arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd)
  * 
  * @param table the arrow table to write
  */
-arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Table> table, arrow::MemoryPool *pool)
+arrow::Status write_parquet(const std::string &path, std::vector<std::shared_ptr<arrow::Table>> tables, arrow::MemoryPool *pool)
 {
+    arrow::ConcatenateTablesOptions options;
+    options.unify_schemas = true;
+    ARROW_ASSIGN_OR_RAISE(auto final_table, arrow::ConcatenateTables(tables, options));
     std::shared_ptr<arrow::io::FileOutputStream> outfile;
     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(path));
-    return parquet::arrow::WriteTable(*table, pool, outfile, 3);
+    return parquet::arrow::WriteTable(*final_table, pool, outfile, 3);
 }

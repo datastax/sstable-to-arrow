@@ -26,6 +26,9 @@
 
 arrow::Status send_tables(const std::vector<std::shared_ptr<arrow::Table>> &tables);
 arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd);
-arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Table> table, arrow::MemoryPool *pool = arrow::default_memory_pool());
+arrow::Status write_parquet(
+    const std::string &path,
+    std::vector<std::shared_ptr<arrow::Table>> tables,
+    arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 #endif
