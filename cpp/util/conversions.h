@@ -31,7 +31,7 @@ struct node
 {
     std::string_view str;
     std::shared_ptr<std::vector<std::shared_ptr<node>>> children;
-    node(const std::string_view &str_)
+    node(std::string_view str_)
         : str(str_), children(std::make_shared<std::vector<std::shared_ptr<node>>>()) {}
 };
 
@@ -44,24 +44,24 @@ extern const std::string_view compositetype, listtype, maptype, settype, tuplety
 // are encoded
 extern const std::vector<std::string_view> multi_cell_types;
 
-long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks);
-bool is_multi_cell(const std::string_view &coltype);
-std::string_view get_child_type(const std::string_view &type);
-void get_map_child_types(const std::string_view &type, std::string_view *key_type, std::string_view *value_type);
+size_t get_col_size(std::string_view coltype, kaitai::kstream *ks);
+bool is_multi_cell(std::string_view coltype);
+std::string_view get_child_type(std::string_view type);
+void get_map_child_types(std::string_view type, std::string_view *key_type, std::string_view *value_type);
 
-bool is_reversed(const std::string_view &type);
-bool is_composite(const std::string_view &type);
-bool is_list(const std::string_view &type);
-bool is_map(const std::string_view &type);
-bool is_set(const std::string_view &type);
-bool is_tuple(const std::string_view &type);
+bool is_reversed(std::string_view type);
+bool is_composite(std::string_view type);
+bool is_list(std::string_view type);
+bool is_map(std::string_view type);
+bool is_set(std::string_view type);
+bool is_tuple(std::string_view type);
 
 struct get_arrow_type_options {
     std::shared_ptr<arrow::DataType> replace_with{nullptr};
 };
 
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, const get_arrow_type_options &options = get_arrow_type_options{});
-arrow::Result<std::shared_ptr<node>> parse_nested_type(const std::string_view &type);
+std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get_arrow_type_options &options = get_arrow_type_options{});
+arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view type);
 
 } // namespace conversions
 

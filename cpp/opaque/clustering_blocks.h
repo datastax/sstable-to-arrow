@@ -18,7 +18,7 @@ public:
     std::vector<std::string> *values();
 };
 
-bool is_null(long long header, int i);
-bool is_empty(long long header, int i);
+bool is_null(uint64_t header, int i);
+bool is_empty(uint64_t header, int i);
 
 #endif

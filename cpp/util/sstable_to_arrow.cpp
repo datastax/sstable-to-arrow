@@ -2,7 +2,7 @@
 
 #include "sstable_to_arrow.h"
 
-arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(std::shared_ptr<sstable_statistics_t> statistics, std::shared_ptr<sstable_data_t> sstable, arrow::MemoryPool *pool)
+arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable, arrow::MemoryPool *pool)
 {
     auto helper = std::make_unique<conversion_helper_t>(statistics);
     ARROW_RETURN_NOT_OK(helper->init(pool));

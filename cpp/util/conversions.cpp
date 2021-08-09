@@ -58,7 +58,7 @@ const std::unordered_map<std::string_view, cassandra_type> type_info{
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
 
-long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
+size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
 {
     DEBUG_ONLY("getting col size of " + std::string(coltype) + '\n');
     if (coltype.rfind(reversedtype, 0) == 0)
@@ -87,7 +87,7 @@ long long get_col_size(const std::string_view &coltype, kaitai::kstream *ks)
     return len;
 }
 
-std::string_view get_child_type(const std::string_view &type)
+std::string_view get_child_type(std::string_view type)
 {
     size_t start = type.find('(') + 1;
     return std::string_view(
@@ -95,7 +95,7 @@ std::string_view get_child_type(const std::string_view &type)
         type.rfind(')') - start);
 }
 
-void get_map_child_types(const std::string_view &type, std::string_view *key_type, std::string_view *value_type)
+void get_map_child_types(std::string_view type, std::string_view *key_type, std::string_view *value_type)
 {
     const int sep_idx = type.find(',');
     size_t key_len = sep_idx - (maptype.size() + 1);
@@ -108,19 +108,19 @@ void get_map_child_types(const std::string_view &type, std::string_view *key_typ
      * Checks if the currently selected cell has multiple child cells (usually a collection like a list, map, set, etc)
      * These are usually referred to as complex cells
      */
-bool is_multi_cell(const std::string_view &coltype)
+bool is_multi_cell(std::string_view coltype)
 {
     if (is_reversed(coltype))
         return is_multi_cell(get_child_type(coltype));
 
-    for (const std::string_view &complex_type : multi_cell_types)
+    for (std::string_view complex_type : multi_cell_types)
         if (coltype.rfind(complex_type, 0) == 0)
             return true;
     return false;
 }
 
 #define IS_TYPE_WITH_PARAMETERS(name)            \
-    bool is_##name(const std::string_view &type) \
+    bool is_##name(std::string_view type) \
     {                                            \
         return type.rfind(name##type, 0) == 0;   \
     }
@@ -134,7 +134,7 @@ IS_TYPE_WITH_PARAMETERS(tuple)
 
 #undef IS_TYPE_WITH_PARAMETERS
 
-std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, const get_arrow_type_options &options)
+std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get_arrow_type_options &options)
 {
     try
     {
@@ -171,7 +171,7 @@ std::shared_ptr<arrow::DataType> get_arrow_type(const std::string_view &type, co
     throw std::runtime_error("type not found or supported when getting arrow type: " + std::string(type));
 }
 
-arrow::Result<std::shared_ptr<node>> parse_nested_type(const std::string_view &type)
+arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view type)
 {
     std::stack<std::shared_ptr<node>> stack;
     size_t prev_start = 0;

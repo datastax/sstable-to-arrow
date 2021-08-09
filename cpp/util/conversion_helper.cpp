@@ -282,7 +282,7 @@ arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows
 }
 
 // Read the serialization header from the statistics file.
-sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics)
+sstable_statistics_t::serialization_header_t *get_serialization_header(const std::unique_ptr<sstable_statistics_t> &statistics)
 {
     const auto &toc = *statistics->toc()->array();
     const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file

@@ -99,3 +99,16 @@ void read_options(int argc, char *const argv[])
         }
     }
 }
+
+timer::timer()
+{
+    auto start_ts = std::chrono::high_resolution_clock::now();
+    m_start = std::chrono::time_point_cast<std::chrono::microseconds>(start_ts).time_since_epoch().count();
+}
+
+timer::~timer()
+{
+    auto end_ts = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::time_point_cast<std::chrono::microseconds>(end_ts).time_since_epoch().count();
+    std::cout << "[PROFILE " << m_name << "]: " << (end - m_start) << "us\n";
+}

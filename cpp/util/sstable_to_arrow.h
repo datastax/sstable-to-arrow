@@ -18,8 +18,8 @@
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
 arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
-    std::shared_ptr<sstable_statistics_t> statistics,
-    std::shared_ptr<sstable_data_t> sstable,
+    const std::unique_ptr<sstable_statistics_t> &statistics,
+    const std::unique_ptr<sstable_data_t> &sstable,
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 arrow::Status process_partition(

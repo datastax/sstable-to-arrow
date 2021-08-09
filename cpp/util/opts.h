@@ -80,4 +80,12 @@ const std::string help_msg =
 
 const boost::filesystem::path sample_data_path{"/home/sample_data/baselines/iot-5b608090e03d11ebb4c1d335f841c590"};
 
+struct timer
+{
+    std::string m_name;
+    int64_t m_start;
+    timer();
+    ~timer();
+};
+
 #endif

@@ -83,6 +83,6 @@ public:
 arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows);
 
 // extract the serialization header from an SSTable
-sstable_statistics_t::serialization_header_t *get_serialization_header(std::shared_ptr<sstable_statistics_t> statistics);
+sstable_statistics_t::serialization_header_t *get_serialization_header(const std::unique_ptr<sstable_statistics_t> &statistics);
 
 #endif

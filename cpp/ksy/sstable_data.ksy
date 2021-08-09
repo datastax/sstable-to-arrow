@@ -189,6 +189,7 @@ types:
 
         # TODO maybe process this differently directly into arrow instead of processing it after?
         # doesn't change order of complexity, maybe constant factor optimization
+        # but allows for streaming format = unlimited size dbs
       - id: value
         size: _root.deserialization_helper.get_col_size.as<u8>
         if: (flags & 0x04) == 0 # only if does not have empty value

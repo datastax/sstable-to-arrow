@@ -12,7 +12,7 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
     values_.resize(size);
     while (offset < size)
     {
-        long long header = vint_t(ks).val();
+        uint64_t header = vint_t(ks).val();
         int limit = std::min(size, offset + 32);
         while (offset < limit)
         {
@@ -29,15 +29,15 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
     }
 }
 
-bool is_null(long long header, int i)
+bool is_null(uint64_t header, int i)
 {
-    long long mask = 1 << ((i * 2) + 1);
+    uint64_t mask = 1 << ((i * 2) + 1);
     return (header & mask) != 0;
 }
 
-bool is_empty(long long header, int i)
+bool is_empty(uint64_t header, int i)
 {
-    long long mask = 1 << (i * 2);
+    uint64_t mask = 1 << (i * 2);
     return (header & mask) != 0;
 }
 
