@@ -42,17 +42,18 @@ class column_t
     // uuids require a second value column
     std::unique_ptr<arrow::ArrayBuilder> second;
     bool has_second = false;
+    bool m_is_clustering;
 
     // this constructor infers the arrow::DataType from the Cassandra type
-    column_t(const std::string &name_, const std::string &cassandra_type_)
-        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_))
+    column_t(const std::string &name_, const std::string &cassandra_type_, bool is_clustering)
+        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_), is_clustering)
     {
     }
 
-    column_t(const std::string &name_, const std::string &cassandra_type_, std::shared_ptr<arrow::DataType> type_)
-        : cassandra_type(cassandra_type_),
-          field(arrow::field(name_, type_)), has_second{conversions::is_uuid(cassandra_type_) &&
-                                                        global_flags.for_cudf} {};
+    column_t(const std::string &name_, const std::string &cassandra_type_, std::shared_ptr<arrow::DataType> type_,
+             bool is_clustering)
+        : cassandra_type(cassandra_type_), field(arrow::field(name_, type_)),
+          has_second{conversions::is_uuid(cassandra_type_) && global_flags.for_cudf}, m_is_clustering{is_clustering} {};
 
     arrow::Status init(arrow::MemoryPool *pool, bool complex_ts_allowed = true);
 
@@ -63,6 +64,8 @@ class column_t
     uint8_t append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name) const;
     arrow::Result<uint8_t> finish(std::shared_ptr<arrow::Array> *ptr);
     arrow::Status append_null();
+
+    bool has_metadata() const;
 };
 
 class conversion_helper_t
@@ -94,7 +97,7 @@ class conversion_helper_t
     uint64_t get_ttl(uint64_t delta) const;
     arrow::Status append_partition_deletion_time(uint32_t local_deletion_time, uint64_t marked_for_delete_at);
 
-    std::shared_ptr<column_t> make_column(const std::string &name, const std::string &type);
+    std::shared_ptr<column_t> make_column(const std::string &name, const std::string &type, bool is_clustering);
 
     size_t num_data_cols() const;
     size_t num_ts_cols() const;

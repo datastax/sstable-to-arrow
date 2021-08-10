@@ -71,7 +71,8 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
             // append partition key
             const std::string &type = helper->partition_key->cassandra_type;
             if (conversions::is_uuid(type))
-                ARROW_RETURN_NOT_OK(append_uuid(helper->partition_key->builder.get(), helper->partition_key->second.get(), partition_key));
+                ARROW_RETURN_NOT_OK(append_uuid(helper->partition_key->builder.get(),
+                                                helper->partition_key->second.get(), partition_key));
             else
                 ARROW_RETURN_NOT_OK(append_scalar(type, helper->partition_key->builder.get(), partition_key, pool));
             // append partition deletion info
@@ -423,8 +424,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         auto builder = dynamic_cast<arrow::StructBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
 
-        auto maybe_tree = conversions::parse_nested_type(coltype);
-        auto tree = *maybe_tree;
+        ARROW_ASSIGN_OR_RAISE(auto tree, conversions::parse_nested_type(coltype));
         for (size_t i = 0; i < tree->children->size(); ++i)
         {
             uint16_t child_size = ks.read_u2be();
@@ -436,7 +436,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     }
     else if (conversions::is_reversed(coltype))
         return append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool);
-    else if (coltype == "org.apache.cassandra.db.marshal.DecimalType") // decimal
+    else if (coltype == conversions::types::DecimalType) // decimal
     {
         auto builder = (arrow::StructBuilder *)builder_ptr;
         ARROW_RETURN_NOT_OK(builder->Append());
@@ -447,7 +447,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         ARROW_RETURN_NOT_OK(val_builder->Append(ks.read_bytes_full()));
         return arrow::Status::OK();
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.DurationType") // duration
+    else if (coltype == conversions::types::DurationType) // duration
     {
         auto builder = dynamic_cast<arrow::FixedSizeListBuilder *>(builder_ptr);
         auto value_builder = dynamic_cast<arrow::Int64Builder *>(builder->value_builder());
@@ -460,7 +460,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         ARROW_RETURN_NOT_OK(value_builder->Append(nanoseconds));
         return arrow::Status::OK();
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.InetAddressType") // inet
+    else if (coltype == conversions::types::InetAddressType) // inet
     {
         auto builder = dynamic_cast<arrow::DenseUnionBuilder *>(builder_ptr);
         if (ks.size() == 4)
@@ -477,16 +477,16 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         }
         else
         {
-            std::cerr << "invalid IP address of size " << ks.size() << " bytes. needs to be 4 or 8\n";
-            return arrow::Status::TypeError("invalid IP address");
+            return arrow::Status::TypeError("invalid IP address of size " + std::to_string(ks.size()) +
+                                            "bytes. needs to be 4 or 8");
         }
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.IntegerType") // varint
+    else if (coltype == conversions::types::IntegerType) // varint
     {
         auto builder = dynamic_cast<arrow::Int64Builder *>(builder_ptr);
         return builder->Append(vint_t::parse_java(bytes.data(), bytes.size()));
     }
-    else if (coltype == "org.apache.cassandra.db.marshal.SimpleDateType") // date
+    else if (coltype == conversions::types::SimpleDateType) // date
     {
         auto builder = dynamic_cast<arrow::Date32Builder *>(builder_ptr);
         uint32_t date = ks.read_u4be() - (1 << 31);

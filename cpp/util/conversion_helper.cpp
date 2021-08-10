@@ -36,7 +36,7 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
     if (has_second)
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, field->type(), &second));
 
-    if (global_flags.include_metadata)
+    if (has_metadata())
     {
         // TODO currently calling get_arrow_type multiple times, potentially
         // expensive see if there is easier way to replace since we already know
@@ -65,7 +65,7 @@ arrow::Status column_t::reserve(uint32_t nrows)
     if (has_second)
         ARROW_RETURN_NOT_OK(reserve_builder(second.get(), nrows));
 
-    if (global_flags.include_metadata)
+    if (has_metadata())
         for (auto builder_ptr : {ts_builder.get(), local_del_time_builder.get(), ttl_builder.get()})
             ARROW_RETURN_NOT_OK(reserve_builder(builder_ptr, nrows));
     return arrow::Status::OK();
@@ -81,7 +81,7 @@ arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
     if (has_second)
         ARROW_RETURN_NOT_OK(second->Finish(NEXT_ITEM));
 
-    if (global_flags.include_metadata)
+    if (has_metadata())
     {
         ARROW_RETURN_NOT_OK(ts_builder->Finish(NEXT_ITEM));
         ARROW_RETURN_NOT_OK(local_del_time_builder->Finish(NEXT_ITEM));
@@ -110,7 +110,7 @@ uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema, const 
     else
         NEXT_ITEM = field;
 
-    if (global_flags.include_metadata)
+    if (has_metadata())
     {
         NEXT_ITEM = arrow::field("_ts_" + ts_name, ts_builder->type());
         NEXT_ITEM = arrow::field("_del_time_" + ts_name, local_del_time_builder->type());
@@ -134,11 +134,17 @@ arrow::Status column_t::append_null()
     return arrow::Status::OK();
 }
 
-std::shared_ptr<column_t> conversion_helper_t::make_column(const std::string &name, const std::string &type)
+bool column_t::has_metadata() const
+{
+    return global_flags.include_metadata && !m_is_clustering;
+}
+
+std::shared_ptr<column_t> conversion_helper_t::make_column(const std::string &name, const std::string &type,
+                                                           bool is_clustering)
 {
     if (conversions::is_uuid(type))
         ++m_n_uuid_cols;
-    return std::make_shared<column_t>(name, type);
+    return std::make_shared<column_t>(name, type, is_clustering);
 }
 
 // initialize the name and type of the partition key column and all of the
@@ -153,7 +159,7 @@ conversion_helper_t::conversion_helper_t(const std::unique_ptr<sstable_statistic
     assert(metadata != nullptr);
 
     // partition key
-    partition_key = make_column("partition_key", metadata->partition_key_type()->body());
+    partition_key = make_column("partition_key", metadata->partition_key_type()->body(), false);
 
     // clustering columns
     const std::string clustering_key_name = "clustering_key_";
@@ -161,14 +167,14 @@ conversion_helper_t::conversion_helper_t(const std::unique_ptr<sstable_statistic
     for (auto &col : *metadata->clustering_key_types()->array())
         clustering_cols.push_back(
             make_column(clustering_key_name + std::to_string(i++), // TODO expensive string concatentation
-                        col->body()));
+                        col->body(), true));
 
     // static and regular columns
     for (auto &col : *metadata->static_columns()->array())
-        static_cols.push_back(make_column(col->name()->body(), col->column_type()->body()));
+        static_cols.push_back(make_column(col->name()->body(), col->column_type()->body(), false));
 
     for (auto &col : *metadata->regular_columns()->array())
-        regular_cols.push_back(make_column(col->name()->body(), col->column_type()->body()));
+        regular_cols.push_back(make_column(col->name()->body(), col->column_type()->body(), false));
 }
 
 // creates the builders for each of the columns in this table
