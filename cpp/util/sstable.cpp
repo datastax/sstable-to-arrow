@@ -96,7 +96,9 @@ arrow::Status sstable_t::read_decompressed_sstable()
     auto bs = new boost::interprocess::ibufferstream(m_decompressed_data.data(), m_decompressed_data.size());
     auto is = std::unique_ptr<std::istream>(bs);
     if (!is)
+    {
         return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
+    }
 
     m_data.init(std::move(is));
 
@@ -151,24 +153,29 @@ void init_deserialization_helper(sstable_statistics_t::serialization_header_t *s
 {
     // Set important constants for the serialization helper and initialize
     // vectors to store types of clustering columns
-    auto clustering_key_types = serialization_header->clustering_key_types()->array();
-    auto static_columns = serialization_header->static_columns()->array();
-    auto regular_columns = serialization_header->regular_columns()->array();
+    auto *clustering_key_types = serialization_header->clustering_key_types()->array();
+    auto *static_columns = serialization_header->static_columns()->array();
+    auto *regular_columns = serialization_header->regular_columns()->array();
 
     deserialization_helper_t::set_n_cols(deserialization_helper_t::CLUSTERING, clustering_key_types->size());
     deserialization_helper_t::set_n_cols(deserialization_helper_t::STATIC, static_columns->size());
     deserialization_helper_t::set_n_cols(deserialization_helper_t::REGULAR, regular_columns->size());
 
-    int i;
-    i = 0;
+    int i{0};
     for (auto &type : *clustering_key_types)
+    {
         deserialization_helper_t::set_col_type(deserialization_helper_t::CLUSTERING, i++, type->body());
+    }
     i = 0;
     for (auto &column : *static_columns)
+    {
         deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->column_type()->body());
+    }
     i = 0;
     for (auto &column : *regular_columns)
+    {
         deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->column_type()->body());
+    }
 }
 
 arrow::Result<std::unique_ptr<std::istream>> open_stream(const std::string &path)
@@ -182,9 +189,11 @@ arrow::Result<std::unique_ptr<std::istream>> open_stream(const std::string &path
     }
     else
     {
-        auto ifs = new std::ifstream(path.c_str(), std::ifstream::binary);
+        auto *ifs = new std::ifstream(path.c_str(), std::ifstream::binary);
         if (!ifs->is_open())
+        {
             return arrow::Status::IOError("could not open file \"" + path + '\"');
+        }
         auto stream = std::unique_ptr<std::istream>(ifs);
         return stream;
     }

@@ -14,14 +14,14 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     bitmask = vint_t(ks).val();
 
-    int superset_count = deserialization_helper_t::get_n_cols(deserialization_helper_t::curkind);
+    size_t superset_count = deserialization_helper_t::get_n_cols(deserialization_helper_t::curkind);
     if (superset_count >= 64)
     {
-        int delta = bitmask;
-        int column_count = superset_count - delta;
+        uint64_t delta = bitmask;
+        uint64_t column_count = superset_count - delta;
         if (column_count < superset_count / 2) // encode the columns that are set
         {
-            for (int i = 0; i < column_count; i++)
+            for (size_t i = 0; i < column_count; i++)
             {
                 vint_t idx(ks);
 
@@ -31,18 +31,20 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
         else // more columns are set than absent, so `bitmask` stores the absent
              // columns
         {
-            int idx = 0;
-            int skipped = 0;
+            size_t idx = 0;
+            size_t skipped = 0;
             while (true)
             {
-                int next_missing_index = skipped < delta ? vint_t(ks).val() : superset_count;
+                size_t next_missing_index = skipped < delta ? vint_t(ks).val() : superset_count;
                 while (idx < next_missing_index)
                 {
                     // do stuff
                     idx++;
                 }
                 if (idx == superset_count)
+                {
                     break;
+                }
                 idx++;
                 skipped++;
             }

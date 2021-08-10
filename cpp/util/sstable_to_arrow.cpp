@@ -70,7 +70,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
             no_rows = false;
             // append partition key
             const std::string &type = helper->partition_key->cassandra_type;
-            if (conversions::is_uuid(type))
+            if (helper->partition_key->has_second)
                 ARROW_RETURN_NOT_OK(append_uuid(helper->partition_key->builder.get(),
                                                 helper->partition_key->second.get(), partition_key));
             else
@@ -584,5 +584,5 @@ arrow::Status append_ttl_if_exists(column_t::ttl_builder_t *builder, const std::
 // in this SSTable
 bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx)
 {
-    return row->_is_null_columns_bitmask() || (row->columns_bitmask()->bitmask & (1 << idx)) == 0;
+    return row->_is_null_columns_bitmask() || (row->columns_bitmask()->bitmask & (1U << idx)) == 0;
 }

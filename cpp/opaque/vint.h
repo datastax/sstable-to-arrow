@@ -17,7 +17,7 @@ class vint_t : public kaitai::kstruct
   public:
     vint_t(kaitai::kstream *ks);
     static uint64_t parse_java(const char *bytes, size_t size);
-    uint64_t val();
+    uint64_t val() const;
 };
 
 #endif

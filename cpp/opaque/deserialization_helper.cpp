@@ -8,10 +8,13 @@
 #include "conversions.h"      // for get_col_size, is_multi_cell
 #include "opts.h"             // for DEBUG_ONLY
 #include <algorithm>          // for min
-#include <assert.h>           // for assert
+#include <cassert>            // for assert
 #include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
 
-#define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
+constexpr void CHECK_KIND(int kind)
+{
+    assert(kind >= 0 && kind < 3);
+}
 
 // =============== DEFINE STATIC FIELDS ===============
 
@@ -19,7 +22,7 @@ int deserialization_helper_t::idx = 0;
 int deserialization_helper_t::curkind = 0;
 uint64_t deserialization_helper_t::bitmask = 0;
 
-const std::vector<std::shared_ptr<std::vector<std::string>>> deserialization_helper_t::colkinds = {
+const std::vector<std::shared_ptr<std::vector<std::string>>> deserialization_helper_t::colkinds{
     std::make_shared<std::vector<std::string>>(), std::make_shared<std::vector<std::string>>(),
     std::make_shared<std::vector<std::string>>()};
 

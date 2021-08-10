@@ -20,7 +20,13 @@ case "$1" in
         ninja
         ;;
     post-create)
-        apt-get install -y gdb valgrind llvm-10-dev libclang-10-dev clang-10
+        apt-get install -y \
+            clang-10 \
+            clang-tidy-10 \
+            gdb \
+            llvm-10-dev \
+            libclang-10-dev \
+            valgrind
         mkdir /tmp/iwyu && cd /tmp/iwyu
         git clone https://github.com/include-what-you-use/include-what-you-use.git
         cd include-what-you-use

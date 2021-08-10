@@ -26,11 +26,17 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
             std::string cql_type = deserialization_helper_t::get_col_type(CLUSTERING, offset);
 
             if (is_null(header, offset))
+            {
                 values_[offset] = nullptr; // this is probably unsafe but idk a better way
+            }
             else if (is_empty(header, offset))
+            {
                 values_[offset] = '\0';
+            }
             else
+            {
                 values_[offset] = ks->read_bytes(conversions::get_col_size(cql_type, _io()));
+            }
             offset++;
         }
     }
@@ -38,13 +44,13 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
 
 bool is_null(uint64_t header, int i)
 {
-    uint64_t mask = 1 << ((i * 2) + 1);
+    uint64_t mask = 1U << ((i * 2) + 1);
     return (header & mask) != 0;
 }
 
 bool is_empty(uint64_t header, int i)
 {
-    uint64_t mask = 1 << (i * 2);
+    uint64_t mask = 1U << (i * 2);
     return (header & mask) != 0;
 }
 

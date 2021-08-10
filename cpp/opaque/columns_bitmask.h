@@ -6,7 +6,7 @@
 namespace kaitai
 {
 class kstream;
-}
+} // namespace kaitai
 
 class columns_bitmask_t : public kaitai::kstruct
 {

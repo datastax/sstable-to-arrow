@@ -9,7 +9,8 @@ RUN apt install -y \
     git \
     libcurl4-openssl-dev \
     libssl-dev \
-    ninja-build
+    ninja-build \
+    python3-dev
 
 # download required resources into /tmp
 WORKDIR /tmp
@@ -25,7 +26,7 @@ RUN apt install -y ./kaitai-struct-compiler_0.9_all.deb
 # install boost
 RUN tar --bzip2 -xf ./boost_1_76_0.tar.bz2
 WORKDIR /tmp/boost_1_76_0
-RUN ./bootstrap.sh --with-libraries=filesystem,log,python,program_options
+RUN ./bootstrap.sh --with-libraries=filesystem,log,python,iostreams,program_options
 RUN ./b2 install
 
 # install kaitai_struct_cpp_stl_runtime
@@ -37,7 +38,12 @@ RUN ninja install
 # install arrow
 RUN mkdir /tmp/arrow/cpp/release
 WORKDIR /tmp/arrow/cpp/release
-RUN cmake -GNinja -DARROW_FILESYSTEM=ON -DARROW_PARQUET=ON -DARROW_S3=ON -DARROW_WITH_LZ4=ON  ..
+RUN cmake -GNinja \
+    -DARROW_PARQUET=ON \
+    -DARROW_S3=ON \
+    -DARROW_WITH_LZ4=ON \
+    -DARROW_PYTHON=ON \
+    ..
 RUN ninja
 RUN ninja install
 

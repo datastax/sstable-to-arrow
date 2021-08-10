@@ -14,21 +14,21 @@
 #include <boost/filesystem/directory.hpp>       // for directory_entry, dir...
 #include <boost/filesystem/operations.hpp>      // for is_regular_file
 #include <boost/filesystem/path_traits.hpp>     // for filesystem
+#include <cstdio>                               // for sscanf, size_t
 #include <ext/alloc_traits.h>                   // for __alloc_traits<>::va...
 #include <iostream>                             // for operator<<, basic_os...
-#include <stdio.h>                              // for sscanf, size_t
 #include <string_view>                          // for operator==, basic_st...
 #include <utility>                              // for pair
 #include <vector>                               // for vector
 namespace arrow
 {
 class Table;
-}
+} // namespace arrow
 
 #define EXIT_NOT_OK(expr, msg)                                                                                         \
     do                                                                                                                 \
     {                                                                                                                  \
-        arrow::Status _s = (expr);                                                                                     \
+        const arrow::Status &_s = (expr);                                                                              \
         if (!_s.ok())                                                                                                  \
         {                                                                                                              \
             std::cerr << (msg) << ": " << _s.message() << '\n';                                                        \
@@ -42,18 +42,22 @@ int main(int argc, char *argv[])
 {
     read_options(argc, argv);
 
-    if (global_flags.errors.size() > 0)
+    if (!global_flags.errors.empty())
     {
         std::cerr << "invalid arguments:\n";
         for (const std::string &err : global_flags.errors)
+        {
             std::cerr << err << '\n';
+        }
         return 1;
     }
 
     EXIT_NOT_OK(run_arguments(), "error running arguments");
 
     if (!global_flags.read_sstable_dir)
+    {
         return 0;
+    }
 
     s3_connection conn;
     if (!conn.ok())
@@ -65,9 +69,13 @@ int main(int argc, char *argv[])
     std::map<int, std::shared_ptr<sstable_t>> sstables;
 
     if (global_flags.is_s3)
+    {
         EXIT_NOT_OK(get_file_paths_from_s3(global_flags.sstable_dir_path.string(), sstables), "error loading from S3");
+    }
     else
+    {
         get_file_paths(global_flags.sstable_dir_path, sstables);
+    }
 
     if (sstables.empty())
     {
@@ -165,8 +173,12 @@ void get_file_paths(const boost::filesystem::path &dir_path, std::map<int, std::
 {
     namespace fs = boost::filesystem;
     for (const fs::directory_entry &file : fs::directory_iterator(dir_path))
+    {
         if (fs::is_regular_file(file.path()))
+        {
             add_file_to_sstables(file.path().string(), file.path().filename().string(), sstables);
+        }
+    }
 }
 
 arrow::Status get_file_paths_from_s3(const std::string &uri, std::map<int, std::shared_ptr<sstable_t>> &sstables)
@@ -188,8 +200,12 @@ arrow::Status get_file_paths_from_s3(const std::string &uri, std::map<int, std::
     ARROW_ASSIGN_OR_RAISE(auto file_info, global_flags.s3fs->GetFileInfo(selector));
 
     for (auto &info : file_info)
+    {
         if (info.IsFile())
+        {
             add_file_to_sstables(info.path(), info.base_name(), sstables);
+        }
+    }
 
     return arrow::Status::OK();
 }
@@ -218,18 +234,32 @@ void add_file_to_sstables(const std::string &full_path, const std::string &file_
 
     // create this sstable if it does not yet exist
     if (sstables.count(num) == 0)
+    {
         sstables[num] = std::make_shared<sstable_t>();
+    }
 
     if (db_type == "Data")
+    {
         sstables[num]->set_data_path(full_path);
+    }
     else if (db_type == "Statistics")
+    {
         sstables[num]->set_statistics_path(full_path);
+    }
     else if (db_type == "Index")
+    {
         sstables[num]->set_index_path(full_path);
+    }
     else if (db_type == "Summary")
+    {
         sstables[num]->set_summary_path(full_path);
+    }
     else if (db_type == "CompressionInfo")
+    {
         sstables[num]->set_compression_info_path(full_path);
+    }
     else
+    {
         std::cout << "skipping unrecognized file " << file_name << '\n';
+    }
 }
