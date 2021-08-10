@@ -69,8 +69,11 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
         {
             no_rows = false;
             // append partition key
-            ARROW_RETURN_NOT_OK(append_scalar(helper->partition_key->cassandra_type,
-                                              helper->partition_key->builder.get(), partition_key, pool));
+            const std::string &type = helper->partition_key->cassandra_type;
+            if (conversions::is_uuid(type))
+                ARROW_RETURN_NOT_OK(append_uuid(helper->partition_key->builder.get(), helper->partition_key->second.get(), partition_key));
+            else
+                ARROW_RETURN_NOT_OK(append_scalar(type, helper->partition_key->builder.get(), partition_key, pool));
             // append partition deletion info
             if (global_flags.include_metadata)
                 ARROW_RETURN_NOT_OK(helper->append_partition_deletion_time(local_deletion_time, marked_for_delete_at));
@@ -192,7 +195,10 @@ arrow::Status process_row(sstable_data_t::row_t *row, bool is_static,
         {
             auto &cell = (*row->clustering_blocks()->values())[i];
             auto &col = helper->clustering_cols[i];
-            ARROW_RETURN_NOT_OK(append_scalar(col->cassandra_type, col->builder.get(), cell, pool));
+            if (col->has_second)
+                ARROW_RETURN_NOT_OK(append_uuid(col->builder.get(), col->second.get(), cell));
+            else
+                ARROW_RETURN_NOT_OK(append_scalar(col->cassandra_type, col->builder.get(), cell, pool));
             // ignore timestamps for clustering cols since they don't have them
         }
     }
@@ -387,7 +393,20 @@ arrow::Status append_simple(std::shared_ptr<column_t> col, const std::unique_ptr
         ARROW_RETURN_NOT_OK(append_local_del_time_if_exists(local_del_time_builder, helper, cell));
         ARROW_RETURN_NOT_OK(append_ttl_if_exists(ttl_builder, helper, cell));
     }
-    return append_scalar(col->cassandra_type, col->builder.get(), cell->value(), pool);
+    if (col->has_second)
+        return append_uuid(col->builder.get(), col->second.get(), cell->value());
+    else
+        return append_scalar(col->cassandra_type, col->builder.get(), cell->value(), pool);
+}
+
+arrow::Status append_uuid(arrow::ArrayBuilder *first, arrow::ArrayBuilder *second, std::string_view bytes)
+{
+    auto first_builder = dynamic_cast<arrow::UInt64Builder *>(first);
+    auto second_builder = dynamic_cast<arrow::UInt64Builder *>(second);
+    kaitai::kstream ks(std::string{bytes});
+    ARROW_RETURN_NOT_OK(first_builder->Append(ks.read_u8be()));
+    ARROW_RETURN_NOT_OK(second_builder->Append(ks.read_u8be()));
+    return arrow::Status::OK();
 }
 
 arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, std::string_view bytes,

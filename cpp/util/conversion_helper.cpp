@@ -4,7 +4,8 @@
 #include <arrow/table.h>              // for Table
 #include <arrow/type.h>               // for Field, DataType, Schema (ptr o...
 #include <assert.h>                   // for assert
-#include <kaitai/kaitaistruct.h>      // for kstruct
+#include <cstdint>
+#include <kaitai/kaitaistruct.h> // for kstruct
 
 #include <algorithm>          // for max
 #include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
@@ -32,6 +33,8 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
 {
     // create data builder
     ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, field->type(), &builder));
+    if (has_second)
+        ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, field->type(), &second));
 
     if (global_flags.include_metadata)
     {
@@ -59,6 +62,9 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
 arrow::Status column_t::reserve(uint32_t nrows)
 {
     ARROW_RETURN_NOT_OK(reserve_builder(builder.get(), nrows));
+    if (has_second)
+        ARROW_RETURN_NOT_OK(reserve_builder(second.get(), nrows));
+
     if (global_flags.include_metadata)
         for (auto builder_ptr : {ts_builder.get(), local_del_time_builder.get(), ttl_builder.get()})
             ARROW_RETURN_NOT_OK(reserve_builder(builder_ptr, nrows));
@@ -68,15 +74,22 @@ arrow::Status column_t::reserve(uint32_t nrows)
 // DANGEROUS - ensure that the next four elements in `ptr` are allocated!
 arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
 {
-    ARROW_RETURN_NOT_OK(builder->Finish(ptr));
+    uint8_t n_cols_finished = 0;
+
+#define NEXT_ITEM (ptr + n_cols_finished++)
+    ARROW_RETURN_NOT_OK(builder->Finish(NEXT_ITEM));
+    if (has_second)
+        ARROW_RETURN_NOT_OK(second->Finish(NEXT_ITEM));
+
     if (global_flags.include_metadata)
     {
-        ARROW_RETURN_NOT_OK(ts_builder->Finish(ptr + 1));
-        ARROW_RETURN_NOT_OK(local_del_time_builder->Finish(ptr + 2));
-        ARROW_RETURN_NOT_OK(ttl_builder->Finish(ptr + 3));
-        return 4;
+        ARROW_RETURN_NOT_OK(ts_builder->Finish(NEXT_ITEM));
+        ARROW_RETURN_NOT_OK(local_del_time_builder->Finish(NEXT_ITEM));
+        ARROW_RETURN_NOT_OK(ttl_builder->Finish(NEXT_ITEM));
     }
-    return 1;
+#undef NEXT_ITEM
+
+    return n_cols_finished;
 }
 
 uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema) const
@@ -86,24 +99,46 @@ uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema) const
 
 uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name) const
 {
-    *schema = field;
+    uint8_t n_cols_finished = 0;
+
+#define NEXT_ITEM *(schema + n_cols_finished++)
+    if (has_second)
+    {
+        NEXT_ITEM = field->WithName(field->name() + "_part1");
+        NEXT_ITEM = field->WithName(field->name() + "_part2"); // duplicate the type
+    }
+    else
+        NEXT_ITEM = field;
+
     if (global_flags.include_metadata)
     {
-        *(schema + 1) = arrow::field("_ts_" + ts_name, ts_builder->type());
-        *(schema + 2) = arrow::field("_del_time_" + ts_name, local_del_time_builder->type());
-        *(schema + 3) = arrow::field("_ttl_" + ts_name, ttl_builder->type());
-        return 4;
+        NEXT_ITEM = arrow::field("_ts_" + ts_name, ts_builder->type());
+        NEXT_ITEM = arrow::field("_del_time_" + ts_name, local_del_time_builder->type());
+        NEXT_ITEM = arrow::field("_ttl_" + ts_name, ttl_builder->type());
     }
-    return 1;
+#undef NEXT_ITEM
+
+    return n_cols_finished;
 }
 
 arrow::Status column_t::append_null()
 {
     ARROW_RETURN_NOT_OK(builder->AppendNull());
+    if (has_second)
+        ARROW_RETURN_NOT_OK(second->AppendNull());
+
     if (global_flags.include_metadata)
         for (auto &builder_ptr : {ts_builder.get(), local_del_time_builder.get(), ttl_builder.get()})
             ARROW_RETURN_NOT_OK(builder_ptr->AppendNull());
+
     return arrow::Status::OK();
+}
+
+std::shared_ptr<column_t> conversion_helper_t::make_column(const std::string &name, const std::string &type)
+{
+    if (conversions::is_uuid(type))
+        ++m_n_uuid_cols;
+    return std::make_shared<column_t>(name, type);
 }
 
 // initialize the name and type of the partition key column and all of the
@@ -118,22 +153,22 @@ conversion_helper_t::conversion_helper_t(const std::unique_ptr<sstable_statistic
     assert(metadata != nullptr);
 
     // partition key
-    partition_key = std::make_shared<column_t>("partition_key", metadata->partition_key_type()->body());
+    partition_key = make_column("partition_key", metadata->partition_key_type()->body());
 
     // clustering columns
-    std::string clustering_key_name = "clustering_key_";
+    const std::string clustering_key_name = "clustering_key_";
     int i = 0; // count clustering columns
     for (auto &col : *metadata->clustering_key_types()->array())
-        clustering_cols.push_back(std::make_shared<column_t>(
-            clustering_key_name + std::to_string(i++), // TODO expensive string concatentation
-            col->body()));
+        clustering_cols.push_back(
+            make_column(clustering_key_name + std::to_string(i++), // TODO expensive string concatentation
+                        col->body()));
 
     // static and regular columns
     for (auto &col : *metadata->static_columns()->array())
-        static_cols.push_back(std::make_shared<column_t>(col->name()->body(), col->column_type()->body()));
+        static_cols.push_back(make_column(col->name()->body(), col->column_type()->body()));
 
     for (auto &col : *metadata->regular_columns()->array())
-        regular_cols.push_back(std::make_shared<column_t>(col->name()->body(), col->column_type()->body()));
+        regular_cols.push_back(make_column(col->name()->body(), col->column_type()->body()));
 }
 
 // creates the builders for each of the columns in this table
@@ -188,13 +223,11 @@ uint64_t conversion_helper_t::get_timestamp(uint64_t delta) const
 {
     return metadata->min_timestamp()->val() + conversions::TIMESTAMP_EPOCH + delta;
 }
-
 // deletion time is stored in seconds
 uint64_t conversion_helper_t::get_local_del_time(uint64_t delta) const
 {
     return metadata->min_local_deletion_time()->val() + conversions::DELETION_TIME_EPOCH + delta;
 }
-
 // TTL is stored in seconds
 uint64_t conversion_helper_t::get_ttl(uint64_t delta) const
 {
@@ -219,8 +252,10 @@ arrow::Status conversion_helper_t::append_partition_deletion_time(uint32_t local
 
 size_t conversion_helper_t::num_data_cols() const
 {
-    // partition key
-    return 1 + clustering_cols.size() + static_cols.size() + regular_cols.size();
+    // 1 - partition key
+    // add the number of extra columns required to store uuids
+    return 1 + clustering_cols.size() + static_cols.size() + regular_cols.size() +
+           (global_flags.for_cudf ? m_n_uuid_cols : 0);
 }
 
 size_t conversion_helper_t::num_ts_cols() const
@@ -233,10 +268,10 @@ size_t conversion_helper_t::num_ts_cols() const
 
 size_t conversion_helper_t::num_cols() const
 {
+    size_t total = num_data_cols();
     if (global_flags.include_metadata)
-        return num_data_cols() + num_ts_cols();
-    else
-        return num_data_cols();
+        total += num_ts_cols();
+    return total;
 }
 
 std::shared_ptr<arrow::Schema> conversion_helper_t::schema() const
@@ -255,7 +290,7 @@ std::shared_ptr<arrow::Schema> conversion_helper_t::schema() const
 
     // clustering columns don't have timestamps
     for (auto &col : clustering_cols)
-        schema_vec[i++] = col->field;
+        i += col->append_to_schema(&schema_vec[i]);
 
     for (auto &group : {static_cols, regular_cols})
         for (auto &col : group)

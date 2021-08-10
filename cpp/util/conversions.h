@@ -4,6 +4,7 @@
 #include <arrow/result.h> // for Result
 #include <stddef.h>       // for size_t
 #include <stdint.h>       // for uint64_t
+#include <string>
 
 #include <memory>        // for shared_ptr, make_shared
 #include <string_view>   // for string_view
@@ -20,6 +21,15 @@ class kstream;
 
 namespace conversions
 {
+
+namespace types
+{
+
+extern const std::string AsciiType, BooleanType, ByteType, BytesType, DateType, DecimalType, DoubleType, DurationType,
+    FloatType, InetAddressType, Int32Type, IntegerType, LexicalUUIDType, LongType, ShortType, SimpleDateType, TimeType,
+    TimeUUIDType, TimestampType, UTF8Type, UUIDType, CompositeType, ListType, MapType, SetType, TupleType, ReversedType;
+
+}
 
 static const uint64_t TIMESTAMP_EPOCH = 1442880000000000;
 static const uint64_t DELETION_TIME_EPOCH = 1442880000;
@@ -46,9 +56,6 @@ struct node
 
 extern const std::unordered_map<std::string_view, cassandra_type> type_info;
 
-// special types that take type parameters
-extern const std::string_view compositetype, listtype, maptype, settype, tupletype, reversedtype;
-
 // order matters and is used in sstable_data.ksy to determine how child cells
 // are encoded
 extern const std::vector<std::string_view> multi_cell_types;
@@ -64,6 +71,7 @@ bool is_list(std::string_view type);
 bool is_map(std::string_view type);
 bool is_set(std::string_view type);
 bool is_tuple(std::string_view type);
+bool is_uuid(std::string_view type);
 
 struct get_arrow_type_options
 {

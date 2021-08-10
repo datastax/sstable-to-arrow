@@ -71,6 +71,8 @@ arrow::Status initialize_ts_list_builder(const std::unique_ptr<arrow::ArrayBuild
 arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, std::string_view bytes,
                             arrow::MemoryPool *pool);
 
+arrow::Status append_uuid(arrow::ArrayBuilder *first, arrow::ArrayBuilder *second, std::string_view bytes);
+
 // appends the cell's timestamp or null if it doesn't exist to `builder`.
 arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
                                   sstable_data_t::simple_cell_t *cell);

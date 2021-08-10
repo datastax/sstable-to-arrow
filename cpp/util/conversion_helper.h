@@ -12,7 +12,8 @@
 #include <string> // for string
 #include <vector> // for vector
 
-#include "conversions.h"        // for get_arrow_type
+#include "conversions.h" // for get_arrow_type
+#include "opts.h"
 #include "sstable_statistics.h" // for sstable_statistics_t
 namespace arrow
 {
@@ -38,6 +39,10 @@ class column_t
     std::unique_ptr<arrow::ArrayBuilder> local_del_time_builder;
     std::unique_ptr<arrow::ArrayBuilder> ttl_builder;
 
+    // uuids require a second value column
+    std::unique_ptr<arrow::ArrayBuilder> second;
+    bool has_second = false;
+
     // this constructor infers the arrow::DataType from the Cassandra type
     column_t(const std::string &name_, const std::string &cassandra_type_)
         : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_))
@@ -45,7 +50,9 @@ class column_t
     }
 
     column_t(const std::string &name_, const std::string &cassandra_type_, std::shared_ptr<arrow::DataType> type_)
-        : cassandra_type(cassandra_type_), field(arrow::field(name_, type_)){};
+        : cassandra_type(cassandra_type_),
+          field(arrow::field(name_, type_)), has_second{conversions::is_uuid(cassandra_type_) &&
+                                                        global_flags.for_cudf} {};
 
     arrow::Status init(arrow::MemoryPool *pool, bool complex_ts_allowed = true);
 
@@ -60,6 +67,8 @@ class column_t
 
 class conversion_helper_t
 {
+    size_t m_n_uuid_cols;
+
   public:
     conversion_helper_t(const std::unique_ptr<sstable_statistics_t> &statistics);
 
@@ -84,6 +93,8 @@ class conversion_helper_t
     uint64_t get_local_del_time(uint64_t delta) const;
     uint64_t get_ttl(uint64_t delta) const;
     arrow::Status append_partition_deletion_time(uint32_t local_deletion_time, uint64_t marked_for_delete_at);
+
+    std::shared_ptr<column_t> make_column(const std::string &name, const std::string &type);
 
     size_t num_data_cols() const;
     size_t num_ts_cols() const;
