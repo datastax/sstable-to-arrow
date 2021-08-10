@@ -1,7 +1,15 @@
 #include "columns_bitmask.h"
+#include "deserialization_helper.h" // for deserialization_helper_t, deseri...
+#include "vint.h"                   // for vint_t
+namespace kaitai
+{
+class kstream;
+}
 
-// see Columns::deserializeSubset https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/Columns.java#L524
-// From UnfilteredSerializer::deserializeRowBody https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L562
+// see Columns::deserializeSubset
+// https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/Columns.java#L524
+// From UnfilteredSerializer::deserializeRowBody
+// https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/rows/UnfilteredSerializer.java#L562
 columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     bitmask = vint_t(ks).val();
@@ -20,7 +28,8 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
                 // add stuff
             }
         }
-        else // more columns are set than absent, so `bitmask` stores the absent columns
+        else // more columns are set than absent, so `bitmask` stores the absent
+             // columns
         {
             int idx = 0;
             int skipped = 0;

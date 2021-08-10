@@ -1,5 +1,14 @@
 #include "opts.h"
 
+#include <bits/getopt_core.h> // for optarg, optind, getopt
+
+#include <boost/algorithm/string/predicate.hpp> // for istarts_with
+#include <boost/filesystem/operations.hpp>      // for is_regular_file, exists
+#include <boost/filesystem/path_traits.hpp>     // for filesystem
+#include <chrono>                               // for microseconds, time_p...
+#include <iostream>                             // for operator<<, basic_os...
+#include <type_traits>                          // for enable_if<>::type
+
 flags global_flags;
 
 void read_options(int argc, char *const argv[])
@@ -80,10 +89,8 @@ void read_options(int argc, char *const argv[])
         }
     }
 
-    global_flags.read_sstable_dir = !(
-        global_flags.summary_only ||
-        global_flags.statistics_only ||
-        global_flags.index_only);
+    global_flags.read_sstable_dir =
+        !(global_flags.summary_only || global_flags.statistics_only || global_flags.index_only);
 
     if (global_flags.read_sstable_dir && !global_flags.use_sample_data)
     {
@@ -93,7 +100,8 @@ void read_options(int argc, char *const argv[])
         {
             global_flags.is_s3 = boost::istarts_with(argv[optind], "S3://");
             if (!global_flags.is_s3 && !is_directory(argv[optind]))
-                global_flags.errors.push_back("the sstable directory path given is not a path to a directory");
+                global_flags.errors.push_back("the sstable directory path given "
+                                              "is not a path to a directory");
             else
                 global_flags.sstable_dir_path = argv[optind];
         }

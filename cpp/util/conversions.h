@@ -1,14 +1,22 @@
 #ifndef CONVERSIONS_H_
 #define CONVERSIONS_H_
 
-#include <kaitai/kaitaistream.h>
-#include <string_view>
-#include <unordered_map>
-#include <arrow/api.h>
-#include <vector>
-#include <stack>
-#include "vint.h"
-#include "opts.h"
+#include <arrow/result.h> // for Result
+#include <stddef.h>       // for size_t
+#include <stdint.h>       // for uint64_t
+
+#include <memory>        // for shared_ptr, make_shared
+#include <string_view>   // for string_view
+#include <unordered_map> // for unordered_map
+#include <vector>        // for vector
+namespace arrow
+{
+class DataType;
+}
+namespace kaitai
+{
+class kstream;
+}
 
 namespace conversions
 {
@@ -31,8 +39,9 @@ struct node
 {
     std::string_view str;
     std::shared_ptr<std::vector<std::shared_ptr<node>>> children;
-    node(std::string_view str_)
-        : str(str_), children(std::make_shared<std::vector<std::shared_ptr<node>>>()) {}
+    node(std::string_view str_) : str(str_), children(std::make_shared<std::vector<std::shared_ptr<node>>>())
+    {
+    }
 };
 
 extern const std::unordered_map<std::string_view, cassandra_type> type_info;
@@ -56,11 +65,13 @@ bool is_map(std::string_view type);
 bool is_set(std::string_view type);
 bool is_tuple(std::string_view type);
 
-struct get_arrow_type_options {
+struct get_arrow_type_options
+{
     std::shared_ptr<arrow::DataType> replace_with{nullptr};
 };
 
-std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get_arrow_type_options &options = get_arrow_type_options{});
+std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type,
+                                                const get_arrow_type_options &options = get_arrow_type_options{});
 arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view type);
 
 } // namespace conversions

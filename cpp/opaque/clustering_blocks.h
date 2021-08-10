@@ -2,18 +2,19 @@
 #define CLUSTERING_BLOCKS_H_
 
 #include <kaitai/kaitaistruct.h>
-#include <kaitai/kaitaistream.h>
-#include <algorithm>
-#include <vector>
+#include <stdint.h>
 #include <string>
-#include "deserialization_helper.h"
-#include "vint.h"
+#include <vector>
+namespace kaitai
+{
+class kstream;
+}
 
 class clustering_blocks_t : public kaitai::kstruct
 {
     std::vector<std::string> values_;
 
-public:
+  public:
     clustering_blocks_t(kaitai::kstream *ks);
     std::vector<std::string> *values();
 };

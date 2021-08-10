@@ -1,9 +1,16 @@
 #include "clustering_blocks.h"
+#include "conversions.h"
+#include "deserialization_helper.h"
+#include "vint.h"
+#include <algorithm>
+#include <ext/alloc_traits.h>
+#include <kaitai/kaitaistream.h>
 
 const int CLUSTERING = deserialization_helper_t::CLUSTERING;
 
 /**
- * See https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L351
+ * See
+ * https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L351
  */
 clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {

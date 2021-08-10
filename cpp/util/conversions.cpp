@@ -1,12 +1,30 @@
 #include "conversions.h"
 
+#include <arrow/type_fwd.h> // for field, int64, fixed_size_binary, int32
+
+#include <algorithm>          // for copy, copy_backward
+#include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
+#include <stack>              // for stack
+#include <stdexcept>          // for runtime_error, out_of_range
+#include <string>             // for operator+, to_string, string, char_traits
+#include <utility>            // for pair
+
+#include "opts.h" // for DEBUG_ONLY, flags, global_flags
+#include "vint.h" // for vint_t
+namespace arrow
+{
+class DataType;
+}
+namespace kaitai
+{
+class kstream;
+}
+
 namespace conversions
 {
 
-arrow::FieldVector decimal_fields{
-    arrow::field("scale", arrow::int32()), arrow::field("val", arrow::binary())};
-arrow::FieldVector inet_fields{
-    arrow::field("ipv4", arrow::int32()), arrow::field("ipv6", arrow::int64())};
+arrow::FieldVector decimal_fields{arrow::field("scale", arrow::int32()), arrow::field("val", arrow::binary())};
+arrow::FieldVector inet_fields{arrow::field("ipv4", arrow::int32()), arrow::field("ipv6", arrow::int64())};
 
 const std::string_view compositetype = "org.apache.cassandra.db.marshal.CompositeType";
 const std::string_view listtype = "org.apache.cassandra.db.marshal.ListType";
@@ -15,24 +33,25 @@ const std::string_view settype = "org.apache.cassandra.db.marshal.SetType";
 const std::string_view tupletype = "org.apache.cassandra.db.marshal.TupleType";       // TODO
 const std::string_view reversedtype = "org.apache.cassandra.db.marshal.ReversedType"; // TODO
 
-const std::vector<std::string_view> multi_cell_types{
-    conversions::listtype,
-    conversions::maptype,
-    conversions::settype};
+const std::vector<std::string_view> multi_cell_types{conversions::listtype, conversions::maptype, conversions::settype};
 
 // see https://docs.rapids.ai/api/cudf/stable/basics.html
 // for a list of types that cudf supports
 const std::unordered_map<std::string_view, cassandra_type> type_info{
-    {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0, arrow::utf8()}},        // ascii
-    {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1, arrow::boolean()}}, // boolean
-    {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 0, arrow::int8()}},       // tinyint
-    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary(), false}},       // blob
+    {"org.apache.cassandra.db.marshal.AsciiType", {"ascii", 0, arrow::utf8()}},         // ascii
+    {"org.apache.cassandra.db.marshal.BooleanType", {"boolean", 1, arrow::boolean()}},  // boolean
+    {"org.apache.cassandra.db.marshal.ByteType", {"tinyint", 0, arrow::int8()}},        // tinyint
+    {"org.apache.cassandra.db.marshal.BytesType", {"blob", 0, arrow::binary(), false}}, // blob
     // {"org.apache.cassandra.db.marshal.CompositeType", { "", 0 }},
-    // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, // extends "long"
-    {"org.apache.cassandra.db.marshal.DateType", {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}},              // old version of TimestampType
-    {"org.apache.cassandra.db.marshal.DecimalType", {"decimal", 0, arrow::struct_(decimal_fields)}},              // decimal, custom implementation
-    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}},                              // double
-    {"org.apache.cassandra.db.marshal.DurationType", {"duration", 0, arrow::fixed_size_list(arrow::int64(), 3)}}, // duration
+    // {"org.apache.cassandra.db.marshal.CounterColumnType", { "", 0 }}, //
+    // extends "long"
+    {"org.apache.cassandra.db.marshal.DateType",
+     {"", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // old version of TimestampType
+    {"org.apache.cassandra.db.marshal.DecimalType",
+     {"decimal", 0, arrow::struct_(decimal_fields)}},                                // decimal, custom implementation
+    {"org.apache.cassandra.db.marshal.DoubleType", {"double", 8, arrow::float64()}}, // double
+    {"org.apache.cassandra.db.marshal.DurationType",
+     {"duration", 0, arrow::fixed_size_list(arrow::int64(), 3)}}, // duration
     // {"org.apache.cassandra.db.marshal.DynamicCompositeType", { "", 0 }},
     // {"org.apache.cassandra.db.marshal.EmptyType", { "", 0 }},
     {"org.apache.cassandra.db.marshal.FloatType", {"float", 4, arrow::float32()}}, // float
@@ -44,16 +63,19 @@ const std::unordered_map<std::string_view, cassandra_type> type_info{
     // TODO ListType
     {"org.apache.cassandra.db.marshal.LongType", {"bigint", 8, arrow::int64()}}, // bigint
     // TODO MapType
-    // {"org.apache.cassandra.db.marshal.PartitionerDefinedOrder", { "", 0 }}, // not for user-defined
+    // {"org.apache.cassandra.db.marshal.PartitionerDefinedOrder", { "", 0 }},
+    // // not for user-defined
     // https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/marshal/ReversedType.java
     // TODO SetType
-    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 0, arrow::int16()}},                                // smallint
-    {"org.apache.cassandra.db.marshal.SimpleDateType", {"date", 0, arrow::date32()}},                              // date, represented as 32-bit unsigned
-    {"org.apache.cassandra.db.marshal.TimeType", {"time", 0, arrow::time64(arrow::TimeUnit::NANO)}},               // time
-    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16, arrow::fixed_size_binary(16), false}},              // timeuuid
-    {"org.apache.cassandra.db.marshal.TimestampType", {"timestamp", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // timestamp
+    {"org.apache.cassandra.db.marshal.ShortType", {"smallint", 0, arrow::int16()}}, // smallint
+    {"org.apache.cassandra.db.marshal.SimpleDateType",
+     {"date", 0, arrow::date32()}}, // date, represented as 32-bit unsigned
+    {"org.apache.cassandra.db.marshal.TimeType", {"time", 0, arrow::time64(arrow::TimeUnit::NANO)}},         // time
+    {"org.apache.cassandra.db.marshal.TimeUUIDType", {"timeuuid", 16, arrow::fixed_size_binary(16), false}}, // timeuuid
+    {"org.apache.cassandra.db.marshal.TimestampType",
+     {"timestamp", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // timestamp
     // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
-    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0, arrow::utf8()}},                 // text, varchar
+    {"org.apache.cassandra.db.marshal.UTF8Type", {"text", 0, arrow::utf8()}},                        // text, varchar
     {"org.apache.cassandra.db.marshal.UUIDType", {"uuid", 16, arrow::fixed_size_binary(16), false}}, // uuid
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
@@ -90,9 +112,7 @@ size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
 std::string_view get_child_type(std::string_view type)
 {
     size_t start = type.find('(') + 1;
-    return std::string_view(
-        type.data() + start,
-        type.rfind(')') - start);
+    return std::string_view(type.data() + start, type.rfind(')') - start);
 }
 
 void get_map_child_types(std::string_view type, std::string_view *key_type, std::string_view *value_type)
@@ -105,9 +125,10 @@ void get_map_child_types(std::string_view type, std::string_view *key_type, std:
 }
 
 /**
-     * Checks if the currently selected cell has multiple child cells (usually a collection like a list, map, set, etc)
-     * These are usually referred to as complex cells
-     */
+ * Checks if the currently selected cell has multiple child cells (usually a
+ * collection like a list, map, set, etc) These are usually referred to as
+ * complex cells
+ */
 bool is_multi_cell(std::string_view coltype)
 {
     if (is_reversed(coltype))
@@ -119,10 +140,10 @@ bool is_multi_cell(std::string_view coltype)
     return false;
 }
 
-#define IS_TYPE_WITH_PARAMETERS(name)            \
-    bool is_##name(std::string_view type) \
-    {                                            \
-        return type.rfind(name##type, 0) == 0;   \
+#define IS_TYPE_WITH_PARAMETERS(name)                                                                                  \
+    bool is_##name(std::string_view type)                                                                              \
+    {                                                                                                                  \
+        return type.rfind(name##type, 0) == 0;                                                                         \
     }
 
 IS_TYPE_WITH_PARAMETERS(list)
@@ -156,15 +177,18 @@ std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get
     if (is_reversed(type))
         return get_arrow_type(get_child_type(type), options);
     else if (is_map(type))
-        // we keep the key type but recursively replace the value type with timestamps
-        return arrow::map(get_arrow_type(tree->children->front()->str), get_arrow_type(tree->children->back()->str, options));
+        // we keep the key type but recursively replace the value type with
+        // timestamps
+        return arrow::map(get_arrow_type(tree->children->front()->str),
+                          get_arrow_type(tree->children->back()->str, options));
     else if (is_set(type) || is_list(type)) // TODO currently treating sets and lists identically
         return arrow::list(get_arrow_type(get_child_type(type), options));
     else if (is_composite(type))
     {
         arrow::FieldVector vec;
         for (size_t i = 0; i < tree->children->size(); ++i)
-            vec.push_back(arrow::field(std::string((*tree->children)[i]->str), get_arrow_type((*tree->children)[i]->str, options)));
+            vec.push_back(arrow::field(std::string((*tree->children)[i]->str),
+                                       get_arrow_type((*tree->children)[i]->str, options)));
         return arrow::struct_(vec);
     }
 

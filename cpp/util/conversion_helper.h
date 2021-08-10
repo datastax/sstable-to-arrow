@@ -1,14 +1,32 @@
 #ifndef CONVERSION_HELPER_H_
 #define CONVERSION_HELPER_H_
 
-#include <arrow/api.h>
-#include "conversions.h"
-#include "sstable_statistics.h"
-#include "opts.h"
+#include <arrow/array/builder_base.h> // for ArrayBuilder
+#include <arrow/result.h>             // for Result
+#include <arrow/status.h>             // for Status
+#include <arrow/type_fwd.h>           // for TimestampBuilder, field, Durat...
+#include <stddef.h>                   // for size_t
+#include <stdint.h>                   // for uint64_t, uint8_t, uint32_t
+
+#include <memory> // for shared_ptr, unique_ptr
+#include <string> // for string
+#include <vector> // for vector
+
+#include "conversions.h"        // for get_arrow_type
+#include "sstable_statistics.h" // for sstable_statistics_t
+namespace arrow
+{
+class Array;
+class DataType;
+class Field;
+class MemoryPool;
+class Schema;
+class Table;
+} // namespace arrow
 
 class column_t
 {
-public:
+  public:
     using ts_builder_t = arrow::TimestampBuilder;
     using local_del_time_builder_t = arrow::TimestampBuilder;
     using ttl_builder_t = arrow::DurationBuilder;
@@ -21,15 +39,12 @@ public:
     std::unique_ptr<arrow::ArrayBuilder> ttl_builder;
 
     // this constructor infers the arrow::DataType from the Cassandra type
-    column_t(
-        const std::string &name_,
-        const std::string &cassandra_type_)
-        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_)) {}
+    column_t(const std::string &name_, const std::string &cassandra_type_)
+        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_))
+    {
+    }
 
-    column_t(
-        const std::string &name_,
-        const std::string &cassandra_type_,
-        std::shared_ptr<arrow::DataType> type_)
+    column_t(const std::string &name_, const std::string &cassandra_type_, std::shared_ptr<arrow::DataType> type_)
         : cassandra_type(cassandra_type_), field(arrow::field(name_, type_)){};
 
     arrow::Status init(arrow::MemoryPool *pool, bool complex_ts_allowed = true);
@@ -45,8 +60,8 @@ public:
 
 class conversion_helper_t
 {
-public:
-    conversion_helper_t(std::shared_ptr<sstable_statistics_t> statistics);
+  public:
+    conversion_helper_t(const std::unique_ptr<sstable_statistics_t> &statistics);
 
     std::shared_ptr<column_t> partition_key; // also stores row liveness info
     std::shared_ptr<arrow::TimestampBuilder> row_local_del_time;
@@ -83,6 +98,7 @@ public:
 arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows);
 
 // extract the serialization header from an SSTable
-sstable_statistics_t::serialization_header_t *get_serialization_header(const std::unique_ptr<sstable_statistics_t> &statistics);
+sstable_statistics_t::serialization_header_t *get_serialization_header(
+    const std::unique_ptr<sstable_statistics_t> &statistics);
 
 #endif

@@ -1,10 +1,15 @@
 /**
- * Note that we use "kind" to refer to one of "clustering", "static", or "regular",
- * while we use "type" to refer to the actual data type stored inside a cell,
- * e.g. org.apache.cassandra.db.marshal.DateType.
+ * Note that we use "kind" to refer to one of "clustering", "static", or
+ * "regular", while we use "type" to refer to the actual data type stored inside
+ * a cell, e.g. org.apache.cassandra.db.marshal.DateType.
  */
 
 #include "deserialization_helper.h"
+#include "conversions.h"      // for get_col_size, is_multi_cell
+#include "opts.h"             // for DEBUG_ONLY
+#include <algorithm>          // for min
+#include <assert.h>           // for assert
+#include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
 
 #define CHECK_KIND(kind) assert((kind) >= 0 && (kind) < 3)
 
@@ -15,14 +20,15 @@ int deserialization_helper_t::curkind = 0;
 uint64_t deserialization_helper_t::bitmask = 0;
 
 const std::vector<std::shared_ptr<std::vector<std::string>>> deserialization_helper_t::colkinds = {
-    std::make_shared<std::vector<std::string>>(),
-    std::make_shared<std::vector<std::string>>(),
+    std::make_shared<std::vector<std::string>>(), std::make_shared<std::vector<std::string>>(),
     std::make_shared<std::vector<std::string>>()};
 
 // =============== METHOD DECLARATIONS ===============
 
 // we don't actually want to read any bytes from the file
-deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) : kaitai::kstruct(ks) {}
+deserialization_helper_t::deserialization_helper_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
+{
+}
 
 /** Get the number of clustering, static, or regular columns */
 int deserialization_helper_t::get_n_cols(int kind)
@@ -30,7 +36,8 @@ int deserialization_helper_t::get_n_cols(int kind)
     CHECK_KIND(kind);
     return colkinds[kind]->size();
 }
-/** Set the number of clustering, static, or regular columns (and allocate memory if setting) */
+/** Set the number of clustering, static, or regular columns (and allocate
+ * memory if setting) */
 void deserialization_helper_t::set_n_cols(int kind, int n)
 {
     CHECK_KIND(kind);
@@ -59,8 +66,9 @@ int deserialization_helper_t::get_n_clustering_cells(int block)
     return std::min(get_n_cols(CLUSTERING) - block * 32, 32);
 }
 /**
- * Gets the number of clustering blocks total. Each one is a group of 32 clustering cells
- * Equivalent to (int)ceil((double)number_of_clustering_cells / 32.) but I avoid working with floats
+ * Gets the number of clustering blocks total. Each one is a group of 32
+ * clustering cells Equivalent to (int)ceil((double)number_of_clustering_cells
+ * / 32.) but I avoid working with floats
  */
 int deserialization_helper_t::get_n_blocks()
 {
@@ -75,9 +83,9 @@ bool deserialization_helper_t::is_multi_cell()
     return is_multi_cell(curkind, idx);
 }
 
-/** =============== utility functions for the sstable_data.ksy file ===============
- * These are for when we need to evaluate certain portions imperatively due to
- * restrictions with Kaitai Struct
+/** =============== utility functions for the sstable_data.ksy file
+ * =============== These are for when we need to evaluate certain portions
+ * imperatively due to restrictions with Kaitai Struct
  */
 
 void deserialization_helper_t::set_bitmask(uint64_t bitmask_)

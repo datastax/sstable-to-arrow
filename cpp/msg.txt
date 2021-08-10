@@ -1,0 +1,44 @@
+[1/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/opaque/deserialization_helper.cpp.o
+[2/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/util/conversions.cpp.o
+[3/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/util/io.cpp.o
+[4/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/util/conversion_helper.cpp.o
+[5/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/util/opts.cpp.o
+Warning: include-what-you-use reported diagnostics:
+
+../util/opts.h should add these lines:
+
+../util/opts.h should remove these lines:
+- #include <iostream>  // lines 9-9
+
+The full include-list for ../util/opts.h:
+#include <stdint.h>                   // for int64_t
+#include <boost/filesystem/path.hpp>  // for path
+#include <memory>                     // for shared_ptr
+#include <string>                     // for string
+#include <vector>                     // for vector
+namespace arrow { namespace fs { class S3FileSystem; } }  // lines 14-14
+---
+
+(../util/opts.cpp has correct #includes/fwd-decls)
+
+[6/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/util/sstable_to_arrow.cpp.o
+[7/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/util/sstable.cpp.o
+FAILED: CMakeFiles/sstable_to_arrow.dir/util/sstable.cpp.o 
+/usr/bin/cmake -E __run_co_compile --iwyu=/usr/local/bin/include-what-you-use -- /usr/bin/c++  -DBOOST_ALL_NO_LIB -DBOOST_FILESYSTEM_DYN_LINK -I. -I../util -I../opaque -isystem /usr/local/include -Wall -Wextra -pedantic -pthread -std=gnu++1z -MD -MT CMakeFiles/sstable_to_arrow.dir/util/sstable.cpp.o -MF CMakeFiles/sstable_to_arrow.dir/util/sstable.cpp.o.d -o CMakeFiles/sstable_to_arrow.dir/util/sstable.cpp.o -c ../util/sstable.cpp
+In file included from /usr/local/include/arrow/array/data.h:27:0,
+                 from /usr/local/include/arrow/array/array_base.h:26,
+                 from /usr/local/include/arrow/array.h:25,
+                 from /usr/local/include/arrow/api.h:22,
+                 from ../util/sstable.h:4,
+                 from ../util/sstable.cpp:1:
+../util/sstable.cpp: In function 'arrow::Result<std::unique_ptr<std::basic_istream<char> > > open_stream(const string&)':
+../util/sstable.cpp:162:67: error: invalid use of incomplete type 'using element_type = class arrow::fs::S3FileSystem {aka class arrow::fs::S3FileSystem}'
+         ARROW_ASSIGN_OR_RAISE(auto input_stream, global_flags.s3fs->OpenInputFile(path));
+                                                                   ^
+In file included from ../util/sstable.h:15:0,
+                 from ../util/sstable.cpp:1:
+../util/opts.h:14:15: note: forward declaration of 'using element_type = class arrow::fs::S3FileSystem {aka class arrow::fs::S3FileSystem}'
+         class S3FileSystem;
+               ^~~~~~~~~~~~
+[8/9] Building CXX object CMakeFiles/sstable_to_arrow.dir/main.cpp.o
+ninja: build stopped: subcommand failed.

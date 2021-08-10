@@ -19,6 +19,17 @@ case "$1" in
         cmake -DCMAKE_BUILD_TYPE=Release -GNinja -DPROFILE_GPROF ..
         ninja
         ;;
+    post-create)
+        apt-get install -y gdb valgrind llvm-10-dev libclang-10-dev clang-10
+        mkdir /tmp/iwyu && cd /tmp/iwyu
+        git clone https://github.com/include-what-you-use/include-what-you-use.git
+        cd include-what-you-use
+        git checkout clang_10
+        cd .. && mkdir build && cd build
+        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-10 ../include-what-you-use
+        make
+        make install
+        ;;
     *)
         echo "Use subcommand release, debug, or profile"
         ;;

@@ -1,8 +1,7 @@
 cmake_minimum_required(VERSION 3.10.2)
 project(sstable_to_arrow VERSION 0.1.0)
 
-# include(CTest)
-# enable_testing()
+option(INCLUDE_WHAT_YOU_USE "check include directives")
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
@@ -10,6 +9,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+if(INCLUDE_WHAT_YOU_USE)
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "/usr/local/bin/include-what-you-use")
+endif()
 include(CPack)
 
 find_package(Arrow REQUIRED)
@@ -34,6 +36,7 @@ add_executable(sstable_to_arrow
     util/inspect_files.cpp util/inspect_files.h
     util/conversion_helper.cpp util/conversion_helper.h
     util/io.cpp util/io.h
+    util/sstable.cpp util/sstable.h
     main.cpp main.h
     )
 

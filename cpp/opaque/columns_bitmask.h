@@ -1,14 +1,16 @@
 #ifndef COLUMN_BITMASK_H_
 #define COLUMN_BITMASK_H_
 
-#include <kaitai/kaitaistruct.h>
-#include <kaitai/kaitaistream.h>
-#include "vint.h"
-#include "deserialization_helper.h"
+#include <kaitai/kaitaistruct.h> // for kstruct
+#include <stdint.h>              // for uint64_t
+namespace kaitai
+{
+class kstream;
+}
 
 class columns_bitmask_t : public kaitai::kstruct
 {
-public:
+  public:
     uint64_t bitmask;
     columns_bitmask_t(kaitai::kstream *ks);
 };

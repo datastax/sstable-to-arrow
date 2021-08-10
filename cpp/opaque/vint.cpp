@@ -1,4 +1,5 @@
 #include "vint.h"
+#include <kaitai/kaitaistream.h>
 
 vint_t::vint_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
@@ -8,8 +9,11 @@ vint_t::vint_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
     else
     {
         // get number of leading set bits
-        size_t size = (uint8_t)first_byte == 0xff ? 8 : __builtin_clz(~first_byte) - 24; // -24 since C++ treats it as a 4-byte integer but we only want the number of leading zeros in the single byte
-        val_ = first_byte & (0xff >> size);                                              // get the value of the remaining part of it
+        size_t size = (uint8_t)first_byte == 0xff
+                          ? 8
+                          : __builtin_clz(~first_byte) - 24; // -24 since C++ treats it as a 4-byte integer but we only
+                                                             // want the number of leading zeros in the single byte
+        val_ = first_byte & (0xff >> size);                  // get the value of the remaining part of it
 
         for (size_t i = 0; i < size; i++)
         {

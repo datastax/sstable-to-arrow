@@ -1,14 +1,32 @@
 #include "conversion_helper.h"
 
+#include <arrow/array/builder_dict.h> // for NumericBuilder
+#include <arrow/table.h>              // for Table
+#include <arrow/type.h>               // for Field, DataType, Schema (ptr o...
+#include <assert.h>                   // for assert
+#include <kaitai/kaitaistruct.h>      // for kstruct
+
+#include <algorithm>          // for max
+#include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
+#include <initializer_list>   // for initializer_list
+
+#include "opts.h" // for flags, global_flags, DEBUG_ONLY
+#include "vint.h" // for vint_t
+namespace arrow
+{
+class Array;
+class MemoryPool;
+} // namespace arrow
+
 /**
  * @brief create the data builder and time data builders for this column
- * 
+ *
  * @param complex_ts_allowed Whether the type of the time data builders should
  * mirror the data builder if complex. For example, if this column stores lists
- * of data and complex_ts_allowed is set to true, each of the time data builders
- * will also store a list of data. Otherwise, they will store a single timestamp
- * for the entire list.
- * @return arrow::Status 
+ * of data and complex_ts_allowed is set to true, each of the time data
+ * builders will also store a list of data. Otherwise, they will store a single
+ * timestamp for the entire list.
+ * @return arrow::Status
  */
 arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
 {
@@ -17,15 +35,20 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
 
     if (global_flags.include_metadata)
     {
-        // TODO currently calling get_arrow_type multiple times, potentially expensive
-        // see if there is easier way to replace since we already know base data type
+        // TODO currently calling get_arrow_type multiple times, potentially
+        // expensive see if there is easier way to replace since we already know
+        // base data type
         auto micro = arrow::timestamp(arrow::TimeUnit::MICRO);
-        auto ts_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, conversions::get_arrow_type_options{micro}) : micro;
+        auto ts_type = complex_ts_allowed
+                           ? conversions::get_arrow_type(cassandra_type, conversions::get_arrow_type_options{micro})
+                           : micro;
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &ts_builder));
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &local_del_time_builder));
 
         auto ttl = arrow::duration(arrow::TimeUnit::SECOND);
-        auto ttl_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, conversions::get_arrow_type_options{ttl}) : ttl;
+        auto ttl_type = complex_ts_allowed
+                            ? conversions::get_arrow_type(cassandra_type, conversions::get_arrow_type_options{ttl})
+                            : ttl;
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ttl_type, &ttl_builder));
     }
 
@@ -85,7 +108,7 @@ arrow::Status column_t::append_null()
 
 // initialize the name and type of the partition key column and all of the
 // clustering, static, and regular columns, but do not create the builders
-conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> sstable_statistics)
+conversion_helper_t::conversion_helper_t(const std::unique_ptr<sstable_statistics_t> &sstable_statistics)
 {
     auto &statistics_ptr = (*sstable_statistics->toc()->array())[2]; // see sstable_statistics.ksy for info
     statistics = dynamic_cast<sstable_statistics_t::statistics_t *>(statistics_ptr->body());
@@ -95,9 +118,7 @@ conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> s
     assert(metadata != nullptr);
 
     // partition key
-    partition_key = std::make_shared<column_t>(
-        "partition_key",
-        metadata->partition_key_type()->body());
+    partition_key = std::make_shared<column_t>("partition_key", metadata->partition_key_type()->body());
 
     // clustering columns
     std::string clustering_key_name = "clustering_key_";
@@ -109,14 +130,10 @@ conversion_helper_t::conversion_helper_t(std::shared_ptr<sstable_statistics_t> s
 
     // static and regular columns
     for (auto &col : *metadata->static_columns()->array())
-        static_cols.push_back(std::make_shared<column_t>(
-            col->name()->body(),
-            col->column_type()->body()));
+        static_cols.push_back(std::make_shared<column_t>(col->name()->body(), col->column_type()->body()));
 
     for (auto &col : *metadata->regular_columns()->array())
-        regular_cols.push_back(std::make_shared<column_t>(
-            col->name()->body(),
-            col->column_type()->body()));
+        regular_cols.push_back(std::make_shared<column_t>(col->name()->body(), col->column_type()->body()));
 }
 
 // creates the builders for each of the columns in this table
@@ -127,10 +144,13 @@ arrow::Status conversion_helper_t::init(arrow::MemoryPool *pool)
     ARROW_RETURN_NOT_OK(partition_key->init(pool, false));
     if (global_flags.include_metadata)
     {
-        partition_key_local_del_time = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::SECOND), pool);
-        partition_key_marked_for_deletion_at = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool);
+        partition_key_local_del_time =
+            std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::SECOND), pool);
+        partition_key_marked_for_deletion_at =
+            std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool);
         row_local_del_time = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::SECOND), pool);
-        row_marked_for_deletion_at = std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool);
+        row_marked_for_deletion_at =
+            std::make_shared<arrow::TimestampBuilder>(arrow::timestamp(arrow::TimeUnit::MICRO), pool);
     }
 
     for (auto &col : clustering_cols)
@@ -144,7 +164,8 @@ arrow::Status conversion_helper_t::init(arrow::MemoryPool *pool)
     return arrow::Status::OK();
 }
 
-// reserves space in each of the column builders for the number of rows in this table
+// reserves space in each of the column builders for the number of rows in this
+// table
 arrow::Status conversion_helper_t::reserve()
 {
     size_t nrows = statistics->number_of_rows() + 5; // for security
@@ -180,7 +201,8 @@ uint64_t conversion_helper_t::get_ttl(uint64_t delta) const
     return metadata->min_ttl()->val() + delta;
 }
 
-arrow::Status conversion_helper_t::append_partition_deletion_time(uint32_t local_deletion_time, uint64_t marked_for_delete_at)
+arrow::Status conversion_helper_t::append_partition_deletion_time(uint32_t local_deletion_time,
+                                                                  uint64_t marked_for_delete_at)
 {
     if (local_deletion_time == conversions::LOCAL_DELETION_TIME_NULL)
         ARROW_RETURN_NOT_OK(partition_key_local_del_time->AppendNull());
@@ -282,9 +304,11 @@ arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows
 }
 
 // Read the serialization header from the statistics file.
-sstable_statistics_t::serialization_header_t *get_serialization_header(const std::unique_ptr<sstable_statistics_t> &statistics)
+sstable_statistics_t::serialization_header_t *get_serialization_header(
+    const std::unique_ptr<sstable_statistics_t> &statistics)
 {
     const auto &toc = *statistics->toc()->array();
-    const auto &ptr = toc[3]; // 3 is the index of the serialization header in the table of contents in the statistics file
+    const auto &ptr = toc[3]; // 3 is the index of the serialization header in
+                              // the table of contents in the statistics file
     return dynamic_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());
 }

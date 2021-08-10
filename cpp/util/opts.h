@@ -1,19 +1,20 @@
 #ifndef OPTS_H_
 #define OPTS_H_
 
-#include <boost/filesystem.hpp>
-#include <boost/algorithm/string.hpp>
-#include <arrow/filesystem/api.h>
-#include <getopt.h>
-#include <memory>
-#include <map>
-#include <iostream>
+#include <arrow/filesystem/s3fs.h> // for S3FileSystem
+#include <stdint.h>                // for int64_t
 
-#define DEBUG_ONLY(msg)           \
-    do                            \
-    {                             \
-        if (global_flags.verbose) \
-            std::cout << (msg);   \
+#include <boost/filesystem/path.hpp> // for path
+#include <iostream>                  // for cout
+#include <memory>                    // for shared_ptr
+#include <string>                    // for string
+#include <vector>                    // for vector
+
+#define DEBUG_ONLY(msg)                                                                                                \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (global_flags.verbose)                                                                                      \
+            std::cout << (msg);                                                                                        \
     } while (0)
 
 struct flags
@@ -45,38 +46,48 @@ extern flags global_flags;
 
 void read_options(int argc, char *const argv[]);
 
-const std::string help_msg =
-    "\n"
-    "========================= sstable-to-arrow =========================\n"
-    "\n"
-    "This is a utility for parsing SSTables on disk and converting them\n"
-    "into the Apache Arrow columnar memory format to allow for faster\n"
-    "analytics using a GPU.\n"
-    "\n"
-    "Usage:\n"
-    "      ./sstable-to-arrow -h\n"
-    "      ./sstable-to-arrow -m <summary_file_path>\n"
-    "      ./sstable-to-arrow -t <statistics_file_path>\n"
-    "      ./sstable-to-arrow -i <index_file_path>\n"
-    "      ./sstable-to-arrow [-p <parquet_dest_path>] [-dvcg] <sstable_dir_path>\n"
-    "          (sstable_dir_path is the path to the directory containing all of\n"
-    "          the sstable files)\n"
-    "\n"
-    "       -m <summary_file_path>    read the given summary file\n"
-    "    -t <statistics_file_path>    read the given statistics file\n"
-    "         -i <index_file_name>    read the given index file\n"
-    "       -p <parquet_dest_path>    export the sstable to the specified\n"
-    "                                 path as a parquet file; implies -d and -c\n"
-    "                                 because certain metadata types are not\n"
-    "                                 yet supported\n"
-    "                           -d    turn off listening on the network (dry run)\n"
-    "                           -v    verbose output for debugging\n"
-    "                           -c    don't include metadata; does not get\n"
-    "                                 rid of duplicates (compact)\n"
-    "                           -x    convert types that aren't supported by\n"
-    "                                 cudf to hex strings\n"
-    "                           -s    read sample data; overwrites any given path\n"
-    "                           -h    show this help message\n";
+const std::string help_msg = "\n"
+                             "========================= sstable-to-arrow =========================\n"
+                             "\n"
+                             "This is a utility for parsing SSTables on disk and converting them\n"
+                             "into the Apache Arrow columnar memory format to allow for faster\n"
+                             "analytics using a GPU.\n"
+                             "\n"
+                             "Usage:\n"
+                             "      ./sstable-to-arrow -h\n"
+                             "      ./sstable-to-arrow -m <summary_file_path>\n"
+                             "      ./sstable-to-arrow -t <statistics_file_path>\n"
+                             "      ./sstable-to-arrow -i <index_file_path>\n"
+                             "      ./sstable-to-arrow [-p <parquet_dest_path>] [-dvcg] "
+                             "<sstable_dir_path>\n"
+                             "          (sstable_dir_path is the path to the directory containing "
+                             "all "
+                             "of\n"
+                             "          the sstable files)\n"
+                             "\n"
+                             "       -m <summary_file_path>    read the given summary file\n"
+                             "    -t <statistics_file_path>    read the given statistics file\n"
+                             "         -i <index_file_name>    read the given index file\n"
+                             "       -p <parquet_dest_path>    export the sstable to the specified\n"
+                             "                                 path as a parquet file; implies -d "
+                             "and "
+                             "-c\n"
+                             "                                 because certain metadata types are "
+                             "not\n"
+                             "                                 yet supported\n"
+                             "                           -d    turn off listening on the network "
+                             "(dry "
+                             "run)\n"
+                             "                           -v    verbose output for debugging\n"
+                             "                           -c    don't include metadata; does not get\n"
+                             "                                 rid of duplicates (compact)\n"
+                             "                           -x    convert types that aren't supported "
+                             "by\n"
+                             "                                 cudf to hex strings\n"
+                             "                           -s    read sample data; overwrites any "
+                             "given "
+                             "path\n"
+                             "                           -h    show this help message\n";
 
 const boost::filesystem::path sample_data_path{"/home/sample_data/baselines/iot-5b608090e03d11ebb4c1d335f841c590"};
 

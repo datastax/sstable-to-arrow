@@ -1,25 +1,19 @@
 #ifndef DESERIALIZATION_HELPER_H_
 #define DESERIALIZATION_HELPER_H_
 
-#include <kaitai/kaitaistruct.h>
-#include <kaitai/kaitaistream.h>
-#include <arrow/api.h>
-#include <cmath>
-#include <vector>
-#include <memory>
-#include <string>
-#include <assert.h>
-#include <map>
-#include <set>
-#include <iostream>
-
-#include "vint.h"
-#include "opts.h"
-#include "conversions.h"
+#include <kaitai/kaitaistruct.h> // for kstruct
+#include <memory>                // for shared_ptr
+#include <stdint.h>              // for uint64_t
+#include <string>                // for string
+#include <vector>                // for vector
+namespace kaitai
+{
+class kstream;
+} // namespace kaitai
 
 class deserialization_helper_t : public kaitai::kstruct
 {
-public:
+  public:
     deserialization_helper_t(kaitai::kstream *ks);
 
     // returns the number of bytes that a value of this current column takes up
@@ -30,7 +24,8 @@ public:
     static const int STATIC = 1;
     static const int REGULAR = 2;
 
-    // the index of the current cell out of the superset of columns in this SSTable
+    // the index of the current cell out of the superset of columns in this
+    // SSTable
     static int idx;
     // one of CLUSTERING, STATIC, REGULAR
     static int curkind;
