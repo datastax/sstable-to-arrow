@@ -14,7 +14,9 @@
     do                                                                                                                 \
     {                                                                                                                  \
         if (global_flags.verbose)                                                                                      \
+        {                                                                                                              \
             std::cout << (msg);                                                                                        \
+        }                                                                                                              \
     } while (0)
 
 struct flags

@@ -28,6 +28,8 @@ find_package(Arrow REQUIRED)
 find_package(Threads REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem iostreams python)
 
+set(OPAQUE_TYPES deletion_time sstable_data sstable_index sstable_statistics sstable_summary sstable_compression_info)
+
 add_executable(sstable_to_arrow
     opaque/clustering_blocks.cpp opaque/clustering_blocks.h
     opaque/columns_bitmask.cpp opaque/columns_bitmask.h
@@ -69,17 +71,7 @@ else()
     target_compile_options(sstable_to_arrow PRIVATE -Wall -Wextra -pedantic)
 endif()
 
-option(PROFILE_GPROF "enable the -pg flag when linking to enable profiling with the gprof tool" OFF)
-if(PROFILE_GPROF)
-    target_link_libraries(sstable_to_arrow PRIVATE "-pg")
-endif(PROFILE_GPROF)
-
-option(DEBUG_VERBOSE "print verbose messages detailing code" OFF)
-if(DEBUG_VERBOSE)
-    add_definitions(-DDEBUG)
-endif(DEBUG_VERBOSE)
-
-foreach(ksy_file deletion_time sstable_data sstable_index sstable_statistics sstable_summary sstable_compression_info)
+foreach(ksy_file ${OPAQUE_TYPES})
     add_custom_command(
         OUTPUT "${PROJECT_BINARY_DIR}/${ksy_file}.h" "${PROJECT_BINARY_DIR}/${ksy_file}.cpp"
         COMMAND ${KSC} --target cpp_stl --cpp-standard 11 --opaque-types true --outdir "${PROJECT_BINARY_DIR}" "${CMAKE_SOURCE_DIR}/ksy/${ksy_file}.ksy"
