@@ -76,6 +76,7 @@ bool is_uuid(std::string_view type);
 struct get_arrow_type_options
 {
     std::shared_ptr<arrow::DataType> replace_with{nullptr};
+    bool for_cudf{false};
 };
 
 std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type,

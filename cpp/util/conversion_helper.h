@@ -44,12 +44,6 @@ class column_t
     bool has_second = false;
     bool m_is_clustering;
 
-    // this constructor infers the arrow::DataType from the Cassandra type
-    column_t(const std::string &name_, const std::string &cassandra_type_, bool is_clustering)
-        : column_t(name_, cassandra_type_, conversions::get_arrow_type(cassandra_type_), is_clustering)
-    {
-    }
-
     column_t(const std::string &name_, const std::string &cassandra_type_, std::shared_ptr<arrow::DataType> type_,
              bool is_clustering)
         : cassandra_type(cassandra_type_), field(arrow::field(name_, type_)),

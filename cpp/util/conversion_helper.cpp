@@ -42,15 +42,20 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
         // expensive see if there is easier way to replace since we already know
         // base data type
         auto micro = arrow::timestamp(arrow::TimeUnit::MICRO);
+        conversions::get_arrow_type_options options;
+        options.replace_with = micro;
+        options.for_cudf = global_flags.for_cudf;
         auto ts_type = complex_ts_allowed
-                           ? conversions::get_arrow_type(cassandra_type, conversions::get_arrow_type_options{micro})
+                           ? conversions::get_arrow_type(cassandra_type, options)
                            : micro;
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &ts_builder));
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &local_del_time_builder));
 
         auto ttl = arrow::duration(arrow::TimeUnit::SECOND);
+        options.replace_with = ttl;
+        options.for_cudf = global_flags.for_cudf;
         auto ttl_type = complex_ts_allowed
-                            ? conversions::get_arrow_type(cassandra_type, conversions::get_arrow_type_options{ttl})
+                            ? conversions::get_arrow_type(cassandra_type, options)
                             : ttl;
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ttl_type, &ttl_builder));
     }
@@ -144,7 +149,9 @@ std::shared_ptr<column_t> conversion_helper_t::make_column(const std::string &na
 {
     if (conversions::is_uuid(type))
         ++m_n_uuid_cols;
-    return std::make_shared<column_t>(name, type, is_clustering);
+    conversions::get_arrow_type_options options;
+    options.for_cudf = global_flags.for_cudf;
+    return std::make_shared<column_t>(name, type, conversions::get_arrow_type(type, options), is_clustering);
 }
 
 // initialize the name and type of the partition key column and all of the

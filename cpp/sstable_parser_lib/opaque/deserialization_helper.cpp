@@ -6,7 +6,6 @@
 
 #include "deserialization_helper.h"
 #include "conversions.h"      // for get_col_size, is_multi_cell
-#include "opts.h"             // for DEBUG_ONLY
 #include <algorithm>          // for min
 #include <cassert>            // for assert
 #include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
@@ -114,7 +113,6 @@ int deserialization_helper_t::inc()
 // Indicate that we are processing a static row
 int deserialization_helper_t::set_static()
 {
-    DEBUG_ONLY("begin processing static row\n");
     curkind = STATIC;
     idx = -1;
     inc(); // skip any missing columns at start
@@ -124,7 +122,6 @@ int deserialization_helper_t::set_static()
 // Indicate that we are processing a regular row
 int deserialization_helper_t::set_regular()
 {
-    DEBUG_ONLY("begin processing regular row\n");
     curkind = REGULAR;
     idx = -1;
     inc(); // skip any missing columns at start

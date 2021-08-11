@@ -10,7 +10,6 @@
 #include <string>             // for operator+, to_string, string, char_traits
 #include <utility>            // for pair
 
-#include "opts.h" // for DEBUG_ONLY, flags, global_flags
 #include "vint.h" // for vint_t
 namespace arrow
 {
@@ -104,7 +103,6 @@ const std::unordered_map<std::string_view, cassandra_type> type_info{
 
 size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
 {
-    DEBUG_ONLY("getting col size of " + std::string(coltype) + '\n');
     if (coltype.rfind(types::ReversedType, 0) == 0)
         return get_col_size(get_child_type(coltype), ks);
     if (is_multi_cell(coltype))
@@ -113,7 +111,6 @@ size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
         // size marked as a varint instead of the expected value
         // TODO confirm this is the case
         long long len = vint_t(ks).val();
-        DEBUG_ONLY("length of child cell: " + std::to_string(len) + '\n');
         return len;
     }
 
@@ -127,7 +124,6 @@ size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
     // otherwise read the length as a varint
     else
         len = vint_t(ks).val();
-    DEBUG_ONLY("length: " + std::to_string(len) + '\n');
     return len;
 }
 
@@ -199,9 +195,9 @@ std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get
         // doesn't throw means type is a "primitive"
         if (options.replace_with != nullptr)
             return options.replace_with;
-        if (global_flags.for_cudf && is_uuid(type))
+        if (options.for_cudf && is_uuid(type))
             return arrow::uint64();
-        if (global_flags.for_cudf && !_t.cudf_supported)
+        if (options.for_cudf && !_t.cudf_supported)
             return arrow::utf8(); // pass unsupported types as hexadecimal strings
         return _t.arrow_type;
     }
