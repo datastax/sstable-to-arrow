@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.16)
+project(sstable_to_arrow_lib VERSION 0.1.0)
+
 # find required components
 find_package(Arrow REQUIRED)
 find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
@@ -22,5 +25,6 @@ target_link_libraries(
           Threads::Threads
           sstable_parser)
 
-target_include_directories(sstable_to_arrow_lib
-                           PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(
+  sstable_to_arrow_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+                              ${sstable_parser_INCLUDE_DIRS})

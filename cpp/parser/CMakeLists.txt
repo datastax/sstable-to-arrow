@@ -1,5 +1,9 @@
-# find required components
+cmake_minimum_required(VERSION 3.16)
+project(sstable_parser VERSION 0.1.0)
+
+# only depends on kaitai-struct-compiler
 find_program(KSC "kaitai-struct-compiler" REQUIRED)
+find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 
 # compile kaitai files to source files in C++
 set(KSY_TYPES deletion_time sstable_data sstable_index sstable_statistics
@@ -26,11 +30,20 @@ set(OPAQUE_TYPES
 list(TRANSFORM OPAQUE_TYPES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/opaque/)
 
 # create the sstable_parser target from the source files
-add_library(sstable_parser ${OPAQUE_TYPES} ${KSY_TYPES})
+add_library(${PROJECT_NAME} SHARED ${OPAQUE_TYPES} ${KSY_TYPES})
+
+target_link_libraries(${PROJECT_NAME} PRIVATE kaitai_struct_cpp_stl_runtime)
 
 target_include_directories(
-  sstable_parser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/opaque
-                        ${CMAKE_CURRENT_BINARY_DIR}/ksy)
+  ${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/opaque
+                         ${CMAKE_CURRENT_BINARY_DIR}/ksy)
 
-set_target_properties(sstable_parser PROPERTIES CXX_STANDARD 17
-                                                CXX_STANDARD_REQUIRED ON)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17
+                                                 CXX_STANDARD_REQUIRED ON)
+
+install(TARGETS ${PROJECT_NAME} DESTINATION lib)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/opaque/ ${CMAKE_CURRENT_BINARY_DIR}/ksy/
+  DESTINATION include/${PROJECT_NAME}
+  FILES_MATCHING
+  PATTERN "*.h")

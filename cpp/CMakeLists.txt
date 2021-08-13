@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.16)
 project(sstable_to_arrow VERSION 0.1.0)
 
 # find required packages to link to
@@ -24,7 +24,7 @@ if(INCLUDE_WHAT_YOU_USE)
 endif()
 
 # add subdirectories
-add_subdirectory(sstable_parser_lib)
+add_subdirectory(parser)
 add_subdirectory(conversion_lib)
 
 # create main sstable_to_arrow executable target
