@@ -1,7 +1,7 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
-#include <arrow/status.h>            // for Status
+#include <arrow/result.h>            // for Status
 #include <boost/filesystem/path.hpp> // for path
 #include <map>                       // for map
 #include <memory>                    // for shared_ptr
@@ -42,7 +42,7 @@ void get_file_paths(const boost::filesystem::path &dir_path, std::map<int, std::
  * SSTable files, e.g. s3://my-bucket/path/to/s3
  * @param sstables the map of sstable_t objects where the paths will be stored
  */
-arrow::Status get_file_paths_from_s3(const std::string &uri, std::map<int, std::shared_ptr<sstable_t>> &sstables);
+arrow::Result<std::map<int, std::shared_ptr<sstable_t>>> get_file_paths_from_s3(const std::string &uri);
 
 /**
  * @brief Decodes information from the file name and stores the full path in the

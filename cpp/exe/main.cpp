@@ -76,9 +76,9 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        std::map<int, std::shared_ptr<sstable_t>> sstables;
-        EXIT_NOT_OK(get_file_paths_from_s3(global_flags.sstable_dir_path.string(), sstables), "error loading from S3");
-        EXIT_NOT_OK(convert_sstables(sstables), "error converting sstables");
+        auto result = get_file_paths_from_s3(global_flags.sstable_dir_path.string());
+        EXIT_NOT_OK(result.status(), "error loading from S3");
+        EXIT_NOT_OK(convert_sstables(result.ValueOrDie()), "error converting sstables");
     }
     else
     {
@@ -202,8 +202,10 @@ void get_file_paths(const boost::filesystem::path &dir_path, std::map<int, std::
     }
 }
 
-arrow::Status get_file_paths_from_s3(const std::string &uri, std::map<int, std::shared_ptr<sstable_t>> &sstables)
+arrow::Result<std::map<int, std::shared_ptr<sstable_t>>> get_file_paths_from_s3(const std::string &uri)
 {
+    std::map<int, std::shared_ptr<sstable_t>> sstables;
+
     // get the bucket uri and the actual path to the file
     size_t pos = uri.find('/', 5);
     std::string bucket_uri{pos == std::string::npos ? uri : uri.substr(0, pos)};
@@ -228,7 +230,7 @@ arrow::Status get_file_paths_from_s3(const std::string &uri, std::map<int, std::
         }
     }
 
-    return arrow::Status::OK();
+    return sstables;
 }
 
 void add_file_to_sstables(const std::string &full_path, const std::string &file_name,
