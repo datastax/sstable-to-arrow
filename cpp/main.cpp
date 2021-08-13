@@ -1,14 +1,15 @@
 #include "main.h"
-#include "inspect_files.h"                      // for debug_index, debug_s...
-#include "io.h"                                 // for send_tables, write_p...
-#include "opts.h"                               // for flags, global_flags
-#include "sstable.h"                            // for file_container, ssta...
-#include "sstable_index.h"                      // for sstable_index_t
-#include "sstable_statistics.h"                 // for sstable_statistics_t
-#include "sstable_summary.h"                    // for sstable_summary_t
-#include "sstable_to_arrow.h"                   // for vector_to_columnar_t...
-#include <arrow/filesystem/api.h>               // for EnsureS3Initialized
-#include <arrow/result.h>                       // for Result, ARROW_ASSIGN...
+#include "inspect_files.h"        // for debug_index, debug_s...
+#include "io.h"                   // for send_tables, write_p...
+#include "opts.h"                 // for flags, global_flags
+#include "sstable.h"              // for file_container, ssta...
+#include "sstable_index.h"        // for sstable_index_t
+#include "sstable_statistics.h"   // for sstable_statistics_t
+#include "sstable_summary.h"      // for sstable_summary_t
+#include "sstable_to_arrow.h"     // for vector_to_columnar_t...
+#include <arrow/filesystem/api.h> // for EnsureS3Initialized
+#include <arrow/result.h>         // for Result, ARROW_ASSIGN...
+#include <arrow/table.h>
 #include <bits/exception.h>                     // for exception
 #include <boost/algorithm/string/predicate.hpp> // for iends_with
 #include <boost/filesystem/directory.hpp>       // for directory_entry, dir...
@@ -42,6 +43,12 @@ int main(int argc, char *argv[])
 {
     read_options(argc, argv);
 
+    if (global_flags.show_help)
+    {
+        std::cout << help_msg << '\n';
+        return 0;
+    }
+
     if (!global_flags.errors.empty())
     {
         std::cerr << "invalid arguments:\n";
@@ -59,28 +66,35 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    s3_connection conn;
-    if (!conn.ok())
-    {
-        std::cerr << "error connecting to S3\n";
-        return 1;
-    }
-
-    std::map<int, std::shared_ptr<sstable_t>> sstables;
-
     if (global_flags.is_s3)
     {
+        // establish connection to S3 with RAII
+        s3_connection conn;
+        if (!conn.ok())
+        {
+            std::cerr << "error connecting to S3\n";
+            return 1;
+        }
+
+        std::map<int, std::shared_ptr<sstable_t>> sstables;
         EXIT_NOT_OK(get_file_paths_from_s3(global_flags.sstable_dir_path.string(), sstables), "error loading from S3");
+        EXIT_NOT_OK(convert_sstables(sstables), "error converting sstables");
     }
     else
     {
+        std::map<int, std::shared_ptr<sstable_t>> sstables;
         get_file_paths(global_flags.sstable_dir_path, sstables);
+        EXIT_NOT_OK(convert_sstables(sstables), "error converting sstables");
     }
 
+    return 0;
+}
+
+arrow::Status convert_sstables(std::map<int, std::shared_ptr<sstable_t>> sstables)
+{
     if (sstables.empty())
     {
-        std::cerr << "no sstables found\n";
-        return 1;
+        return arrow::Status::Invalid("no sstables found");
     }
 
     std::vector<std::shared_ptr<arrow::Table>> finished_tables(sstables.size());
@@ -89,7 +103,7 @@ int main(int argc, char *argv[])
     for (auto &entry : sstables)
     {
         std::cout << "\n\n========== Reading SSTable #" << entry.first << " ==========\n";
-        EXIT_NOT_OK(entry.second->init(), "error loading sstable files");
+        ARROW_RETURN_NOT_OK(entry.second->init());
 
         arrow::Result<std::shared_ptr<arrow::Table>> result;
 
@@ -98,21 +112,28 @@ int main(int argc, char *argv[])
             result = vector_to_columnar_table(entry.second->statistics(), entry.second->data());
         }
 
-        EXIT_NOT_OK(result.status(), "error converting sstable");
+        ARROW_RETURN_NOT_OK(result.status());
         finished_tables[i++] = result.ValueOrDie();
     }
 
     if (global_flags.write_parquet)
     {
-        EXIT_NOT_OK(write_parquet(global_flags.parquet_dst_path.string(), finished_tables), "error writing to parquet");
+        ARROW_RETURN_NOT_OK(write_parquet(global_flags.parquet_dst_path.string(), finished_tables));
     }
 
     if (global_flags.listen)
     {
-        EXIT_NOT_OK(send_tables(finished_tables), "error running I/O operations");
+        ARROW_RETURN_NOT_OK(send_tables(finished_tables));
+    }
+    else
+    {
+        for (auto &entry : finished_tables)
+        {
+            std::cout << entry->ToString() << '\n';
+        }
     }
 
-    return 0;
+    return arrow::Status::OK();
 }
 
 arrow::Status run_arguments()

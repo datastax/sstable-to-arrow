@@ -24,6 +24,8 @@ class s3_connection
  */
 arrow::Status run_arguments();
 
+arrow::Status convert_sstables(std::map<int, std::shared_ptr<sstable_t>> sstables);
+
 /**
  * @brief Read the file paths from the local filesystem and store them into the
  * given map of sstables.
