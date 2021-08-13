@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 project(sstable_to_arrow VERSION 0.1.0)
 
-# add subdirectories
-add_subdirectory(parser)
-add_subdirectory(src)
+# exe includes both of the other two directories
+# this is probably not the right way to do it but it works
 add_subdirectory(exe)
 
 include(test/sstable_to_arrow.cmake)
+
+install(TARGETS sstable_to_arrow_exe DESTINATION bin)
 
 # use CPack to create platform specific installers
 include(InstallRequiredSystemLibraries)

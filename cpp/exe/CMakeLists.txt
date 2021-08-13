@@ -1,3 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+
+add_subdirectory(../src ${CMAKE_CURRENT_BINARY_DIR}/sstable_to_arrow)
+
 set(EXE_TARGET_NAME sstable_to_arrow_exe)
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
@@ -21,12 +25,15 @@ find_package(Arrow REQUIRED)
 find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 
 # create main sstable_to_arrow executable target
-add_executable(${EXE_TARGET_NAME} main.cpp main.h)
+add_executable(${EXE_TARGET_NAME} main.cpp main.h cli_args.cpp cli_args.h)
 
 target_link_libraries(
   ${EXE_TARGET_NAME}
   PRIVATE arrow_shared ${Boost_LIBRARIES} kaitai_struct_cpp_stl_runtime
           sstable_to_arrow sstable_parser Threads::Threads)
+
+target_include_directories(${EXE_TARGET_NAME}
+                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(MSVC)
   target_compile_options(${EXE_TARGET_NAME} PRIVATE /W4 /WX)

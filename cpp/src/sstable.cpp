@@ -21,17 +21,14 @@ arrow::Status sstable_t::init()
     m_statistics.init();
     init_deserialization_helper(get_serialization_header(statistics()));
 
+    if (m_compression_info.path() != "") // if the SSTable is compressed
     {
-        timer t;
-        if (m_compression_info.path() != "") // if the SSTable is compressed
-        {
-            m_compression_info.init();
-            read_decompressed_sstable();
-        }
-        else
-        {
-            m_data.init();
-        }
+        m_compression_info.init();
+        read_decompressed_sstable();
+    }
+    else
+    {
+        m_data.init();
     }
 
     // TODO check for validity
@@ -93,7 +90,7 @@ arrow::Status sstable_t::read_decompressed_sstable()
     // std::make_shared<boost::iostreams::stream<boost::iostreams::array_source>>(decompressed.data(),
     // decompressed.size()); naked new to convert from a boost stream to
     // std::istream
-    auto bs = new boost::interprocess::ibufferstream(m_decompressed_data.data(), m_decompressed_data.size());
+    auto *bs = new boost::interprocess::ibufferstream(m_decompressed_data.data(), m_decompressed_data.size());
     auto is = std::unique_ptr<std::istream>(bs);
     if (!is)
     {

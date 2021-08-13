@@ -74,10 +74,11 @@ RUN make && make install
 WORKDIR /home
 COPY . .
 WORKDIR /home/build
-# RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release .. && \
-#     cmake --build .
+RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build . && \
+    cmake --install .
 
-# EXPOSE 9143
+EXPOSE 9143
 
-# ENTRYPOINT [ "./sstable_to_arrow" ]
-# CMD [ "-h" ]
+ENTRYPOINT [ "sstable-to-arrow" ]
+CMD [ "-h" ]

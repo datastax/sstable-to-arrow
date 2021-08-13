@@ -5,12 +5,13 @@ project(
   DESCRIPTION "Convert SSTable files to Arrow Tables")
 set(LIBRARY_NAME sstable_to_arrow)
 
+add_subdirectory(../parser ${CMAKE_CURRENT_BINARY_DIR}/sstable_parser)
+
 # find required components
 find_package(Arrow REQUIRED)
 find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 find_library(lz4 REQUIRED)
 find_library(parquet REQUIRED)
-find_package(SSTableParser REQUIRED)
 find_package(Threads REQUIRED)
 
 # create sstable_to_arrow target
@@ -33,7 +34,7 @@ target_include_directories(
 set_target_properties(${LIBRARY_NAME} PROPERTIES CXX_STANDARD 17
                                                  CXX_STANDARD_REQUIRED ON)
 
-# ===== CONFIGURE INSTALLATION =====
+# ===== INSTALL CONFIGURATION =====
 
 set(INSTALL_DEST lib/cmake/${PROJECT_NAME})
 set(CONFIG_DEST ${PROJECT_NAME}Config)

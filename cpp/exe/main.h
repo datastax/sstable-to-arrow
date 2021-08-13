@@ -1,12 +1,14 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
-#include <arrow/result.h>            // for Status
-#include <boost/filesystem/path.hpp> // for path
-#include <map>                       // for map
-#include <memory>                    // for shared_ptr
-#include <string>                    // for string
+#include "cli_args.h"
+#include <arrow/api.h>
+#include <map>
+#include <memory>
+#include <boost/filesystem.hpp>
+
 class sstable_t;
+struct cli_args;
 
 class s3_connection
 {
@@ -22,9 +24,10 @@ class s3_connection
  * @brief If any specific files (index/statistics/summary) are passed for
  * inspection, inspect them using the functions in inspect_files
  */
-arrow::Status run_arguments();
+arrow::Status run_arguments(cli_args args);
 
-arrow::Status convert_sstables(std::map<int, std::shared_ptr<sstable_t>> sstables);
+arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> convert_sstables(
+    std::map<int, std::shared_ptr<sstable_t>> sstables);
 
 /**
  * @brief Read the file paths from the local filesystem and store them into the
