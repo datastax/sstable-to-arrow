@@ -1,4 +1,4 @@
-import hello
-print(hello.greet())
-table = hello.create_table()
+import sstable_to_pyarrow as sstopy
+print(sstopy.greet())
+table = sstopy.create_table()
 print(table.to_string())

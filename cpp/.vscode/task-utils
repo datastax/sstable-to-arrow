@@ -35,6 +35,7 @@ case "$1" in
         cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-10 ../include-what-you-use
         make
         make install
+        python3 -m pip install cmake_format
         ;;
     *)
         echo "Use subcommand release, debug, or profile"

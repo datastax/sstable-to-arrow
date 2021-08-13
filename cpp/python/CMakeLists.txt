@@ -1,15 +1,31 @@
 cmake_minimum_required(VERSION 3.16)
-project(sstable_to_pyarrow)
+project(SSTableToPyArrow)
+set(MODULE_NAME sstable_to_pyarrow)
 
 find_package(Arrow REQUIRED)
 find_package(Boost REQUIRED COMPONENTS python3)
 find_package(Python3 REQUIRED COMPONENTS Development NumPy)
+find_package(SSTableToArrow REQUIRED)
+# TODO find out how to get this into SSTableToArrow package
+find_package(SSTableParser REQUIRED)
 
-add_library(sstable_to_pyarrow SHARED sstable_to_pyarrow.cpp)
+configure_file(sstable_to_pyarrow.h.in sstable_to_pyarrow.h)
 
-set_target_properties(sstable_to_pyarrow PROPERTIES PREFIX "")
+add_library(${MODULE_NAME} SHARED sstable_to_pyarrow.cpp)
+
+set_target_properties(
+  ${MODULE_NAME}
+  PROPERTIES PREFIX ""
+             CXX_STANDARD 17
+             CXX_STANDARD_REQUIRED ON)
 target_link_libraries(
-  sstable_to_pyarrow PRIVATE arrow_shared arrow_python ${Boost_LIBRARIES} Python3::NumPy
-                  Python3::Python)
-
-install(TARGETS sstable_to_pyarrow DESTINATION lib)
+  ${MODULE_NAME}
+  PRIVATE arrow_shared
+          arrow_python
+          ${Boost_LIBRARIES}
+          Python3::NumPy
+          Python3::Python
+          sstable_parser
+          sstable_to_arrow)
+target_include_directories(${MODULE_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+install(TARGETS ${MODULE_NAME} DESTINATION lib)

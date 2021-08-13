@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 project(sstable_to_arrow VERSION 0.1.0)
+set(EXE_TARGET_NAME sstable_to_arrow_exe)
 
 # find required packages to link to
 find_package(Threads REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem iostreams python)
+find_package(Arrow REQUIRED)
+find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
@@ -25,19 +28,23 @@ endif()
 
 # add subdirectories
 add_subdirectory(parser)
-add_subdirectory(conversion_lib)
+add_subdirectory(src)
 
 # create main sstable_to_arrow executable target
-add_executable(sstable_to_arrow main.cpp main.h)
+add_executable(${EXE_TARGET_NAME} main.cpp main.h)
 
 target_link_libraries(
-  sstable_to_arrow PRIVATE sstable_to_arrow_lib sstable_parser
-                           ${Boost_LIBRARIES} Threads::Threads)
+  ${EXE_TARGET_NAME}
+  PRIVATE arrow_shared ${Boost_LIBRARIES} kaitai_struct_cpp_stl_runtime
+          sstable_to_arrow sstable_parser Threads::Threads)
+
+set_target_properties(${EXE_TARGET_NAME} PROPERTIES OUTPUT_NAME
+                                                    "sstable-to-arrow")
 
 if(MSVC)
-  target_compile_options(sstable_to_arrow PRIVATE /W4 /WX)
+  target_compile_options(${EXE_TARGET_NAME} PRIVATE /W4 /WX)
 else()
-  target_compile_options(sstable_to_arrow PRIVATE -Wall -Wextra -pedantic)
+  target_compile_options(${EXE_TARGET_NAME} PRIVATE -Wall -Wextra -pedantic)
 endif()
 
 include(test/sstable_to_arrow.cmake)

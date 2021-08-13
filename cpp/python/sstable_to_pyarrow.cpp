@@ -3,6 +3,8 @@
 #include <arrow/python/api.h>
 #include <arrow/python/pyarrow.h>
 #include <iostream>
+#include <sstable_to_arrow/sstable_to_arrow.h>
+#include "sstable_to_pyarrow.h"
 
 char const *greet()
 {
@@ -43,7 +45,7 @@ PyObject *create_table()
 
 // make sure the module name is the same as the name imported into python
 // i.e. if you run "import hello" in python, the module name should be "hello" (and not "hello_ext")
-BOOST_PYTHON_MODULE(hello)
+BOOST_PYTHON_MODULE(MODULE_NAME)
 {
     using namespace boost::python;
     def("greet", greet);
