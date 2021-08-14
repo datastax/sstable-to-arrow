@@ -9,6 +9,7 @@ add_subdirectory(../parser ${CMAKE_CURRENT_BINARY_DIR}/sstable_parser)
 
 # find required components
 find_package(Arrow REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
 find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 find_library(lz4 REQUIRED)
 find_library(parquet REQUIRED)

@@ -27,12 +27,34 @@
 #include "deletion_time.h"     // for deletion_time_t
 #include "opts.h"              // for flags, global_flags
 #include "vint.h"              // for vint_t
+#include "sstable.h"
 class sstable_statistics_t;
 namespace arrow
 {
 class MemoryPool;
 class Table;
 } // namespace arrow
+
+arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> convert_sstables(
+    std::map<int, std::shared_ptr<sstable_t>> sstables)
+{
+    if (sstables.empty())
+        return arrow::Status::Invalid("no sstables found");
+
+    std::vector<std::shared_ptr<arrow::Table>> finished_tables(sstables.size());
+
+    int i = 0;
+    for (auto &entry : sstables)
+    {
+        std::cout << "\n\n========== Reading SSTable #" << entry.first << " ==========\n";
+        ARROW_RETURN_NOT_OK(entry.second->init());
+
+        ARROW_ASSIGN_OR_RAISE(finished_tables[i++],
+                              vector_to_columnar_table(entry.second->statistics(), entry.second->data()));
+    }
+
+    return finished_tables;
+}
 
 arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
     const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,

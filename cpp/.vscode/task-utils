@@ -20,7 +20,8 @@ case "$1" in
         ninja
         ;;
     post-create)
-        apt-get install -y \
+        apt-get update -yq
+        apt-get install -yq \
             clang-10 \
             clang-tidy-10 \
             gdb \
