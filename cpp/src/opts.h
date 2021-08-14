@@ -1,11 +1,14 @@
 #ifndef OPTS_H_
 #define OPTS_H_
 
-#include "sstable.h"
-#include <arrow/filesystem/s3fs.h> // for S3FileSystem
-#include <iostream>                // for cout
-#include <map>
-#include <memory> // for shared_ptr
+#include <arrow/result.h> // for Result
+#include <iostream>       // for cout
+#include <map>            // for map
+#include <memory>         // for shared_ptr
+#include <string>         // for string
+#include <string_view>    // for string_view
+namespace arrow { namespace fs { class S3FileSystem; } }
+namespace sstable_to_arrow { class sstable_t; }
 
 namespace sstable_to_arrow
 {

@@ -1,10 +1,8 @@
 #include "columns_bitmask.h"
 #include "deserialization_helper.h" // for deserialization_helper_t, deseri...
 #include "vint.h"                   // for vint_t
-namespace kaitai
-{
-class kstream;
-}
+#include <stddef.h>                 // for size_t
+namespace kaitai { class kstream; }
 
 // see Columns::deserializeSubset
 // https://github.com/apache/cassandra/blob/cassandra-3.11/src/java/org/apache/cassandra/db/Columns.java#L524

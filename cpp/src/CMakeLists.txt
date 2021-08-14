@@ -6,7 +6,6 @@ project(
   VERSION 0.1.0
   DESCRIPTION "Convert SSTable files to Arrow Tables")
 set(LIBRARY_NAME sstable_to_arrow)
-
 add_subdirectory(../parser sstable_parser)
 
 # find required components

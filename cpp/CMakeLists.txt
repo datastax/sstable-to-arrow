@@ -1,13 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(sstable_to_arrow VERSION 0.1.0)
 
-# exe includes both of the other two directories
-# this is probably not the right way to do it but it works
-add_subdirectory(exe)
-
 option(INCLUDE_WHAT_YOU_USE "check include directives")
 if(INCLUDE_WHAT_YOU_USE)
   find_program(IWYU "include-what-you-use" REQUIRED)
+  message("using include-what-you-use at path ${IWYU}")
   set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU})
 endif()
 
@@ -16,6 +13,10 @@ if(TIDY)
   find_program(CLANG_TIDY NAMES "clang-tidy" "clang-tidy-10" REQUIRED)
   set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY};-checks=*")
 endif()
+
+# exe includes both of the other two directories this is probably not the right
+# way to do it but it works
+add_subdirectory(exe)
 
 include(test/sstable_to_arrow.cmake)
 

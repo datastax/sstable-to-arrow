@@ -1,8 +1,10 @@
 #include "cli_args.h"
-#include "opts.h"
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <getopt.h>
+#include "opts.h"                               // for flags, global_flags
+#include <algorithm>                            // for max
+#include <bits/getopt_core.h>                   // for optarg, optind, getopt
+#include <boost/algorithm/string/predicate.hpp> // for istarts_with
+#include <boost/filesystem/operations.hpp>      // for is_regular_file, exists
+#include <boost/filesystem/path_traits.hpp>     // for filesystem
 
 cli_args read_options(int argc, char *const argv[])
 {

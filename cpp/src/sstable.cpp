@@ -1,20 +1,18 @@
 #include "sstable.h"
-
-#include <arrow/buffer.h>          // for Buffer
-#include <arrow/filesystem/s3fs.h> // for S3FileSystem
-#include <arrow/io/interfaces.h>   // for RandomAccessFile
-#include <assert.h>                // for assert
-#include <lz4.h>                   // for LZ4_decompres...
-#include <stddef.h>                // for size_t
-#include <stdint.h>                // for uint64_t, int...
-
+#include "conversion_helper.h"                         // for get_serializa...
+#include "deserialization_helper.h"                    // for deserializati...
+#include "opts.h"                                      // for flags, global...
+#include <algorithm>                                   // for max
+#include <arrow/buffer.h>                              // for Buffer
+#include <arrow/filesystem/s3fs.h>                     // for S3FileSystem
+#include <arrow/io/interfaces.h>                       // for RandomAccessFile
+#include <assert.h>                                    // for assert
 #include <boost/interprocess/streams/bufferstream.hpp> // for basic_ibuffer...
 #include <iostream>                                    // for cout
+#include <lz4.h>                                       // for LZ4_decompres...
 #include <sstream>                                     // for basic_istring...
-
-#include "conversion_helper.h"      // for get_serializa...
-#include "deserialization_helper.h" // for deserializati...
-#include "opts.h"                   // for flags, global...
+#include <stddef.h>                                    // for size_t
+#include <stdint.h>                                    // for uint64_t, int...
 
 namespace sstable_to_arrow
 {
@@ -54,18 +52,16 @@ void init_deserialization_helper(sstable_statistics_t::serialization_header_t *s
 
 arrow::Status sstable_t::init()
 {
-    m_statistics.init();
+    ARROW_RETURN_NOT_OK(m_statistics.init());
     init_deserialization_helper(get_serialization_header(statistics()));
 
     if (m_compression_info.path() != "") // if the SSTable is compressed
     {
-        m_compression_info.init();
+        ARROW_RETURN_NOT_OK(m_compression_info.init());
         read_decompressed_sstable();
     }
     else
-    {
-        m_data.init();
-    }
+        ARROW_RETURN_NOT_OK(m_data.init());
 
     // TODO check for validity
     // if (sstable->statistics == nullptr || sstable->data == nullptr ||
@@ -133,7 +129,7 @@ arrow::Status sstable_t::read_decompressed_sstable()
         return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
     }
 
-    m_data.init(std::move(is));
+    ARROW_RETURN_NOT_OK(m_data.init(std::move(is)));
 
     return arrow::Status::OK();
 }

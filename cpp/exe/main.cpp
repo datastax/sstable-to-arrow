@@ -1,9 +1,19 @@
-#include "api.h"
-#include "cli_args.h"
-#include "io.h"
-#include <boost/algorithm/string.hpp>
-#include <arrow/api.h>
-#include <iostream>
+#include "api.h"                // for read_sstables
+#include "cli_args.h"           // for cli_args, read_options, help_msg
+#include "inspect_files.h"      // for debug_index, debug_statistics, debug...
+#include "io.h"                 // for send_tables, write_parquet
+#include "sstable.h"            // for file_container
+#include "sstable_index.h"      // for sstable_index_t
+#include "sstable_statistics.h" // for sstable_statistics_t
+#include "sstable_summary.h"    // for sstable_summary_t
+#include <arrow/result.h>       // for Result
+#include <arrow/status.h>       // for Status, ARROW_RETURN_NOT_OK
+#include <arrow/table.h>        // for Table
+#include <bits/exception.h>     // for exception
+#include <iostream>             // for operator<<, basic_ostream, ostream
+#include <memory>               // for shared_ptr, __shared_ptr_access
+#include <string>               // for operator<<, string
+#include <vector>               // for vector
 
 #define EXIT_NOT_OK(expr, msg)                                                                                         \
     do                                                                                                                 \

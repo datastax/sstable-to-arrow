@@ -1,6 +1,15 @@
 #include "opts.h"
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
+#include "sstable.h"                            // for sstable_t
+#include <arrow/filesystem/filesystem.h>        // for FileInfo, FileSelector
+#include <arrow/filesystem/s3fs.h>              // for EnsureS3Initialized
+#include <arrow/status.h>                       // for ARROW_RETURN_NOT_OK
+#include <boost/algorithm/string/predicate.hpp> // for iends_with
+#include <boost/filesystem/directory.hpp>       // for directory_entry, dir...
+#include <boost/filesystem/operations.hpp>      // for is_regular_file
+#include <boost/filesystem/path.hpp>            // for path
+#include <boost/filesystem/path_traits.hpp>     // for filesystem
+#include <stdio.h>                              // for sscanf, size_t
+#include <vector>                               // for vector
 
 namespace sstable_to_arrow
 {

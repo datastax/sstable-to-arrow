@@ -1,16 +1,20 @@
 #ifndef SSTABLE_TO_ARROW_API_H_
 #define SSTABLE_TO_ARROW_API_H_
 
-#include "inspect_files.h"
-#include "sstable.h"
-#include <arrow/result.h>
-#include <arrow/table.h>
-#include <map>
-#include <memory>
+#include <arrow/result.h> // for Result
+#include <map>            // for map
+#include <memory>         // for shared_ptr
+#include <string_view>    // for string_view
+#include <vector>         // for vector
+namespace arrow { class Table; }
 
 namespace sstable_to_arrow
 {
 
+class sstable_t; // forward decl
+
+namespace
+{
 class s3_connection
 {
     bool m_ok;
@@ -20,6 +24,7 @@ class s3_connection
     ~s3_connection();
     bool ok() const;
 };
+} // namespace
 
 /**
  * @brief Convert a map of sstable_t objects into a vector of arrow tables.

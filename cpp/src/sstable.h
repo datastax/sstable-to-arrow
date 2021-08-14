@@ -20,7 +20,6 @@
 
 namespace sstable_to_arrow
 {
-
 namespace
 {
 void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header);

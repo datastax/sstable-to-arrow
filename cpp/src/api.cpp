@@ -1,10 +1,36 @@
 #include "api.h"
-#include "sstable_to_arrow.h"
-#include <boost/algorithm/string/predicate.hpp>
-#include <iostream>
+#include "opts.h"                               // for get_file_paths_from_...
+#include "sstable.h"                            // for sstable_t
+#include "sstable_to_arrow.h"                   // for vector_to_columnar_t...
+#include <arrow/filesystem/s3fs.h>              // for EnsureS3Initialized
+#include <arrow/status.h>                       // for Status, ARROW_RETURN...
+#include <boost/algorithm/string/predicate.hpp> // for istarts_with
+#include <ext/alloc_traits.h>                   // for __alloc_traits<>::va...
+#include <iostream>                             // for operator<<, basic_os...
+#include <utility>                              // for pair
+namespace arrow { class Table; }
 
 namespace sstable_to_arrow
 {
+namespace
+{
+s3_connection::s3_connection()
+{
+    std::cout << "opening connection to s3\n";
+    m_ok = arrow::fs::EnsureS3Initialized().ok();
+}
+
+s3_connection::~s3_connection()
+{
+    std::cout << "closing connection to s3\n";
+    m_ok = arrow::fs::FinalizeS3().ok();
+}
+
+bool s3_connection::ok() const
+{
+    return m_ok;
+}
+} // namespace
 
 arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> convert_sstables(
     std::map<int, std::shared_ptr<sstable_t>> sstables)
@@ -40,23 +66,6 @@ arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> read_sstables(std::str
         auto sstables{get_file_paths_from_local(path)};
         return convert_sstables(sstables);
     }
-}
-
-s3_connection::s3_connection()
-{
-    std::cout << "opening connection to s3\n";
-    m_ok = arrow::fs::EnsureS3Initialized().ok();
-}
-
-s3_connection::~s3_connection()
-{
-    std::cout << "closing connection to s3\n";
-    m_ok = arrow::fs::FinalizeS3().ok();
-}
-
-bool s3_connection::ok() const
-{
-    return m_ok;
 }
 
 } // namespace sstable_to_arrow

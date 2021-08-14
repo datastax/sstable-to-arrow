@@ -1,39 +1,30 @@
-// See http://arrow.apache.org/docs/cpp/examples/row_columnar_conversion.html
-
 #include "sstable_to_arrow.h"
-
+#include "clustering_blocks.h"          // for clustering_blocks_t
+#include "columns_bitmask.h"            // for columns_bitmask_t
+#include "conversions.h"                // for get_child_type, get_map_chil...
+#include "deletion_time.h"              // for deletion_time_t
+#include "opts.h"                       // for flags, global_flags
+#include "vint.h"                       // for vint_t
+#include <algorithm>                    // for copy
 #include <arrow/array/builder_binary.h> // for StringBuilder, BinaryBuilder
 #include <arrow/array/builder_dict.h>   // for ArrayBuilder, NumericBuilder
 #include <arrow/array/builder_nested.h> // for ListBuilder, MapBuilder, Str...
 #include <arrow/array/builder_union.h>  // for DenseUnionBuilder
 #include <assert.h>                     // for assert
+#include <boost/algorithm/hex.hpp>      // for hex
+#include <ext/alloc_traits.h>           // for __alloc_traits<>::value_type
+#include <initializer_list>             // for initializer_list
+#include <iostream>                     // for operator<<, cout, ostream
 #include <kaitai/kaitaistream.h>        // for kstream
 #include <kaitai/kaitaistruct.h>        // for kstruct
 #include <stddef.h>                     // for size_t
-
-#include <algorithm>               // for copy
-#include <boost/algorithm/hex.hpp> // for hex
-#include <ext/alloc_traits.h>      // for __alloc_traits<>::value_type
-#include <initializer_list>        // for initializer_list
-#include <iostream>                // for operator<<, ostream, basic_o...
-#include <stdexcept>               // for out_of_range
-#include <string>                  // for string, basic_string, operator+
-#include <unordered_map>           // for unordered_map
-#include <vector>                  // for vector
-
-#include "clustering_blocks.h" // for clustering_blocks_t
-#include "columns_bitmask.h"   // for columns_bitmask_t
-#include "conversions.h"       // for get_child_type, get_map_chil...
-#include "deletion_time.h"     // for deletion_time_t
-#include "opts.h"              // for flags, global_flags
-#include "sstable.h"
-#include "vint.h" // for vint_t
-class sstable_statistics_t;
-namespace arrow
-{
-class MemoryPool;
-class Table;
-} // namespace arrow
+#include <stdexcept>                    // for out_of_range
+#include <string>                       // for string, char_traits, operator+
+#include <unordered_map>                // for unordered_map
+#include <vector>                       // for vector
+class sstable_statistics_t;             // lines 31-31
+namespace arrow { class MemoryPool; }
+namespace arrow { class Table; }
 
 namespace sstable_to_arrow
 {
@@ -68,7 +59,8 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
         if ((unfiltered->flags() & 0x01) != 0) // end of partition
             break;
         else if ((unfiltered->flags() & 0x02) != 0) // range tombstone
-            process_marker(dynamic_cast<sstable_data_t::range_tombstone_marker_t *>(unfiltered->body()));
+            ARROW_RETURN_NOT_OK(
+                process_marker(dynamic_cast<sstable_data_t::range_tombstone_marker_t *>(unfiltered->body())));
         else // row
         {
             no_rows = false;
@@ -84,7 +76,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
                 ARROW_RETURN_NOT_OK(helper->append_partition_deletion_time(local_deletion_time, marked_for_delete_at));
             auto row = dynamic_cast<sstable_data_t::row_t *>(unfiltered->body());
             bool is_static = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0);
-            process_row(row, is_static, helper, pool);
+            ARROW_RETURN_NOT_OK(process_row(row, is_static, helper, pool));
         }
     }
 
@@ -469,13 +461,13 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         auto builder = dynamic_cast<arrow::DenseUnionBuilder *>(builder_ptr);
         if (ks.size() == 4)
         {
-            builder->Append(0);
+            ARROW_RETURN_NOT_OK(builder->Append(0));
             auto ipv4_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
             return ipv4_builder->Append(ks.read_s4be());
         }
         else if (ks.size() == 8)
         {
-            builder->Append(1);
+            ARROW_RETURN_NOT_OK(builder->Append(1));
             auto ipv6_builder = dynamic_cast<arrow::Int64Builder *>(builder->child(1));
             return ipv6_builder->Append(ks.read_s8be());
         }
