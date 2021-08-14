@@ -1,3 +1,5 @@
+include_guard()
+
 cmake_minimum_required(VERSION 3.16)
 project(
   SSTableToArrow
@@ -5,20 +7,25 @@ project(
   DESCRIPTION "Convert SSTable files to Arrow Tables")
 set(LIBRARY_NAME sstable_to_arrow)
 
-add_subdirectory(../parser ${CMAKE_CURRENT_BINARY_DIR}/sstable_parser)
+add_subdirectory(../parser sstable_parser)
 
 # find required components
 find_package(Arrow REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
-find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 find_library(lz4 REQUIRED)
 find_library(parquet REQUIRED)
 find_package(Threads REQUIRED)
 
 # create sstable_to_arrow target
 add_library(
-  ${LIBRARY_NAME} SHARED conversion_helper.cpp inspect_files.cpp io.cpp
-                         opts.cpp sstable_to_arrow.cpp sstable.cpp)
+  ${LIBRARY_NAME}
+  api.cpp
+  conversion_helper.cpp
+  inspect_files.cpp
+  io.cpp
+  opts.cpp
+  sstable_to_arrow.cpp
+  sstable.cpp)
 
 # TODO is there a better way to propagate the include directories from
 # sstable_parser and keep the library itself private?

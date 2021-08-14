@@ -25,15 +25,8 @@ namespace kaitai
 class kstruct;
 }
 
-/**
- * @brief Convert a map of sstable_t objects into a vector of arrow tables.
- *
- * @param sstables a map of sstables from their number in the filename to the sstable_t object containing the path
- * information for that sstable
- * @return arrow::Result<std::vector<std::shared_ptr<arrow::Table>>>
- */
-arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> convert_sstables(
-    std::map<int, std::shared_ptr<sstable_t>> sstables);
+namespace sstable_to_arrow
+{
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
@@ -101,5 +94,7 @@ arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker);
 // check if `row` has the column specified by an `idx` referring to the overall
 // SSTable.
 bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx);
+
+} // namespace sstable_to_arrow
 
 #endif

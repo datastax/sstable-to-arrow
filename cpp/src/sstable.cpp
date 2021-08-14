@@ -16,6 +16,42 @@
 #include "deserialization_helper.h" // for deserializati...
 #include "opts.h"                   // for flags, global...
 
+namespace sstable_to_arrow
+{
+namespace
+{
+// Initialize the deserialization helper using the schema from the
+// serialization header stored in the statistics file.
+void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header)
+{
+    // Set important constants for the serialization helper and initialize
+    // vectors to store types of clustering columns
+    auto *clustering_key_types = serialization_header->clustering_key_types()->array();
+    auto *static_columns = serialization_header->static_columns()->array();
+    auto *regular_columns = serialization_header->regular_columns()->array();
+
+    deserialization_helper_t::set_n_cols(deserialization_helper_t::CLUSTERING, clustering_key_types->size());
+    deserialization_helper_t::set_n_cols(deserialization_helper_t::STATIC, static_columns->size());
+    deserialization_helper_t::set_n_cols(deserialization_helper_t::REGULAR, regular_columns->size());
+
+    int i{0};
+    for (auto &type : *clustering_key_types)
+    {
+        deserialization_helper_t::set_col_type(deserialization_helper_t::CLUSTERING, i++, type->body());
+    }
+    i = 0;
+    for (auto &column : *static_columns)
+    {
+        deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->column_type()->body());
+    }
+    i = 0;
+    for (auto &column : *regular_columns)
+    {
+        deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->column_type()->body());
+    }
+}
+} // namespace
+
 arrow::Status sstable_t::init()
 {
     m_statistics.init();
@@ -144,37 +180,6 @@ void sstable_t::set_compression_info_path(const std::string &path)
     m_compression_info.set_path(path);
 }
 
-// Initialize the deserialization helper using the schema from the
-// serialization header stored in the statistics file.
-void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header)
-{
-    // Set important constants for the serialization helper and initialize
-    // vectors to store types of clustering columns
-    auto *clustering_key_types = serialization_header->clustering_key_types()->array();
-    auto *static_columns = serialization_header->static_columns()->array();
-    auto *regular_columns = serialization_header->regular_columns()->array();
-
-    deserialization_helper_t::set_n_cols(deserialization_helper_t::CLUSTERING, clustering_key_types->size());
-    deserialization_helper_t::set_n_cols(deserialization_helper_t::STATIC, static_columns->size());
-    deserialization_helper_t::set_n_cols(deserialization_helper_t::REGULAR, regular_columns->size());
-
-    int i{0};
-    for (auto &type : *clustering_key_types)
-    {
-        deserialization_helper_t::set_col_type(deserialization_helper_t::CLUSTERING, i++, type->body());
-    }
-    i = 0;
-    for (auto &column : *static_columns)
-    {
-        deserialization_helper_t::set_col_type(deserialization_helper_t::STATIC, i++, column->column_type()->body());
-    }
-    i = 0;
-    for (auto &column : *regular_columns)
-    {
-        deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->column_type()->body());
-    }
-}
-
 arrow::Result<std::unique_ptr<std::istream>> open_stream(const std::string &path)
 {
     if (global_flags.is_s3)
@@ -195,3 +200,5 @@ arrow::Result<std::unique_ptr<std::istream>> open_stream(const std::string &path
         return stream;
     }
 }
+
+} // namespace sstable_to_arrow

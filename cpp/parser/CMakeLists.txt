@@ -1,3 +1,5 @@
+include_guard()
+
 cmake_minimum_required(VERSION 3.16)
 project(
   SSTableParser
@@ -34,9 +36,10 @@ set(OPAQUE_TYPES
 list(TRANSFORM OPAQUE_TYPES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/opaque/)
 
 # create the sstable_parser target from the source files
-add_library(${LIBRARY_NAME} SHARED ${OPAQUE_TYPES} ${KSY_TYPES})
+add_library(${LIBRARY_NAME} ${OPAQUE_TYPES} ${KSY_TYPES})
 
-target_link_libraries(${LIBRARY_NAME} PRIVATE kaitai_struct_cpp_stl_runtime)
+# dependents need to pass a kaitai::kstream, so we make this public
+target_link_libraries(${LIBRARY_NAME} PUBLIC kaitai_struct_cpp_stl_runtime)
 
 target_include_directories(
   ${LIBRARY_NAME}
@@ -44,8 +47,7 @@ target_include_directories(
          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/ksy>
          $<INSTALL_INTERFACE:include/${LIBRARY_NAME}>)
 
-set_target_properties(${LIBRARY_NAME} PROPERTIES CXX_STANDARD 17
-                                                 CXX_STANDARD_REQUIRED ON)
+target_compile_features(${LIBRARY_NAME} PUBLIC cxx_std_17)
 
 # ===== CONFIGURE INSTALLATION =====
 

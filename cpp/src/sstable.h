@@ -18,6 +18,14 @@
 #include "sstable_statistics.h"       // for sstable_statistics_t
 #include "sstable_summary.h"          // for sstable_summary_t
 
+namespace sstable_to_arrow
+{
+
+namespace
+{
+void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header);
+}
+
 /**
  * @brief Opens an input stream to the file specified by `path` and stores it
  * in the object pointed to by `ifs`.
@@ -107,6 +115,6 @@ class sstable_t
     void set_compression_info_path(const std::string &path);
 };
 
-void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header);
+} // namespace sstable_to_arrow
 
 #endif

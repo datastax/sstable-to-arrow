@@ -1,4 +1,5 @@
 #include "cli_args.h"
+#include "opts.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <getopt.h>
@@ -99,6 +100,11 @@ cli_args read_options(int argc, char *const argv[])
                 args.sstable_dir_path = argv[optind];
         }
     }
+
+    sstable_to_arrow::global_flags.for_cudf = args.for_cudf;
+    sstable_to_arrow::global_flags.include_metadata = args.include_metadata;
+    sstable_to_arrow::global_flags.is_s3 = args.is_s3;
+    sstable_to_arrow::global_flags.verbose = args.verbose;
 
     return args;
 }

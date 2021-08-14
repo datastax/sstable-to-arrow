@@ -25,6 +25,9 @@ class Schema;
 class Table;
 } // namespace arrow
 
+namespace sstable_to_arrow
+{
+
 class column_t
 {
   public:
@@ -49,6 +52,16 @@ class column_t
         : cassandra_type(cassandra_type_), field(arrow::field(name_, type_)),
           has_second{conversions::is_uuid(cassandra_type_) && global_flags.for_cudf}, m_is_clustering{is_clustering} {};
 
+    /**
+     * @brief create the data builder and time data builders for this column
+     *
+     * @param complex_ts_allowed Whether the type of the time data builders should
+     * mirror the data builder if complex. For example, if this column stores lists
+     * of data and complex_ts_allowed is set to true, each of the time data
+     * builders will also store a list of data. Otherwise, they will store a single
+     * timestamp for the entire list.
+     * @return arrow::Status
+     */
     arrow::Status init(arrow::MemoryPool *pool, bool complex_ts_allowed = true);
 
     // allocate enough memory for nrows elements in both the value and timestamp
@@ -108,5 +121,7 @@ arrow::Status reserve_builder(arrow::ArrayBuilder *builder, const int64_t &nrows
 // extract the serialization header from an SSTable
 sstable_statistics_t::serialization_header_t *get_serialization_header(
     const std::unique_ptr<sstable_statistics_t> &statistics);
+
+} // namespace sstable_to_arrow
 
 #endif

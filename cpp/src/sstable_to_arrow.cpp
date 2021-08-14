@@ -26,8 +26,8 @@
 #include "conversions.h"       // for get_child_type, get_map_chil...
 #include "deletion_time.h"     // for deletion_time_t
 #include "opts.h"              // for flags, global_flags
-#include "vint.h"              // for vint_t
 #include "sstable.h"
+#include "vint.h" // for vint_t
 class sstable_statistics_t;
 namespace arrow
 {
@@ -35,26 +35,8 @@ class MemoryPool;
 class Table;
 } // namespace arrow
 
-arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> convert_sstables(
-    std::map<int, std::shared_ptr<sstable_t>> sstables)
+namespace sstable_to_arrow
 {
-    if (sstables.empty())
-        return arrow::Status::Invalid("no sstables found");
-
-    std::vector<std::shared_ptr<arrow::Table>> finished_tables(sstables.size());
-
-    int i = 0;
-    for (auto &entry : sstables)
-    {
-        std::cout << "\n\n========== Reading SSTable #" << entry.first << " ==========\n";
-        ARROW_RETURN_NOT_OK(entry.second->init());
-
-        ARROW_ASSIGN_OR_RAISE(finished_tables[i++],
-                              vector_to_columnar_table(entry.second->statistics(), entry.second->data()));
-    }
-
-    return finished_tables;
-}
 
 arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
     const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,
@@ -608,3 +590,5 @@ bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx)
 {
     return row->_is_null_columns_bitmask() || (row->columns_bitmask()->bitmask & (1U << idx)) == 0;
 }
+
+} // namespace sstable_to_arrow

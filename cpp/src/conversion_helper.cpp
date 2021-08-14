@@ -19,16 +19,9 @@ class Array;
 class MemoryPool;
 } // namespace arrow
 
-/**
- * @brief create the data builder and time data builders for this column
- *
- * @param complex_ts_allowed Whether the type of the time data builders should
- * mirror the data builder if complex. For example, if this column stores lists
- * of data and complex_ts_allowed is set to true, each of the time data
- * builders will also store a list of data. Otherwise, they will store a single
- * timestamp for the entire list.
- * @return arrow::Status
- */
+namespace sstable_to_arrow
+{
+
 arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
 {
     // create data builder
@@ -45,18 +38,14 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
         conversions::get_arrow_type_options options;
         options.replace_with = micro;
         options.for_cudf = global_flags.for_cudf;
-        auto ts_type = complex_ts_allowed
-                           ? conversions::get_arrow_type(cassandra_type, options)
-                           : micro;
+        auto ts_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, options) : micro;
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &ts_builder));
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &local_del_time_builder));
 
         auto ttl = arrow::duration(arrow::TimeUnit::SECOND);
         options.replace_with = ttl;
         options.for_cudf = global_flags.for_cudf;
-        auto ttl_type = complex_ts_allowed
-                            ? conversions::get_arrow_type(cassandra_type, options)
-                            : ttl;
+        auto ttl_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, options) : ttl;
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ttl_type, &ttl_builder));
     }
 
@@ -360,3 +349,5 @@ sstable_statistics_t::serialization_header_t *get_serialization_header(
                               // the table of contents in the statistics file
     return dynamic_cast<sstable_statistics_t::serialization_header_t *>(ptr->body());
 }
+
+} // namespace sstable_to_arrow

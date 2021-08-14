@@ -13,6 +13,9 @@
 class sstable_index_t;
 class sstable_summary_t;
 
+namespace sstable_to_arrow
+{
+
 // ==================== DEBUG SSTABLE FILES ====================
 // These functions print some important data retrieved from the
 // sstable files.
@@ -104,3 +107,5 @@ void debug_summary(const std::unique_ptr<sstable_summary_t> &summary)
     std::cout << "========== summary file ==========\n"
                  "a description of the summary file has not yet been implemented\n";
 }
+
+} // namespace sstable_to_arrow

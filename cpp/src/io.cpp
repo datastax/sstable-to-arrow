@@ -20,6 +20,11 @@ namespace arrow
 class MemoryPool;
 } // namespace arrow
 
+namespace sstable_to_arrow
+{
+namespace io
+{
+
 const int PORT = 9143;
 
 /**
@@ -117,3 +122,6 @@ arrow::Status write_parquet(const std::string &path, std::vector<std::shared_ptr
     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(path));
     return parquet::arrow::WriteTable(*final_table, pool, outfile, 3);
 }
+
+} // namespace io
+} // namespace sstable_to_arrow
