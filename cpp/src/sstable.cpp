@@ -18,8 +18,6 @@ namespace sstable_to_arrow
 {
 namespace
 {
-// Initialize the deserialization helper using the schema from the
-// serialization header stored in the statistics file.
 void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header)
 {
     // Set important constants for the serialization helper and initialize

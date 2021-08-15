@@ -23,8 +23,11 @@
 #include <unordered_map>                // for unordered_map
 #include <vector>                       // for vector
 class sstable_statistics_t;             // lines 31-31
-namespace arrow { class MemoryPool; }
-namespace arrow { class Table; }
+namespace arrow
+{
+class MemoryPool;
+class Table;
+} // namespace arrow
 
 namespace sstable_to_arrow
 {
@@ -33,7 +36,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
     const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,
     arrow::MemoryPool *pool)
 {
-    auto helper = std::make_unique<conversion_helper_t>(statistics);
+    ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
     ARROW_RETURN_NOT_OK(helper->init(pool));
 
     for (const auto &partition : *sstable->partitions())
@@ -64,13 +67,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
         else // row
         {
             no_rows = false;
-            // append partition key
-            const std::string &type = helper->partition_key->cassandra_type;
-            if (helper->partition_key->has_second)
-                ARROW_RETURN_NOT_OK(append_uuid(helper->partition_key->builder.get(),
-                                                helper->partition_key->second.get(), partition_key));
-            else
-                ARROW_RETURN_NOT_OK(append_scalar(type, helper->partition_key->builder.get(), partition_key, pool));
+            ARROW_RETURN_NOT_OK(append_scalar(helper->partition_key, partition_key, pool));
             // append partition deletion info
             if (global_flags.include_metadata)
                 ARROW_RETURN_NOT_OK(helper->append_partition_deletion_time(local_deletion_time, marked_for_delete_at));
@@ -84,8 +81,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
     // we create a filler row containing the partition deletion information
     if (no_rows)
     {
-        ARROW_RETURN_NOT_OK(append_scalar(helper->partition_key->cassandra_type, helper->partition_key->builder.get(),
-                                          partition_key, pool));
+        ARROW_RETURN_NOT_OK(append_scalar(helper->partition_key, partition_key, pool));
 
         if (global_flags.include_metadata)
         {
@@ -192,10 +188,7 @@ arrow::Status process_row(sstable_data_t::row_t *row, bool is_static,
         {
             auto &cell = (*row->clustering_blocks()->values())[i];
             auto &col = helper->clustering_cols[i];
-            if (col->has_second)
-                ARROW_RETURN_NOT_OK(append_uuid(col->builder.get(), col->second.get(), cell));
-            else
-                ARROW_RETURN_NOT_OK(append_scalar(col->cassandra_type, col->builder.get(), cell, pool));
+            ARROW_RETURN_NOT_OK(append_scalar(col, cell, pool));
             // ignore timestamps for clustering cols since they don't have them
         }
     }
@@ -283,22 +276,24 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
         {
             // map keys are stored in the cell path
             conversions::get_map_child_types(col->cassandra_type, &key_type, &value_type);
-            ARROW_RETURN_NOT_OK(append_scalar(key_type, builder->key_builder(), simple_cell->path()->value(), pool));
-            ARROW_RETURN_NOT_OK(append_scalar(value_type, builder->item_builder(), simple_cell->value(), pool));
+            ARROW_RETURN_NOT_OK(
+                append_scalar(key_type, builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
+            ARROW_RETURN_NOT_OK(
+                append_scalar(value_type, builder->item_builder(), nullptr, simple_cell->value(), pool));
 
             if (global_flags.include_metadata)
             {
                 ARROW_RETURN_NOT_OK(
-                    append_scalar(key_type, ts_builder->key_builder(), simple_cell->path()->value(), pool));
+                    append_scalar(key_type, ts_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
                 ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_item_builder, helper, simple_cell.get()));
 
-                ARROW_RETURN_NOT_OK(
-                    append_scalar(key_type, local_del_time_builder->key_builder(), simple_cell->path()->value(), pool));
+                ARROW_RETURN_NOT_OK(append_scalar(key_type, local_del_time_builder->key_builder(), nullptr,
+                                                  simple_cell->path()->value(), pool));
                 ARROW_RETURN_NOT_OK(
                     append_local_del_time_if_exists(local_del_time_item_builder, helper, simple_cell.get()));
 
                 ARROW_RETURN_NOT_OK(
-                    append_scalar(key_type, ttl_builder->key_builder(), simple_cell->path()->value(), pool));
+                    append_scalar(key_type, ttl_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
                 ARROW_RETURN_NOT_OK(append_ttl_if_exists(ttl_item_builder, helper, simple_cell.get()));
             }
         }
@@ -328,7 +323,7 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
             // values of a set are stored in the path, while the actual cell
             // value is empty
             ARROW_RETURN_NOT_OK(append_scalar(conversions::get_child_type(col->cassandra_type),
-                                              builder->value_builder(), simple_cell->path()->value(), pool));
+                                              builder->value_builder(), nullptr, simple_cell->path()->value(), pool));
             if (global_flags.include_metadata)
             {
                 ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_value_builder, helper, simple_cell.get()));
@@ -359,7 +354,8 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
         std::string_view child_type = conversions::get_child_type(col->cassandra_type);
         for (const auto &simple_cell : *cell->simple_cells())
         {
-            ARROW_RETURN_NOT_OK(append_scalar(child_type, builder->value_builder(), simple_cell->value(), pool));
+            ARROW_RETURN_NOT_OK(
+                append_scalar(child_type, builder->value_builder(), nullptr, simple_cell->value(), pool));
             if (global_flags.include_metadata)
             {
                 ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_value_builder, helper, simple_cell.get()));
@@ -390,35 +386,32 @@ arrow::Status append_simple(std::shared_ptr<column_t> col, const std::unique_ptr
         ARROW_RETURN_NOT_OK(append_local_del_time_if_exists(local_del_time_builder, helper, cell));
         ARROW_RETURN_NOT_OK(append_ttl_if_exists(ttl_builder, helper, cell));
     }
-    if (col->has_second)
-        return append_uuid(col->builder.get(), col->second.get(), cell->value());
-    else
-        return append_scalar(col->cassandra_type, col->builder.get(), cell->value(), pool);
+    return append_scalar(col, cell->value(), pool);
 }
 
-arrow::Status append_uuid(arrow::ArrayBuilder *first, arrow::ArrayBuilder *second, std::string_view bytes)
+namespace
 {
-    auto first_builder = dynamic_cast<arrow::UInt64Builder *>(first);
-    auto second_builder = dynamic_cast<arrow::UInt64Builder *>(second);
-    kaitai::kstream ks(std::string{bytes});
-    ARROW_RETURN_NOT_OK(first_builder->Append(ks.read_u8be()));
-    ARROW_RETURN_NOT_OK(second_builder->Append(ks.read_u8be()));
-    return arrow::Status::OK();
+arrow::Status append_scalar(std::shared_ptr<column_t> col, std::string_view value, arrow::MemoryPool *pool)
+{
+    return append_scalar(col->cassandra_type, col->builder.get(), col->has_second ? col->second.get() : nullptr, value,
+                         pool);
 }
 
-arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, std::string_view bytes,
-                            arrow::MemoryPool *pool)
+arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, arrow::ArrayBuilder *second_ptr,
+                            std::string_view bytes, arrow::MemoryPool *pool)
 {
     // for all other types, we parse the data using kaitai, which might end up
     // being a performance bottleneck
     // TODO look into potential uses of memcpy for optimization
-    std::string buffer(bytes);
-    kaitai::kstream ks(buffer);
+    auto ks = kaitai::kstream(std::string(bytes));
 
     if (conversions::is_composite(coltype))
     {
         auto builder = dynamic_cast<arrow::StructBuilder *>(builder_ptr);
         ARROW_RETURN_NOT_OK(builder->Append());
+        decltype(builder) second_builder = second_ptr ? dynamic_cast<arrow::StructBuilder *>(second_ptr) : nullptr;
+        if (second_ptr)
+            ARROW_RETURN_NOT_OK(second_builder->Append());
 
         ARROW_ASSIGN_OR_RAISE(auto tree, conversions::parse_nested_type(coltype));
         for (size_t i = 0; i < tree->children->size(); ++i)
@@ -426,67 +419,109 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
             uint16_t child_size = ks.read_u2be();
             auto data = ks.read_bytes(child_size);
             ks.read_bytes(1); // skip the '0' bit at end
-            ARROW_RETURN_NOT_OK(append_scalar((*tree->children)[i]->str, builder->child(i), data, pool));
+            ARROW_RETURN_NOT_OK(append_scalar((*tree->children)[i]->str, builder->child(i),
+                                              second_ptr ? second_builder->child(i) : nullptr, data, pool));
         }
         return arrow::Status::OK();
     }
     else if (conversions::is_reversed(coltype))
-        return append_scalar(conversions::get_child_type(coltype), builder_ptr, bytes, pool);
+        return append_scalar(conversions::get_child_type(coltype), builder_ptr, second_ptr, bytes, pool);
     else if (coltype == conversions::types::DecimalType) // decimal
     {
-        auto builder = (arrow::StructBuilder *)builder_ptr;
-        ARROW_RETURN_NOT_OK(builder->Append());
-        auto scale_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
-        auto val_builder = dynamic_cast<arrow::BinaryBuilder *>(builder->child(1));
         int scale = ks.read_s4be();
-        ARROW_RETURN_NOT_OK(scale_builder->Append(scale));
-        ARROW_RETURN_NOT_OK(val_builder->Append(ks.read_bytes_full()));
+        auto val = ks.read_bytes_full();
+        auto append_decimal = [scale, val](arrow::ArrayBuilder *ptr) {
+            auto builder = dynamic_cast<arrow::StructBuilder *>(ptr);
+            ARROW_RETURN_NOT_OK(builder->Append());
+
+            auto scale_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
+            auto val_builder = dynamic_cast<arrow::BinaryBuilder *>(builder->child(1));
+            ARROW_RETURN_NOT_OK(scale_builder->Append(scale));
+            return val_builder->Append(val);
+        };
+        ARROW_RETURN_NOT_OK(append_decimal(builder_ptr));
+        if (second_ptr)
+            ARROW_RETURN_NOT_OK(append_decimal(second_ptr));
         return arrow::Status::OK();
     }
     else if (coltype == conversions::types::DurationType) // duration
     {
-        auto builder = dynamic_cast<arrow::FixedSizeListBuilder *>(builder_ptr);
-        auto value_builder = dynamic_cast<arrow::Int64Builder *>(builder->value_builder());
-        long long months = vint_t(&ks).val();
-        long long days = vint_t(&ks).val();
-        long long nanoseconds = vint_t(&ks).val();
-        ARROW_RETURN_NOT_OK(builder->Append());
-        ARROW_RETURN_NOT_OK(value_builder->Append(months));
-        ARROW_RETURN_NOT_OK(value_builder->Append(days));
-        ARROW_RETURN_NOT_OK(value_builder->Append(nanoseconds));
+        auto months{vint_t(&ks).val()}, days{vint_t(&ks).val()}, nanos{vint_t(&ks).val()};
+        auto append_duration = [months, days, nanos](arrow::ArrayBuilder *ptr) {
+            auto builder = dynamic_cast<arrow::FixedSizeListBuilder *>(ptr);
+            auto value_builder = dynamic_cast<arrow::Int64Builder *>(builder->value_builder());
+            ARROW_RETURN_NOT_OK(builder->Append());
+            ARROW_RETURN_NOT_OK(value_builder->Append(months));
+            ARROW_RETURN_NOT_OK(value_builder->Append(days));
+            ARROW_RETURN_NOT_OK(value_builder->Append(nanos));
+            return arrow::Status::OK();
+        };
+        ARROW_RETURN_NOT_OK(append_duration(builder_ptr));
+        if (second_ptr)
+            ARROW_RETURN_NOT_OK(append_duration(second_ptr));
         return arrow::Status::OK();
     }
     else if (coltype == conversions::types::InetAddressType) // inet
     {
-        auto builder = dynamic_cast<arrow::DenseUnionBuilder *>(builder_ptr);
-        if (ks.size() == 4)
-        {
-            ARROW_RETURN_NOT_OK(builder->Append(0));
-            auto ipv4_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
-            return ipv4_builder->Append(ks.read_s4be());
-        }
-        else if (ks.size() == 8)
-        {
-            ARROW_RETURN_NOT_OK(builder->Append(1));
-            auto ipv6_builder = dynamic_cast<arrow::Int64Builder *>(builder->child(1));
-            return ipv6_builder->Append(ks.read_s8be());
-        }
-        else
-        {
+        auto size = ks.size();
+        if (size != 4 && size != 8)
             return arrow::Status::TypeError("invalid IP address of size " + std::to_string(ks.size()) +
                                             "bytes. needs to be 4 or 8");
-        }
+        auto val = size == 4 ? ks.read_s4be() : ks.read_s8be();
+        auto append_inet_addr = [size, val](arrow::ArrayBuilder *ptr) {
+            auto builder = dynamic_cast<arrow::DenseUnionBuilder *>(ptr);
+            if (size == 4)
+            {
+                ARROW_RETURN_NOT_OK(builder->Append(0));
+                auto ipv4_builder = dynamic_cast<arrow::Int32Builder *>(builder->child(0));
+                return ipv4_builder->Append(val);
+            }
+            else
+            {
+                ARROW_RETURN_NOT_OK(builder->Append(1));
+                auto ipv6_builder = dynamic_cast<arrow::Int64Builder *>(builder->child(1));
+                return ipv6_builder->Append(val);
+            }
+        };
+        ARROW_RETURN_NOT_OK(append_inet_addr(builder_ptr));
+        if (second_ptr)
+            ARROW_RETURN_NOT_OK(append_inet_addr(second_ptr));
+        return arrow::Status::OK();
     }
     else if (coltype == conversions::types::IntegerType) // varint
     {
+        auto val = vint_t::parse_java(bytes.data(), bytes.size());
         auto builder = dynamic_cast<arrow::Int64Builder *>(builder_ptr);
-        return builder->Append(vint_t::parse_java(bytes.data(), bytes.size()));
+        ARROW_RETURN_NOT_OK(builder->Append(val));
+        if (second_ptr)
+        {
+            auto second = dynamic_cast<arrow::Int64Builder *>(second_ptr);
+            ARROW_RETURN_NOT_OK(second->Append(val));
+        }
+        return arrow::Status::OK();
     }
     else if (coltype == conversions::types::SimpleDateType) // date
     {
         auto builder = dynamic_cast<arrow::Date32Builder *>(builder_ptr);
-        uint32_t date = ks.read_u4be() - (1 << 31);
+        uint32_t date = ks.read_u4be() - (1 << 31); // algorithm from cassandra
         return builder->Append(date);
+    }
+    else if (conversions::is_uuid(coltype))
+    {
+        if (second_ptr != nullptr)
+        {
+            auto first_builder = dynamic_cast<arrow::UInt64Builder *>(builder_ptr);
+            auto second_builder = dynamic_cast<arrow::UInt64Builder *>(second_ptr);
+            auto ks = kaitai::kstream(std::string(bytes));
+            ARROW_RETURN_NOT_OK(first_builder->Append(ks.read_u8be()));
+            ARROW_RETURN_NOT_OK(second_builder->Append(ks.read_u8be()));
+        }
+        else
+        {
+            auto builder = dynamic_cast<arrow::FixedSizeBinaryBuilder *>(builder_ptr);
+            ARROW_RETURN_NOT_OK(builder->Append(ks.read_bytes(16)));
+        }
+        return arrow::Status::OK();
     }
 
     // if the current type is not cudf supported, it should have been
@@ -499,7 +534,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
         if (global_flags.for_cudf && !_t.cudf_supported)
         {
             auto builder = dynamic_cast<arrow::StringBuilder *>(builder_ptr);
-            return builder->Append(boost::algorithm::hex(buffer));
+            return builder->Append(boost::algorithm::hex(std::string(bytes)));
         }
         // otherwise continue on below and append as normal
     }
@@ -510,12 +545,18 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
 
     // handle "primitive" types with a macro
 #define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                                                       \
-    else if (coltype == "org.apache.cassandra.db.marshal." #cassandra_type "Type")                                     \
+    else if (coltype == conversions::types::cassandra_type##Type)                                                      \
     {                                                                                                                  \
+        auto val = ks.read_##read_size();                                                                              \
         auto builder = dynamic_cast<arrow::arrow_type##Builder *>(builder_ptr);                                        \
-        return builder->Append(ks.read_##read_size());                                                                 \
+        ARROW_RETURN_NOT_OK(builder->Append(val));                                                                     \
+        if (second_ptr)                                                                                                \
+            ARROW_RETURN_NOT_OK(dynamic_cast<arrow::arrow_type##Builder *>(second_ptr)->Append(val));                  \
+        return arrow::Status::OK();                                                                                    \
     }
 
+    // the macro expands to an "else if" so we need this
+    // we also ignore the uuid types handled above
     if (false)
     {
     }
@@ -526,20 +567,18 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     APPEND_TO_BUILDER(Double, Double, f8be)
     APPEND_TO_BUILDER(Float, Float, f4be)
     APPEND_TO_BUILDER(Int32, Int32, s4be)
-    APPEND_TO_BUILDER(LexicalUUID, FixedSizeBinary, bytes_full)
     APPEND_TO_BUILDER(Long, Int64, s8be)
     APPEND_TO_BUILDER(Short, Int16, s2be)
     APPEND_TO_BUILDER(Time, Time64, s8be)
     APPEND_TO_BUILDER(Timestamp, Timestamp, s8be)
-    APPEND_TO_BUILDER(TimeUUID, FixedSizeBinary, bytes_full)
     APPEND_TO_BUILDER(UTF8, String, bytes_full)
-    APPEND_TO_BUILDER(UUID, FixedSizeBinary, bytes_full)
 
 #undef APPEND_TO_BUILDER
 
     return arrow::Status::TypeError(std::string("unrecognized type when appending to arrow array builder: ") +
                                     std::string(coltype));
 }
+} // namespace
 
 arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
                                   sstable_data_t::simple_cell_t *cell)

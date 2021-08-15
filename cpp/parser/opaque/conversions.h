@@ -79,8 +79,25 @@ struct get_arrow_type_options
     bool for_cudf{false};
 };
 
-std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type,
-                                                const get_arrow_type_options &options = get_arrow_type_options{});
+/**
+ * @brief Transform the given Cassandra type string into an arrow DataType
+ *
+ * @param type the Cassandra type as a string
+ * @param options whether to replace leaves with a different type, or whether to make accomodations for cuDF types
+ * @param needs_second will set this to true if options.for_cudf is set and a UUID type is encountered while parsing
+ * @return arrow::Result<std::shared_ptr<arrow::DataType>>
+ */
+arrow::Result<std::shared_ptr<arrow::DataType>> get_arrow_type(
+    std::string_view type, const get_arrow_type_options &options = get_arrow_type_options{},
+    bool *needs_second = nullptr);
+
+/**
+ * @brief Parse a Cassandra type, represented as a string, into an abstract tree.
+ *
+ * @param type the Cassandra type as a string, e.g.
+ * org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.Int32Type)
+ * @return arrow::Result<std::shared_ptr<node>>
+ */
 arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view type);
 
 } // namespace conversions

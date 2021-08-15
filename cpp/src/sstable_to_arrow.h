@@ -27,6 +27,20 @@ class kstruct;
 
 namespace sstable_to_arrow
 {
+namespace
+{
+/**
+ * @brief Appends a scalar value to an Arrow ArrayBuilder corresponding to a
+ * certain CQL type given by `coltype`.
+ *
+ * @param coltype the CQL data type of the column
+ * @param builder_ptr a pointer to the arrow ArrayBuilder
+ * @param bytes a buffer containing the bytes from the SSTable
+ */
+arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, arrow::ArrayBuilder *second_ptr,
+                            std::string_view bytes, arrow::MemoryPool *pool);
+arrow::Status append_scalar(std::shared_ptr<column_t> col, std::string_view value, arrow::MemoryPool *pool);
+} // namespace
 
 // Convert the SSTable specified by `statistics` and `sstable` into an Arrow
 // table, which is stored in `table`.
@@ -62,19 +76,6 @@ arrow::Status initialize_ts_map_builder(const std::unique_ptr<arrow::ArrayBuilde
 template <typename T>
 arrow::Status initialize_ts_list_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr,
                                          arrow::ListBuilder **builder_ptr, T **item_ptr);
-
-/**
- * @brief Appends a scalar value to an Arrow ArrayBuilder corresponding to a
- * certain CQL type given by `coltype`.
- *
- * @param coltype the CQL data type of the column
- * @param builder_ptr a pointer to the arrow ArrayBuilder
- * @param bytes a buffer containing the bytes from the SSTable
- */
-arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *builder_ptr, std::string_view bytes,
-                            arrow::MemoryPool *pool);
-
-arrow::Status append_uuid(arrow::ArrayBuilder *first, arrow::ArrayBuilder *second, std::string_view bytes);
 
 // appends the cell's timestamp or null if it doesn't exist to `builder`.
 arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,

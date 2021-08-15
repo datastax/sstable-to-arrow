@@ -22,8 +22,14 @@ namespace sstable_to_arrow
 {
 namespace
 {
+/**
+ * @brief Initialize the deserialization helper using the schema from the serialization header stored in the statistics
+ * file.
+ *
+ * @param serialization_header the component of the statistics file containing the cassandra table schema
+ */
 void init_deserialization_helper(sstable_statistics_t::serialization_header_t *serialization_header);
-}
+} // namespace
 
 /**
  * @brief Opens an input stream to the file specified by `path` and stores it
@@ -42,14 +48,20 @@ template <typename T> class file_container
     std::unique_ptr<kaitai::kstream> m_ks;
 
   public:
-    // creates the kaitai object from the stream specified by m_path
+    /**
+     * @brief Creates the kaitai object from the stream specified by m_path
+     */
     arrow::Status init()
     {
         ARROW_ASSIGN_OR_RAISE(auto ptr, open_stream(m_path));
         return init(std::move(ptr));
     }
 
-    // creates the kaitai object from the given stream and the type of this class
+    /**
+     * @brief Creates the kaitai struct object from the given stream and the type parameter of this class.
+     *
+     * @param stream the input stream to create the object with
+     */
     arrow::Status init(std::unique_ptr<std::istream> stream)
     {
         try
@@ -91,16 +103,16 @@ class sstable_t
     file_container<sstable_compression_info_t> m_compression_info;
 
   public:
-    // reads the kaitai objects from the file paths or streams
-    // stored in the member objects
+    /**
+     * @brief Reads the kaitai objects from the file paths or streams stored in the member objects
+     */
     arrow::Status init();
 
-    // initializes the data object
-    // requires that the compression_info is already loaded
+    /**
+     * @brief Initializes the data object. Requires that the compression_info is already loaded
+     */
     arrow::Status read_decompressed_sstable();
 
-    // the following members expose the actual kaitai objects contained within
-    // the file container
     const std::unique_ptr<sstable_statistics_t> &statistics() const;
     const std::unique_ptr<sstable_data_t> &data() const;
     const std::unique_ptr<sstable_index_t> &index() const;

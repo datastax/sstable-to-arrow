@@ -5,7 +5,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/sstable_to_arrow",
+            "program": "${workspaceFolder}/build/exe/sstable-to-arrow",
             "args": [
                 "-h",
                 "replace this array with the CLI arguments you want to debug with"

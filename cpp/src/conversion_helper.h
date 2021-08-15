@@ -37,20 +37,17 @@ class column_t
 
     std::string cassandra_type;
     std::shared_ptr<arrow::Field> field;
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    std::unique_ptr<arrow::ArrayBuilder> ts_builder;
-    std::unique_ptr<arrow::ArrayBuilder> local_del_time_builder;
-    std::unique_ptr<arrow::ArrayBuilder> ttl_builder;
+    std::unique_ptr<arrow::ArrayBuilder> builder, ts_builder, local_del_time_builder, ttl_builder;
 
     // uuids require a second value column
     std::unique_ptr<arrow::ArrayBuilder> second;
-    bool has_second = false;
+    bool has_second;
     bool m_is_clustering;
 
     column_t(const std::string &name_, const std::string &cassandra_type_, std::shared_ptr<arrow::DataType> type_,
-             bool is_clustering)
-        : cassandra_type(cassandra_type_), field(arrow::field(name_, type_)),
-          has_second{conversions::is_uuid(cassandra_type_) && global_flags.for_cudf}, m_is_clustering{is_clustering} {};
+             bool is_clustering, bool needs_second)
+        : cassandra_type(cassandra_type_),
+          field(arrow::field(name_, type_)), m_is_clustering{is_clustering}, has_second{needs_second} {};
 
     /**
      * @brief create the data builder and time data builders for this column
@@ -79,10 +76,21 @@ class conversion_helper_t
 {
     size_t m_n_uuid_cols;
 
-  public:
+    /**
+     * @brief Uses the metadata to call make_column for each column in the Cassandra table
+     */
+    arrow::Status create_columns();
+
     conversion_helper_t(const std::unique_ptr<sstable_statistics_t> &statistics);
 
-    std::shared_ptr<column_t> partition_key; // also stores row liveness info
+  public:
+    /**
+     * @brief Create a new conversion helper object.
+     */
+    static arrow::Result<std::unique_ptr<conversion_helper_t>> create(
+        const std::unique_ptr<sstable_statistics_t> &statistics);
+
+    std::shared_ptr<column_t> partition_key; // also stores row liveness info in metadata
     std::shared_ptr<arrow::TimestampBuilder> row_local_del_time;
     std::shared_ptr<arrow::TimestampBuilder> row_marked_for_deletion_at;
     std::shared_ptr<arrow::TimestampBuilder> partition_key_local_del_time;
@@ -104,7 +112,8 @@ class conversion_helper_t
     uint64_t get_ttl(uint64_t delta) const;
     arrow::Status append_partition_deletion_time(uint32_t local_deletion_time, uint64_t marked_for_delete_at);
 
-    std::shared_ptr<column_t> make_column(const std::string &name, const std::string &type, bool is_clustering);
+    arrow::Result<std::shared_ptr<column_t>> make_column(const std::string &name, const std::string &type,
+                                                         bool is_clustering);
 
     size_t num_data_cols() const;
     size_t num_ts_cols() const;

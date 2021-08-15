@@ -38,14 +38,16 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
         conversions::get_arrow_type_options options;
         options.replace_with = micro;
         options.for_cudf = global_flags.for_cudf;
-        auto ts_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, options) : micro;
+        ARROW_ASSIGN_OR_RAISE(const auto &ts_type,
+                              complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, options) : micro);
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &ts_builder));
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ts_type, &local_del_time_builder));
 
         auto ttl = arrow::duration(arrow::TimeUnit::SECOND);
         options.replace_with = ttl;
         options.for_cudf = global_flags.for_cudf;
-        auto ttl_type = complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, options) : ttl;
+        ARROW_ASSIGN_OR_RAISE(const auto &ttl_type,
+                              complex_ts_allowed ? conversions::get_arrow_type(cassandra_type, options) : ttl);
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(pool, ttl_type, &ttl_builder));
     }
 
@@ -133,14 +135,17 @@ bool column_t::has_metadata() const
     return global_flags.include_metadata && !m_is_clustering;
 }
 
-std::shared_ptr<column_t> conversion_helper_t::make_column(const std::string &name, const std::string &type,
-                                                           bool is_clustering)
+arrow::Result<std::shared_ptr<column_t>> conversion_helper_t::make_column(const std::string &name,
+                                                                          const std::string &cass_type,
+                                                                          bool is_clustering)
 {
-    if (conversions::is_uuid(type))
-        ++m_n_uuid_cols;
+    bool needs_second = false;
     conversions::get_arrow_type_options options;
     options.for_cudf = global_flags.for_cudf;
-    return std::make_shared<column_t>(name, type, conversions::get_arrow_type(type, options), is_clustering);
+    ARROW_ASSIGN_OR_RAISE(const auto &arrow_type, conversions::get_arrow_type(cass_type, options, &needs_second));
+    if (needs_second)
+        ++m_n_uuid_cols;
+    return std::make_shared<column_t>(name, cass_type, arrow_type, is_clustering, needs_second);
 }
 
 // initialize the name and type of the partition key column and all of the
@@ -153,24 +158,45 @@ conversion_helper_t::conversion_helper_t(const std::unique_ptr<sstable_statistic
 
     metadata = get_serialization_header(sstable_statistics);
     assert(metadata != nullptr);
+}
 
+arrow::Result<std::unique_ptr<conversion_helper_t>> conversion_helper_t::create(
+    const std::unique_ptr<sstable_statistics_t> &statistics)
+{
+    auto helper = std::unique_ptr<conversion_helper_t>(new conversion_helper_t(statistics));
+    ARROW_RETURN_NOT_OK(helper->create_columns());
+    return helper;
+}
+
+arrow::Status conversion_helper_t::create_columns()
+{
     // partition key
-    partition_key = make_column("partition_key", metadata->partition_key_type()->body(), false);
+    ARROW_ASSIGN_OR_RAISE(partition_key, make_column("partition_key", metadata->partition_key_type()->body(), false));
 
     // clustering columns
     const std::string clustering_key_name = "clustering_key_";
     int i = 0; // count clustering columns
     for (auto &col : *metadata->clustering_key_types()->array())
-        clustering_cols.push_back(
-            make_column(clustering_key_name + std::to_string(i++), // TODO expensive string concatentation
-                        col->body(), true));
+    {
+        ARROW_ASSIGN_OR_RAISE(const auto &clustering_col,
+                              make_column(clustering_key_name + std::to_string(i++), col->body(), true))
+        clustering_cols.push_back(clustering_col);
+    }
 
     // static and regular columns
     for (auto &col : *metadata->static_columns()->array())
-        static_cols.push_back(make_column(col->name()->body(), col->column_type()->body(), false));
-
+    {
+        ARROW_ASSIGN_OR_RAISE(const auto &static_col,
+                              make_column(col->name()->body(), col->column_type()->body(), false));
+        static_cols.push_back(static_col);
+    }
     for (auto &col : *metadata->regular_columns()->array())
-        regular_cols.push_back(make_column(col->name()->body(), col->column_type()->body(), false));
+    {
+        ARROW_ASSIGN_OR_RAISE(const auto &regular_col,
+                              make_column(col->name()->body(), col->column_type()->body(), false));
+        regular_cols.push_back(regular_col);
+    }
+    return arrow::Status::OK();
 }
 
 // creates the builders for each of the columns in this table

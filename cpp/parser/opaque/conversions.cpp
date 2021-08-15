@@ -1,14 +1,13 @@
 #include "conversions.h"
-
-#include <arrow/type_fwd.h> // for field, int64, fixed_size_binary, int32
-
-#include <algorithm> // for copy, copy_backward
-#include <boost/algorithm/string/predicate.hpp>
-#include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
-#include <stack>              // for stack
-#include <stdexcept>          // for runtime_error, out_of_range
-#include <string>             // for operator+, to_string, string, char_traits
-#include <utility>            // for pair
+#include <algorithm>                            // for copy, copy_backward
+#include <arrow/status.h>                       // for Status
+#include <arrow/type_fwd.h>                     // for field, int64, fixed_size_binary, int32
+#include <boost/algorithm/string/predicate.hpp> // for starts_with, ends_with
+#include <ext/alloc_traits.h>                   // for __alloc_traits<>::value_type
+#include <stack>                                // for stack
+#include <stdexcept>                            // for runtime_error, out_of_range
+#include <string>                               // for operator+, to_string, string, char_traits
+#include <utility>                              // for pair
 
 #include "vint.h" // for vint_t
 namespace arrow
@@ -187,7 +186,9 @@ bool is_uuid(std::string_view type)
     return boost::ends_with(type, "UUIDType");
 }
 
-std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get_arrow_type_options &options)
+arrow::Result<std::shared_ptr<arrow::DataType>> get_arrow_type(std::string_view type,
+                                                               const get_arrow_type_options &options,
+                                                               bool *needs_second)
 {
     try
     {
@@ -196,57 +197,78 @@ std::shared_ptr<arrow::DataType> get_arrow_type(std::string_view type, const get
         if (options.replace_with != nullptr)
             return options.replace_with;
         if (options.for_cudf && is_uuid(type))
+        {
+            if (needs_second)
+                *needs_second = true;
             return arrow::uint64();
+        }
         if (options.for_cudf && !_t.cudf_supported)
             return arrow::utf8(); // pass unsupported types as hexadecimal strings
         return _t.arrow_type;
     }
+
+    // if this type doesn't exist in type_info
     catch (const std::out_of_range &err)
     {
-        // pass
+        auto tree = *parse_nested_type(type);
+
+        if (is_reversed(type))
+            return get_arrow_type(get_child_type(type), options, needs_second);
+        else if (is_map(type))
+        {
+            // we keep the key type but recursively replace the value type with
+            // timestamps
+            const auto &key_type_str = tree->children->front()->str;
+            const auto &item_type_str = tree->children->back()->str;
+            if (options.for_cudf && is_uuid(key_type_str) || is_uuid(item_type_str))
+                return arrow::Status::NotImplemented("UUIDs are currently not supported inside collections");
+            ARROW_ASSIGN_OR_RAISE(const auto &key_type, get_arrow_type(key_type_str, options, needs_second));
+            ARROW_ASSIGN_OR_RAISE(const auto &item_type, get_arrow_type(item_type_str, options, needs_second));
+            return arrow::map(key_type, item_type);
+        }
+        else if (is_set(type) || is_list(type)) // TODO currently treating sets and lists identically
+        {
+            const auto &child_str = get_child_type(type);
+            if (options.for_cudf && is_uuid(child_str))
+                return arrow::Status::NotImplemented("UUIDs are currently not supported inside collections");
+            ARROW_ASSIGN_OR_RAISE(const auto &child_type, get_arrow_type(child_str, options, needs_second));
+            return arrow::list(child_type);
+        }
+        else if (is_composite(type))
+        {
+            arrow::FieldVector vec;
+            for (size_t i = 0; i < tree->children->size(); ++i)
+            {
+                // uuids are fine inside a struct
+                ARROW_ASSIGN_OR_RAISE(const auto &member_type,
+                                      get_arrow_type((*tree->children)[i]->str, options, needs_second));
+                vec.push_back(arrow::field(std::string((*tree->children)[i]->str), member_type));
+            }
+            return arrow::struct_(vec);
+        }
     }
 
-    auto tree = *parse_nested_type(type);
-
-    if (is_reversed(type))
-        return get_arrow_type(get_child_type(type), options);
-    else if (is_map(type))
-        // we keep the key type but recursively replace the value type with
-        // timestamps
-        return arrow::map(get_arrow_type(tree->children->front()->str),
-                          get_arrow_type(tree->children->back()->str, options));
-    else if (is_set(type) || is_list(type)) // TODO currently treating sets and lists identically
-        return arrow::list(get_arrow_type(get_child_type(type), options));
-    else if (is_composite(type))
-    {
-        arrow::FieldVector vec;
-        for (size_t i = 0; i < tree->children->size(); ++i)
-            vec.push_back(arrow::field(std::string((*tree->children)[i]->str),
-                                       get_arrow_type((*tree->children)[i]->str, options)));
-        return arrow::struct_(vec);
-    }
-
-    throw std::runtime_error("type not found or supported when getting arrow type: " + std::string(type));
+    return arrow::Status::Invalid("type not found or supported when getting arrow type: " + std::string(type));
 }
 
-arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view type)
+arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view cass_type)
 {
     std::stack<std::shared_ptr<node>> stack;
     size_t prev_start = 0;
     char prev = '\0';
-    for (size_t j = 0; j < type.size(); ++j)
+    for (size_t j = 0; j < cass_type.size(); ++j)
     {
-        if (type[j] == ' ' || type[j] == '\t' || type[j] == '\n')
+        if (cass_type[j] == ' ' || cass_type[j] == '\t' || cass_type[j] == '\n')
             continue;
 
-        if (type[j] == '(')
+        if (cass_type[j] == '(')
         {
-            std::string_view str(&type[prev_start], j - prev_start);
+            std::string_view str(&cass_type[prev_start], j - prev_start);
             stack.push(std::make_shared<node>(str));
             prev_start = j + 1;
         }
 
-        if (type[j] == ',' || type[j] == ')')
+        if (cass_type[j] == ',' || cass_type[j] == ')')
         {
             if (prev == ')')
             {
@@ -257,27 +279,27 @@ arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view type)
             }
             else
             {
-                auto parent = stack.top(); // reference to current parent type
-                const std::string_view str(&type[prev_start], j - prev_start);
+                auto parent = stack.top(); // reference to current parent cass_type
+                const std::string_view str(&cass_type[prev_start], j - prev_start);
                 parent->children->push_back(std::make_shared<node>(str));
             }
             prev_start = j + 1;
         }
 
-        // finish parsing the type
-        if (type[j] == ')')
+        // finish parsing the cass_type
+        if (cass_type[j] == ')')
         {
-            auto token = stack.top(); // reference to current parent type
+            auto token = stack.top(); // reference to current parent cass_type
             if (stack.size() == 1)
                 return stack.top();
             stack.pop();
             prev_start = j + 1;
         }
 
-        prev = type[j];
+        prev = cass_type[j];
     }
 
-    return std::make_shared<node>(type);
+    return std::make_shared<node>(cass_type);
 }
 
 } // namespace conversions

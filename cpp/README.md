@@ -65,6 +65,7 @@ sstable-to-arrow can also save the SSTable data as a Parquet file by passing the
 - `decimal`s are converted into an 8-byte floating point value because neither C++ nor Arrow has native support for arbitrary-precision integers or decimals like of the Java `BigInteger` or `BigDecimal` classes. This means that operations on decimal columns will use floating point arithmetic, which may be inexact.
 - `set`s are treated as lists since Arrow has no equivalent of a set.
 - cuDF only implements a subset of Apache Arrow, so some types in Arrow are not yet supported in cuDF. By passing the `-g` flag, you can pass the raw bytes for most of these data types as a hexadecimal string instead.
+- UUIDs in collections are not supported
 
 ## TODO
 
