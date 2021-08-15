@@ -1,15 +1,15 @@
 enable_testing()
 
-add_test(NAME Runs COMMAND sstable_to_arrow)
+add_test(NAME Runs COMMAND sstable_to_arrow_exe)
 
-add_test(NAME Usage COMMAND sstable_to_arrow -h)
+add_test(NAME Usage COMMAND sstable_to_arrow_exe -h)
 set_tests_properties(
   Usage
   PROPERTIES
     PASS_REGULAR_EXPRESSION
     "========================= sstable-to-arrow =========================")
 
-add_test(NAME SampleData COMMAND sstable_to_arrow -sd)
+add_test(NAME SampleData COMMAND sstable_to_arrow_exe -sd)
 set_tests_properties(
   SampleData
   PROPERTIES
@@ -19,6 +19,10 @@ set_tests_properties(
     "Nullam sollicitudin ullamcorper turpis, mollis hendrerit dui. Integer posuere, purus eu sodales fringilla, velit n"
 )
 
-add_test(NAME NoMetadata COMMAND sstable_to_arrow -scd)
+add_test(NAME SampleDataForCudf COMMAND sstable_to_arrow_exe -sdx)
+set_tests_properties(SampleDataForCudf PROPERTIES PASS_REGULAR_EXPRESSION
+                                                  "partition_key_part2:")
+
+add_test(NAME NoMetadata COMMAND sstable_to_arrow_exe -scd)
 set_tests_properties(NoMetadata PROPERTIES FAIL_REGULAR_EXPRESSION "_ttl_"
                                            "_del_time_" "_ts_")

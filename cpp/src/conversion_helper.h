@@ -1,20 +1,16 @@
 #ifndef CONVERSION_HELPER_H_
 #define CONVERSION_HELPER_H_
 
+#include "sstable_statistics.h"       // for sstable_statistics_t
 #include <arrow/array/builder_base.h> // for ArrayBuilder
 #include <arrow/result.h>             // for Result
 #include <arrow/status.h>             // for Status
 #include <arrow/type_fwd.h>           // for TimestampBuilder, field, Durat...
+#include <memory>                     // for shared_ptr, unique_ptr
 #include <stddef.h>                   // for size_t
 #include <stdint.h>                   // for uint64_t, uint8_t, uint32_t
-
-#include <memory> // for shared_ptr, unique_ptr
-#include <string> // for string
-#include <vector> // for vector
-
-#include "conversions.h" // for get_arrow_type
-#include "opts.h"
-#include "sstable_statistics.h" // for sstable_statistics_t
+#include <string>                     // for string
+#include <vector>                     // for vector
 namespace arrow
 {
 class Array;

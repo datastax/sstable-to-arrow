@@ -1,18 +1,16 @@
 #include "conversion_helper.h"
-
+#include "conversions.h"              // for get_arrow_type, get_arrow_type...
+#include "opts.h"                     // for flags, global_flags, DEBUG_ONLY
+#include "vint.h"                     // for vint_t
+#include <algorithm>                  // for max
 #include <arrow/array/builder_dict.h> // for NumericBuilder
 #include <arrow/table.h>              // for Table
 #include <arrow/type.h>               // for Field, DataType, Schema (ptr o...
 #include <assert.h>                   // for assert
 #include <cstdint>
+#include <ext/alloc_traits.h>    // for __alloc_traits<>::value_type
+#include <initializer_list>      // for initializer_list
 #include <kaitai/kaitaistruct.h> // for kstruct
-
-#include <algorithm>          // for max
-#include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
-#include <initializer_list>   // for initializer_list
-
-#include "opts.h" // for flags, global_flags, DEBUG_ONLY
-#include "vint.h" // for vint_t
 namespace arrow
 {
 class Array;
