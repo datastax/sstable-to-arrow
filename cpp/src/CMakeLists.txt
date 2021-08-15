@@ -11,9 +11,9 @@ add_subdirectory(../parser sstable_parser)
 # find required components
 find_package(Arrow REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
-find_library(lz4 REQUIRED)
-find_library(parquet REQUIRED)
 find_package(Threads REQUIRED)
+find_library(LZ4 lz4 REQUIRED)
+find_library(Parquet parquet REQUIRED)
 
 # create sstable_to_arrow target
 add_library(
@@ -30,8 +30,8 @@ add_library(
 # sstable_parser and keep the library itself private?
 target_link_libraries(
   ${LIBRARY_NAME}
-  PRIVATE arrow_shared ${Boost_LIBRARIES} kaitai_struct_cpp_stl_runtime lz4
-          parquet Threads::Threads
+  PRIVATE arrow_shared ${Boost_LIBRARIES} ${LZ4}
+          ${Parquet} Threads::Threads
   PUBLIC sstable_parser)
 
 target_include_directories(

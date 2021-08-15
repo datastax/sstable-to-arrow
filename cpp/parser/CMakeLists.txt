@@ -9,7 +9,7 @@ set(LIBRARY_NAME sstable_parser)
 
 # only depends on kaitai-struct-compiler
 find_program(KSC "kaitai-struct-compiler" REQUIRED)
-find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
+find_library(KS_Runtime kaitai_struct_cpp_stl_runtime REQUIRED)
 
 # compile kaitai files to source files in C++
 set(KSY_TYPES deletion_time sstable_data sstable_index sstable_statistics
@@ -39,7 +39,7 @@ list(TRANSFORM OPAQUE_TYPES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/opaque/)
 add_library(${LIBRARY_NAME} ${OPAQUE_TYPES} ${KSY_TYPES})
 
 # dependents need to pass a kaitai::kstream, so we make this public
-target_link_libraries(${LIBRARY_NAME} PUBLIC kaitai_struct_cpp_stl_runtime)
+target_link_libraries(${LIBRARY_NAME} PUBLIC ${KS_Runtime})
 
 target_include_directories(
   ${LIBRARY_NAME}
