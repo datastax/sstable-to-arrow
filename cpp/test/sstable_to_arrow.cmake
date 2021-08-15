@@ -26,3 +26,18 @@ set_tests_properties(SampleDataForCudf PROPERTIES PASS_REGULAR_EXPRESSION
 add_test(NAME NoMetadata COMMAND sstable_to_arrow_exe -scd)
 set_tests_properties(NoMetadata PROPERTIES FAIL_REGULAR_EXPRESSION "_ttl_"
                                            "_del_time_" "_ts_")
+
+add_test(
+  NAME ReadFromS3Uri
+  COMMAND
+    sstable_to_arrow_exe -dx
+    s3://sstable-to-arrow/iot-1k/baselines/iot-5b608090e03d11ebb4c1d335f841c590/
+)
+set_tests_properties(
+  ReadFromS3Uri
+  PROPERTIES
+    PASS_REGULAR_EXPRESSION
+    "opening connection to s3"
+    "closing connection to s3"
+    "partition_key_part1: struct<org.apache.cassandra.db.marshal.UUIDType: uint64, org.apache.cassandra.db.marshal.UTF8Type: string>"
+)
