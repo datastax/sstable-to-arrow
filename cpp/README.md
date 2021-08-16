@@ -1,16 +1,24 @@
 # sstable-to-arrow
 
-This folder contains the source code for sstable-to-arrow.
+This folder contains the source code for sstable-to-arrow. It uses CMake as a build tool generator and is divided into several sub-projects:
 
-- `ksy/` contains the Kaitai Struct declarations for the various SSTable classes.
-- `opaque/` contains different "opaque types" (types defined outside of kaitai) used by the Kaitai Struct classes, as well as classes to help parse and transform the data.
-- `util/` contains other C++ code to help convert between data formats.
+- `exe/` contains the code for the executable.
+- `src/` contains the code for the sstable-to-arrow library.
+- `parser/` contains the code that reads SSTable files and exposes the data as Kaitai Struct objects.
+    - `src/ksy/` contains the Kaitai Struct declarations for the various SSTable classes.
+    - `src/opaque/` contains different "opaque types" (types defined outside of Kaitai) as well as classes to help parse and transform the data. If you would like to parse SSTables in a different language supported by Kaitai, you will need to rewrite these files in that language.
+- `python/` contains an under-development library that exposes Python bindings to access the C++ library. This is not included in the Docker container and should be built separately.
 
 Be warned that error handling and logging are extremely rudimentary, as this is an alpha release.
 
 ## How to run
 
 This project can be run through a [Docker](https://www.docker.com/) container via
+```bash
+docker run --rm -it datastaxlabs/sstable-to-arrow
+```
+
+To read SSTables on your filesystem, you will need to mount them using docker:
 ```bash
 # replace /path/to/sstable/directory with the path to the directory with your sstables
 docker run --rm -itp 9143:9143 -v /path/to/sstable/directory:/mnt/sstables --name sstable-to-arrow datastaxlabs/sstable-to-arrow /mnt/sstables
@@ -36,7 +44,7 @@ make # or: ninja
 4. Run:
 
 ```bash
-./sstable_to_arrow <PATH_TO_SSTABLE_DIRECTORY>
+./exe/sstable-to-arrow <PATH_TO_SSTABLE_DIRECTORY>
 ```
 
 This will listen for a connection on port 9143. It expects the client to send a
@@ -49,7 +57,9 @@ message first, and then it will send data in the following format:
 
 ## Additional features
 
-sstable-to-arrow can also save the SSTable data as a Parquet file by passing the `-p` flag along with the destination file path. Read the full usage details by running `./sstable-to-arrow -h`.
+sstable-to-arrow can also save the SSTable data as a Parquet file by passing the `-p` flag along with the destination file path. Read the full usage details by running `./exe/sstable-to-arrow -h`.
+
+An `sstable_to_pyarrow` Python library is also currently under development. The underlying C++ library is located in `cpp/python` and uses [Boost.Python](https://www.boost.org/doc/libs/1_77_0/libs/python/doc/html/index.html) to provide Python bindings.
 
 ## Limitations and caveats
 
@@ -65,7 +75,7 @@ sstable-to-arrow can also save the SSTable data as a Parquet file by passing the
 - `decimal`s are converted into an 8-byte floating point value because neither C++ nor Arrow has native support for arbitrary-precision integers or decimals like of the Java `BigInteger` or `BigDecimal` classes. This means that operations on decimal columns will use floating point arithmetic, which may be inexact.
 - `set`s are treated as lists since Arrow has no equivalent of a set.
 - cuDF only implements a subset of Apache Arrow, so some types in Arrow are not yet supported in cuDF. By passing the `-g` flag, you can pass the raw bytes for most of these data types as a hexadecimal string instead.
-- UUIDs in collections are not supported
+- UUIDs in collections are not supported.
 
 ## TODO
 
@@ -73,6 +83,5 @@ sstable-to-arrow can also save the SSTable data as a Parquet file by passing the
     - Add support for row tombstone markers
 - Improve error handling system and logging system
 - Improve documentation and user friendliness with the CLI
-- Integrate with SSTables stored in S3
-- Include Python bindings that can be called from Python
+- Improve Python bindings
 - Refactor to allow conversion of larger-than-memory SSTables

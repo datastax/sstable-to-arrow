@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
         return 0;
 
     auto result = sstable_to_arrow::read_sstables(args.sstable_dir_path);
-    EXIT_NOT_OK(result.status(), "error loading from S3");
+    EXIT_NOT_OK(result.status(), "error reading sstables");
     auto sstables = result.ValueOrDie();
 
     if (args.write_parquet)
