@@ -19,7 +19,7 @@ set_target_properties(
   PROPERTIES PREFIX ""
              CXX_STANDARD 17
              CXX_STANDARD_REQUIRED ON
-             POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS})
+             POSITION_INDEPENDENT_CODE $<BOOL:${BUILD_SHARED_LIBS}>)
 
 target_link_libraries(
   ${MODULE_NAME}
