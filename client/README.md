@@ -20,17 +20,37 @@ which can then be used by many applications.
 See [this blog post](https://www.datastax.com/blog/analyzing-cassandra-data-using-gpus-part-2)
 for detailed instructions.
 
-1. Pull the sstable-to-arrow Docker container: `docker pull datastaxlabs/sstable-to-arrow`
-2. Download the `no_cuda.py` script: `curl -LO https://raw.githubusercontent.com/datastax/sstable-to-arrow/main/client/no_cuda.py`
-3. Create a new virtualenv inside this directory: `python -m venv ./myvenv`
-4. Activate the virtualenv: `source ./myvenv/bin/activate`
-5. Install the requirements: `pip install pandas pyarrow`
-6. Launch the sstable-to-arrow server with Docker: `docker run --rm -it -p 9143:9143 --name sstable-to-arrow datastaxlabs/sstable-to-arrow -s`
-7. Run `python no_cuda.py`
+1. Pull the sstable-to-arrow Docker container: 
+
+`docker pull datastaxlabs/sstable-to-arrow`
+
+3. Download the `no_cuda.py` script: 
+
+`curl -LO https://raw.githubusercontent.com/datastax/sstable-to-arrow/main/client/no_cuda.py`
+
+4. Create a new virtualenv inside this directory:  
+ 
+`python -m venv ./myvenv`
+
+5. Activate the virtualenv:
+  
+`source ./myvenv/bin/activate`
+
+6. Install the requirements: 
+ 
+`pip install pandas pyarrow`
+
+7. Launch the sstable-to-arrow server with Docker: 
+ 
+`docker run --rm -it -p 9143:9143 --name sstable-to-arrow datastaxlabs/sstable-to-arrow -s`
+
+8. Run
+ 
+`python no_cuda.py`
 
 ## Next steps
 
-- improve support for different types and cases in current implementation
+- improve support for different types and cases in current implementation (nested UTD's and FROZEN)
 - build a native SSTable reader in the cuDF project, e.g. `cudf.from_sstable()`
 - read DSE SSTable format
 
