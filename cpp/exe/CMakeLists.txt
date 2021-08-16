@@ -18,7 +18,6 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem iostreams python)
 find_package(Arrow REQUIRED)
-find_library(kaitai_struct_cpp_stl_runtime REQUIRED)
 
 # create main sstable_to_arrow executable target
 add_executable(${SSTableToArrowExecutable_TARGET_NAME} main.cpp
@@ -26,8 +25,8 @@ add_executable(${SSTableToArrowExecutable_TARGET_NAME} main.cpp
 
 target_link_libraries(
   ${SSTableToArrowExecutable_TARGET_NAME}
-  PRIVATE arrow_shared ${Boost_LIBRARIES} kaitai_struct_cpp_stl_runtime
-          sstable_to_arrow sstable_parser Threads::Threads)
+  PRIVATE arrow_shared ${Boost_LIBRARIES}
+          sstable_to_arrow Threads::Threads)
 
 target_include_directories(${SSTableToArrowExecutable_TARGET_NAME}
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

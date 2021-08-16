@@ -38,8 +38,6 @@ RUN ./bootstrap.sh \
         --with-libraries=filesystem,log,python,iostreams,program_options && \
     ./b2 install
 
-# install kaitai_struct_cpp_stl_runtime
-
 # install kaitai-struct-compiler and the kaitai struct C++ stl runtime
 WORKDIR /tmp/kaitai_struct_cpp_stl_runtime/build
 RUN apt-get install -yq --no-install-recommends /tmp/kaitai-struct-compiler_0.9_all.deb && \
@@ -47,12 +45,14 @@ RUN apt-get install -yq --no-install-recommends /tmp/kaitai-struct-compiler_0.9_
     cmake --build . && \
     cmake --install .
 
-# install arrow
-WORKDIR /tmp/arrow/cpp/release
+# install arrow python requirements
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install -U setuptools wheel && \
-    python3 -m pip install -r /tmp/arrow/python/requirements-build.txt && \
-    cmake -GNinja \
+    python3 -m pip install -r /tmp/arrow/python/requirements-build.txt
+
+# install arrow
+WORKDIR /tmp/arrow/cpp/release
+RUN cmake -GNinja \
         -DARROW_PARQUET=ON \
         -DARROW_S3=ON \
         -DARROW_WITH_LZ4=ON \

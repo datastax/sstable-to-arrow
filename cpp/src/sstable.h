@@ -1,22 +1,20 @@
 #ifndef SSTABLE_H_
 #define SSTABLE_H_
 
-#include <arrow/result.h>        // for ARROW_ASSIGN_OR_RAISE, Result
-#include <arrow/status.h>        // for Status
-#include <bits/exception.h>      // for exception
-#include <kaitai/kaitaistream.h> // for kstream
-
-#include <fstream> // for istream
-#include <memory>  // for allocator, unique_ptr, make_un...
-#include <string>  // for string, operator+, char_traits
-#include <utility> // for move
-#include <vector>  // for vector
-
 #include "sstable_compression_info.h" // for sstable_compression_info_t
 #include "sstable_data.h"             // for sstable_data_t
 #include "sstable_index.h"            // for sstable_index_t
 #include "sstable_statistics.h"       // for sstable_statistics_t
 #include "sstable_summary.h"          // for sstable_summary_t
+#include <arrow/result.h>             // for ARROW_ASSIGN_OR_RAISE, Result
+#include <arrow/status.h>             // for Status
+#include <bits/exception.h>           // for exception
+#include <fstream>                    // for istream
+#include <kaitai/kaitaistream.h>      // for kstream
+#include <memory>                     // for allocator, unique_ptr, make_un...
+#include <string>                     // for string, operator+, char_traits
+#include <utility>                    // for move
+#include <vector>                     // for vector
 
 namespace sstable_to_arrow
 {
