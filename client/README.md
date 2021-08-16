@@ -21,7 +21,7 @@ See [this blog post](https://www.datastax.com/blog/analyzing-cassandra-data-usin
 for detailed instructions.
 
 1. Pull the sstable-to-arrow Docker container: `docker pull datastaxlabs/sstable-to-arrow`
-2. Download the `no_cuda.py` script: `curl -LO https://github.com/datastax/sstable-to-arrow/blob/main/client/no_cuda.py`
+2. Download the `no_cuda.py` script: `curl -LO https://raw.githubusercontent.com/datastax/sstable-to-arrow/main/client/no_cuda.py`
 3. Create a new virtualenv inside this directory: `python -m venv ./myvenv`
 4. Activate the virtualenv: `source ./myvenv/bin/activate`
 5. Install the requirements: `pip install pandas pyarrow`
