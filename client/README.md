@@ -32,13 +32,12 @@ de/serialization costs.
 See [this blog post](https://www.datastax.com/blog/analyzing-cassandra-data-using-gpus-part-2)
 for detailed instructions.
 
-1. Clone this repository `git clone https://github.com/datastax/sstable-to-arrow.git`
-2. Navigate to this directory `cd sstable-to-arrow/client`
-3. Create a new virtualenv inside this directory `python -m venv ./sstable_to_arrow_venv`
-4. Activate the virtualenv with `source ./sstable_to_arrow_venv/bin/activate`
-5. Install the requirements by running `pip install -r requirements.txt`
-6. Launch the sstable-to-arrow server from [`../cpp`](../cpp)
-7. Run `python with_cuda.py` if your system has CUDA support, otherwise run `python no_cuda.py`
+1. Download the `no_cuda.py` script: `curl -LO https://github.com/datastax/sstable-to-arrow/blob/main/client/no_cuda.py`
+3. Create a new virtualenv inside this directory `python -m venv ./myvenv`
+4. Activate the virtualenv with `source ./myvenv/bin/activate`
+5. Install the requirements by running `pip install pandas pyarrow`
+6. Launch the sstable-to-arrow server with Docker: `docker run --rm -it -p 9143:9143 --name sstable-to-arrow datastaxlabs/sstable-to-arrow -s`
+7. Run `python no_cuda.py`
 
 ## Next steps
 
