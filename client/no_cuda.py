@@ -1,5 +1,4 @@
 import pyarrow as pa
-import pandas as pd
 import socket
 
 HOST = '127.0.0.1'
@@ -33,10 +32,12 @@ def fetch_data():
     return table_buffers
 
 buffers = fetch_data()
-if len(buffers) != 1:
-    print("This demo only works for a single IOT table. Remove this message if you are working with sstable-to-arrow on your own")
 print("This demo doesn't use CUDA, so it won't be able to the performance benefits of using a GPU.")
-df = pa.ipc.open_stream(buffers[0]).read_all().to_pandas()
-print(df)
-col = df['sensor_value'][df['sensor_value'] != float('-inf')]
-print('mean of sensor_value:', col.mean())
+
+for i, buffer in enumerate(buffers):
+    print("\n\nLoading table", i)
+    df = pa.ipc.open_stream(buffer).read_all().to_pandas()
+    print(df)
+    print('\n\n')
+    col = df['sensor_value'][df['sensor_value'] != float('-inf')]
+    print('mean of sensor_value:', col.mean())

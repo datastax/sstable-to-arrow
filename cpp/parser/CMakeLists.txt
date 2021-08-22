@@ -9,7 +9,7 @@ set(LIBRARY_NAME sstable_parser)
 
 # only depends on kaitai-struct-compiler
 find_program(KSC "kaitai-struct-compiler" REQUIRED)
-find_library(KS_Runtime kaitai_struct_cpp_stl_runtime REQUIRED)
+find_library(KS_Runtime kaitai_struct_cpp_stl_runtime REQUIRED HINTS /usr/local/lib)
 
 # compile kaitai files to source files in C++
 set(KSY_TYPES deletion_time sstable_data sstable_index sstable_statistics
