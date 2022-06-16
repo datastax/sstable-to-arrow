@@ -31,5 +31,10 @@
       <option name="name" value="libs-snapshots" />
       <option name="url" value="https://repo.datastax.com/artifactory/libs-snapshots" />
     </remote-repository>
+    <remote-repository>
+      <option name="id" value="artifactory" />
+      <option name="name" value="artifactory" />
+      <option name="url" value="https://repo.datastax.com/artifactory/dse/" />
+    </remote-repository>
   </component>
 </project>

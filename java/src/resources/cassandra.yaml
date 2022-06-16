@@ -45,4 +45,6 @@ row_cache_size_in_mb: 16
 enable_user_defined_functions: true
 enable_scripted_user_defined_functions: true
 prepared_statements_cache_size_mb: 1
+system_view:
+  only_local_and_peers_table: true
 # enable_drop_compact_storage: true

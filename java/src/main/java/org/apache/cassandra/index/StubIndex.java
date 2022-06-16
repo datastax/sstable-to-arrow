@@ -16,27 +16,27 @@
  * limitations under the License.
  */
 
+package org.apache.cassandra.index;
+
 import java.util.*;
 import java.util.concurrent.Callable;
-import java.util.function.BiFunction;
 
-import org.apache.cassandra.config.ColumnDefinition;
+import io.reactivex.Completable;
+import org.apache.cassandra.db.rows.FlowableUnfilteredPartition;
+import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
-import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.exceptions.InvalidRequestException;
-import org.apache.cassandra.index.Index;
-import org.apache.cassandra.index.IndexRegistry;
 import org.apache.cassandra.index.transactions.IndexTransaction;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.utils.flow.Flow;
 
 /**
  * Basic custom index implementation for testing.
@@ -77,12 +77,12 @@ public class StubIndex implements Index
         return false;
     }
 
-    public boolean dependsOn(ColumnDefinition column)
+    public boolean dependsOn(ColumnMetadata column)
     {
         return false;
     }
 
-    public boolean supportsExpression(ColumnDefinition column, Operator operator)
+    public boolean supportsExpression(ColumnMetadata column, Operator operator)
     {
         return operator == Operator.EQ;
     }
@@ -92,16 +92,13 @@ public class StubIndex implements Index
         return UTF8Type.instance;
     }
 
-    public RowFilter getPostIndexQueryFilter(RowFilter filter)
-    {
-        return filter;
-    }
-
+    @Override
     public Indexer indexerFor(final DecoratedKey key,
-                              PartitionColumns columns,
+                              RegularAndStaticColumns columns,
                               int nowInSec,
                               OpOrder.Group opGroup,
-                              IndexTransaction.Type transactionType)
+                              IndexTransaction.Type transactionType,
+                              Memtable memtable)
     {
         return new Indexer()
         {
@@ -110,34 +107,40 @@ public class StubIndex implements Index
                 beginCalls++;
             }
 
-            public void partitionDelete(DeletionTime deletionTime)
+            public Completable partitionDelete(DeletionTime deletionTime)
             {
                 partitionDeletions.add(deletionTime);
+                return Completable.complete();
             }
 
-            public void rangeTombstone(RangeTombstone tombstone)
+            public Completable rangeTombstone(RangeTombstone tombstone)
             {
                 rangeTombstones.add(tombstone);
+                return Completable.complete();
             }
 
-            public void insertRow(Row row)
+            public Completable insertRow(Row row)
             {
                 rowsInserted.add(row);
+                return Completable.complete();
             }
 
-            public void removeRow(Row row)
+            public Completable removeRow(Row row)
             {
                 rowsDeleted.add(row);
+                return Completable.complete();
             }
 
-            public void updateRow(Row oldRowData, Row newRowData)
+            public Completable updateRow(Row oldRowData, Row newRowData)
             {
                 rowsUpdated.add(Pair.create(oldRowData, newRowData));
+                return Completable.complete();
             }
 
-            public void finish()
+            public Completable finish()
             {
                 finishCalls++;
+                return Completable.complete();
             }
         };
     }
@@ -161,7 +164,7 @@ public class StubIndex implements Index
         return Optional.empty();
     }
 
-    public Collection<ColumnDefinition> getIndexedColumns()
+    public Collection<ColumnMetadata> getIndexedColumns()
     {
         return Collections.emptySet();
     }
@@ -204,20 +207,38 @@ public class StubIndex implements Index
 
     }
 
+    @Override
     public Searcher searcherFor(final ReadCommand command)
     {
-        return (controller) -> executeLocally((PartitionRangeReadCommand)command, baseCfs, controller);
+        return new Searcher(command);
     }
 
-    public BiFunction<PartitionIterator, ReadCommand, PartitionIterator> postProcessorFor(ReadCommand readCommand)
+    @Override
+    public RowFilter postIndexQueryFilter(RowFilter rowFilter)
     {
-        return (iter, command) -> iter;
+        return rowFilter;
     }
 
-    public static UnfilteredPartitionIterator executeLocally(PartitionRangeReadCommand command,
-                                                             ColumnFamilyStore cfs,
-                                                             ReadExecutionController controller)
+    protected class Searcher implements Index.Searcher
     {
-        return command.queryStorage(cfs, controller);
+        private final ReadCommand command;
+
+        Searcher(ReadCommand command)
+        {
+            this.command = command;
+        }
+
+        @Override
+        public ReadCommand command()
+        {
+            return command;
+        }
+
+        @Override
+        public Flow<FlowableUnfilteredPartition> search(ReadExecutionController controller)
+        {
+//            return Util.executeLocally((PartitionRangeReadCommand) command, baseCfs, controller);
+            return command.queryStorage(baseCfs, controller);
+        }
     }
 }

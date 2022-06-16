@@ -1,15 +1,14 @@
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.*;
+import org.apache.cassandra.db.monitoring.Monitor;
 import org.apache.cassandra.db.partitions.FilteredPartition;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.io.sstable.CQLSSTableWriter;
 import org.apache.cassandra.io.sstable.SSTableLoader;
-import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.schema.*;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.StreamEvent;
 import org.apache.cassandra.streaming.StreamEventHandler;
@@ -52,7 +51,7 @@ public class SSTableLoaderTest {
         ArrowTransferUtil util = new ArrowTransferUtil(partitions);
         util.process();
 
-        StorageService.instance.shutdownServer();
+//        StorageService.instance.shutdownServer();
         System.out.println("[PROFILE] done all: " + (System.nanoTime() - startTime));
         System.exit(0);
     }
@@ -102,34 +101,36 @@ public class SSTableLoaderTest {
 //	sensor_value double,
 //	station_id uuid,
 //	PRIMARY KEY ((machine_id, sensor_name), time))
-        CFMetaData cfm = CFMetaData.Builder.createDense(KEYSPACE1, CF_STANDARD1, false, false)
-                .addPartitionKey("machine_id", UUIDType.instance)
-                .addPartitionKey("sensor_name", UTF8Type.instance)
+        TableMetadata cfm = TableMetadata.builder(KEYSPACE1, CF_STANDARD1)
+                .addPartitionKeyColumn("machine_id", UUIDType.instance)
+                .addPartitionKeyColumn("sensor_name", UTF8Type.instance)
                 .addClusteringColumn("time", TimestampType.instance)
                 .addRegularColumn("data", UTF8Type.instance)
                 .addRegularColumn("sensor_value", DoubleType.instance)
                 .addRegularColumn("station_id", UUIDType.instance)
                 .build();
 
-        SchemaLoader.createKeyspace(KEYSPACE1,
-                KeyspaceParams.simple(1),
-                cfm);
+        KeyspaceMetadata schema = KeyspaceMetadata.create(KEYSPACE1, KeyspaceParams.simple(1), Tables.of(cfm));
+        SchemaLoader.doSchemaChanges(SchemaTransformations.createKeyspaceIfNotExists(schema));
 
         StorageService.instance.initServer();
     }
-    public static final class TestClient extends SSTableLoader.Client {
-        private String keyspace;
 
-        public void init(String keyspace) {
+    private static final class TestClient extends SSTableLoader.Client
+    {
+        private String keyspace;
+        public void init(String keyspace)
+        {
             this.keyspace = keyspace;
             for (Range<Token> range : StorageService.instance.getLocalRanges(KEYSPACE1))
                 addRangeForEndpoint(range, FBUtilities.getBroadcastAddress());
         }
-
-        public CFMetaData getTableMetadata(String tableName) {
-            return Schema.instance.getCFMetaData(keyspace, tableName);
+        public TableMetadataRef getTableMetadata(String tableName)
+        {
+            return SchemaManager.instance.getTableMetadataRef(keyspace, tableName);
         }
     }
+
     public static StreamEventHandler completionStreamListener(final CountDownLatch latch) {
         return new StreamEventHandler() {
             public void onFailure(Throwable arg0) {
@@ -144,13 +145,15 @@ public class SSTableLoaderTest {
             }
         };
     }
+
     public static AbstractReadCommandBuilder.PartitionRangeBuilder cmd(ColumnFamilyStore cfs) {
         return new AbstractReadCommandBuilder.PartitionRangeBuilder(cfs);
     }
+
     public static List<FilteredPartition> getAll(ReadCommand command) {
         List<FilteredPartition> results = new ArrayList<>();
         try (ReadExecutionController executionController = command.executionController();
-             PartitionIterator iterator = command.executeInternal(executionController)) {
+             PartitionIterator iterator = (PartitionIterator) command.executeInternal((Monitor) executionController)) {
             while (iterator.hasNext()) {
                 try (RowIterator partition = iterator.next()) {
                     results.add(FilteredPartition.create(partition));
@@ -159,6 +162,7 @@ public class SSTableLoaderTest {
         }
         return results;
     }
+
     public static File dataDir(String ks, String cf) {
 //        File tmpdir = Files.createTempDir();
         String pathname = basePath + File.separator + ks + File.separator + cf;

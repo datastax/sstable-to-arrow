@@ -31,16 +31,18 @@
             </plugin>
         </plugins>
     </build>
+
+    <repositories>
+        <repository>
+            <id>artifactory</id>
+            <name>artifactory</name>
+            <url>https://repo.datastax.com/artifactory/dse/</url>
+        </repository>
+    </repositories>
+
     <dependencies>
 
         <!-- core dependencies -->
-
-        <dependency>
-            <groupId>com.diffplug.durian</groupId>
-            <artifactId>durian</artifactId>
-            <version>3.4.0</version>
-            <scope>runtime</scope>
-        </dependency>
 
         <dependency>
             <groupId>org.apache.arrow</groupId>
@@ -55,152 +57,33 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.cassandra</groupId>
-            <artifactId>cassandra-all</artifactId>
-            <version>3.11.10</version>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-dataset</artifactId>
+            <version>7.0.0</version>
         </dependency>
 
         <dependency>
-            <groupId>org.apache.cassandra</groupId>
-            <artifactId>cassandra-clientutil</artifactId>
-            <version>3.9</version>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>dse-commons</artifactId>
+            <version>6.8.16-ef94aee</version>
         </dependency>
 
         <dependency>
-            <groupId>org.apache.cassandra</groupId>
-            <artifactId>cassandra-javautils</artifactId>
-            <version>0.7.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jctools</groupId>
-            <artifactId>jctools-core</artifactId>
-            <version>2.1.2</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.agrona</groupId>
-            <artifactId>agrona</artifactId>
-            <version>1.0.2</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.github.jbellis</groupId>
-            <artifactId>jamm</artifactId>
-            <version>0.3.3</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.msgpack</groupId>
-            <artifactId>jackson-dataformat-msgpack</artifactId>
-            <version>0.8.16</version>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>dse-db</artifactId>
+            <version>6.8.16-ef94aee</version>
             <exclusions>
                 <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-databind</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <!--
+                    excluded sjk-cli to avoid hitting https://stackoverflow.com/a/66852438/10319095 from sonar analysis,
+                    because it contains a java.lang.ProcessBuilder class for java 1.6 compatibility.
+                    Otherwise we would see the following follow-up errors:
+                    Type java.lang.String is indirectly referenced from required .class files but cannot be resolved since the declaring package java.lang exported from module java.base conflicts with a package accessible from module <unnamed>
+                    -->
+                    <groupId>org.gridkit.jvmtool</groupId>
+                    <artifactId>sjk-cli</artifactId>
                 </exclusion>
             </exclusions>
-        </dependency>
-
-        <dependency>
-            <groupId>io.reactivex</groupId>
-            <artifactId>rxjava</artifactId>
-            <version>1.3.6</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-            <version>2.11.4</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.reactivex.rxjava2</groupId>
-            <artifactId>rxjava</artifactId>
-            <version>2.2.7</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-            <version>4.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.inject.extensions</groupId>
-            <artifactId>guice-assistedinject</artifactId>
-            <version>4.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.inject.extensions</groupId>
-            <artifactId>guice-multibindings</artifactId>
-            <version>4.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.clearspring.analytics</groupId>
-            <artifactId>stream</artifactId>
-            <version>2.7.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-            <version>7.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>19.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-transport-native-epoll</artifactId>
-            <version> 4.1.25.5.dse</version>
-        </dependency>
-
-        <dependency>
-            <groupId>net.java.dev.jna</groupId>
-            <artifactId>jna</artifactId>
-            <version>5.0.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.googlecode.json-simple</groupId>
-            <artifactId>json-simple</artifactId>
-            <version>1.1</version>
-        </dependency>
-
-        <!--
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-            <version>2.9.9</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-            <version> 4.1.25.5.dse</version>
-        </dependency>
-       -->
-
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>1.7.25</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.directory.api</groupId>
-            <artifactId>api-ldap-model</artifactId>
-            <version>1.0.0.2.dse</version>
         </dependency>
 
         <dependency>
@@ -216,7 +99,6 @@
             <version>RELEASE</version>
             <scope>compile</scope>
         </dependency>
-
         <dependency>
             <groupId>com.carrotsearch.randomizedtesting</groupId>
             <artifactId>randomizedtesting-runner</artifactId>
@@ -226,7 +108,7 @@
         <dependency>
             <groupId>com.datastax.dse</groupId>
             <artifactId>dse-java-driver-core</artifactId>
-            <version>2.4.0</version>
+            <version>1.10.0-dse+20210424</version>
         </dependency>
 
         <dependency>

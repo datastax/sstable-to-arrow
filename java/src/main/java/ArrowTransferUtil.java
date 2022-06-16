@@ -4,13 +4,13 @@ import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.ipc.ArrowStreamWriter;
 import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.partitions.FilteredPartition;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.schema.TableMetadata;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -48,13 +48,13 @@ public class ArrowTransferUtil {
 //        For some reason, partition.metadata.columns() doesn't actually give all the columns and also has
 //        incorrect types
 //        so instead we get the primary key columns (partition key and clustering)...
-        for (ColumnDefinition col : partitions.get(0).metadata().primaryKeyColumns()) {
+        for (ColumnMetadata col : partitions.get(0).metadata().primaryKeyColumns()) {
             FieldVector vec = createArrowVector(col, rowCount);
             vec.allocateNew();
             vectors.put(col.name.toString(), vec);
         }
 //        and then the columns in each row, which only contain the "actual values" (no primary key)
-        for (ColumnDefinition col : partitions.get(0).lastRow().columns()) {
+        for (ColumnMetadata col : partitions.get(0).lastRow().columns()) {
             FieldVector vec = createArrowVector(col, rowCount);
             vec.allocateNew();
             vectors.put(col.name.toString(), vec);
@@ -93,31 +93,31 @@ public class ArrowTransferUtil {
      * @param partition
      */
     private void processPartition(FilteredPartition partition) {
-        CFMetaData metadata = partition.metadata();
+        TableMetadata metadata = partition.metadata();
 
         for (Row row : partition) {
 //            insert partition key (maybe this can be optimized, since will be the same for each row in the partition)
             List<AbstractType<?>> partitionKeyColumns = new ArrayList<>();
-            for (ColumnDefinition col : metadata.partitionKeyColumns()) {
+            for (ColumnMetadata col : metadata.partitionKeyColumns()) {
                 partitionKeyColumns.add(col.type);
             }
             CompositeType partitionKeyType = CompositeType.getInstance(partitionKeyColumns);
             ByteBuffer[] splitted = partitionKeyType.split(partition.partitionKey().getKey());
 
             for (int i = 0; i < splitted.length; ++i) {
-                ColumnDefinition col = metadata.partitionKeyColumns().get(i);
+                ColumnMetadata col = metadata.partitionKeyColumns().get(i);
                 appendToVector(col, rowIndex, col.type.compose(splitted[i]));
             }
 
 //            insert clustering
             for (int i = 0; i < metadata.clusteringColumns().size(); i++) {
-                ColumnDefinition col = metadata.clusteringColumns().get(i);
+                ColumnMetadata col = metadata.clusteringColumns().get(i);
                 Object clustering = col.type.compose(row.clustering().get(i));
                 appendToVector(col, rowIndex, clustering);
             }
 
 //            insert other cells
-            for (ColumnDefinition col : row.columns()) {
+            for (ColumnMetadata col : row.columns()) {
                 Cell cell = row.getCell(col);
                 Object value = col.cellValueType().compose(cell.value());
                 appendToVector(col, rowIndex, value);
@@ -136,7 +136,7 @@ public class ArrowTransferUtil {
      * @param rowCount the amount of elements to allocate memory for
      * @return an Arrow FieldVector with memory allocated for `rowCount` elements
      */
-    public static FieldVector createArrowVector(ColumnDefinition column, int rowCount) {
+    public static FieldVector createArrowVector(ColumnMetadata column, int rowCount) {
 //        unsure about the difference between this and toSchemaString
 //        switching on CQL3/Cassandra/SSTable type and returning an Arrow ValueVector
         String cql3Type = column.cellValueType().asCQL3Type().toString();
@@ -258,7 +258,7 @@ public class ArrowTransferUtil {
      * @param rowIndex the index to insert the value at
      * @param value    the value to insert
      */
-    private void appendToVector(ColumnDefinition col, int rowIndex, Object value) {
+    private void appendToVector(ColumnMetadata col, int rowIndex, Object value) {
 //        unsure about the difference between this and toSchemaString
 //        switching on CQL3/Cassandra/SSTable type and returning an Arrow ValueVector
 
