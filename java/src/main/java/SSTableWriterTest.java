@@ -22,16 +22,13 @@ import org.apache.cassandra.service.StorageService;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.stream.Collectors;
@@ -40,40 +37,33 @@ public class SSTableWriterTest {
     public static void main(String[] args) throws Exception {
         System.setProperty("cassandra.system_view.only_local_and_peers_table", "true");
 
-//        Object[][] rows = readArrowFile("s3://astra-byob-dev/keyvalue-000001.parquet");
-//        for (Object[] row : rows) {
-//            System.out.println(Arrays.toString(row));
-//        }
+        init();
 
-//        init();
-//        Object[] row = new Object[]{UUID.fromString("396f3d5d-8efa-444f-a809-b134beca04a8"),
-//                "power_factor",
-//                new Date(),
-//                "rper at non lacus. Nulla eleifend facilisis pretium.\\nCurabitur vestibulum, nibh vel tempor condimentum, augue dolor finibus lorem, sed semper nunc nibh eu ligula. Phasellus consectetur erat nec condimentum dapibus. Ut aliquam commodo velit, vitae varius nunc pharetra eu. Vestibulum tincidunt laoreet dolor ut accumsan. Curabitur elit urna, accumsan et posuere vitae, maximus et enim. Suspendisse sit amet dui urna. Integer justo magna, elementum a erat ut, dignissim hendrerit mauris. Curabitur ac congue lacus. Interdum et malesuada fames ac ante ipsum primis in faucibus.\\nDonec interdum facilisis augue ut vestibulum. Donec convallis consequat odio ac consequat. Curabitur a ante quis neque posuere pulvinar ac et sem. Maecenas pellentesque rhoncus pulvinar. Phasellus vitae massa sed urna iaculis auctor. Suspendisse finibus ipsum in tellus molestie egestas. Pellentesque quam nibh, viverra id dui euismod, suscipit aliquam massa. Mauris in lacus suscipit, maximus felis vitae, tempor orci. Cras in velit a ex facilisis eleifend id a lorem. Aenean nec dolor at to",
-//                100.4194,
-//                UUID.fromString("17057725-3482-405a-8744-74686c06ddc1")
-//        };
-
-//        Object[][] rows = readArrowFile("file:///Users/alex.cai/Documents/data/keyvalue-100.csv/keyvalue-000001.parquet");
-//        writeCqlSSTable(rows);
-//
         S3Client s3 = S3Client.builder()
                 .credentialsProvider(ProfileCredentialsProvider.create("alex.cai"))
                 .region(Region.US_WEST_2)
                 .build();
 
         String bucket = "astra-byob-dev";
-//
-//        List<Bucket> buckets = s3.listBuckets().buckets();
-//        System.out.println("S3 buckets:");
-//        for (Bucket b : buckets) {
-//            System.out.println("* " + b.name());
-//        }
 
-        listBuckets(s3, bucket);
+        List<Path> paths = listBuckets(s3, bucket);
+
+        paths.forEach(path -> {
+            try {
+                String uri = path.toUri().toString();
+                System.out.println("reading from " + uri);
+                Object[][] objects = readArrowFile(uri);
+                System.out.println("writing to SSTable");
+                writeCqlSSTable(objects);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
-    public static void listBuckets(S3Client s3, String bucketName) {
+    public static List<Path> listBuckets(S3Client s3, String bucketName) {
+        List<Path> outputs = new ArrayList<>();
+
         try {
             ListObjectsRequest listObjects = ListObjectsRequest
                     .builder()
@@ -89,26 +79,28 @@ public class SSTableWriterTest {
                 S3Object value = (S3Object) it.next();
                 System.out.println(value.key());
 
-                File file = new File(dir + File.separator + value.key());
-                System.out.printf("writing file %s to dir %s - %s\n", value.key(), file.getParentFile().getPath(), file.getPath());
-                Path parent = Files.createDirectories(file.getParentFile().toPath());
-                System.out.println(parent.toFile().exists());
-//                assert file.getParentFile().canWrite();
-//                assert file.getParentFile().mkdirs();
+                if (value.key().endsWith("parquet")) {
+                    File file = new File(dir + File.separator + value.key());
+                    assert Files.createDirectories(file.getParentFile().toPath())
+                            .toFile().exists();
 
-                GetObjectRequest getObject = GetObjectRequest.builder()
-                        .bucket(bucketName)
-                        .key(value.key())
-                        .build();
+                    GetObjectRequest getObject = GetObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(value.key())
+                            .build();
 
-                s3.getObject(getObject, file.toPath());
-                System.out.println("DONE WRITING FILE");
+                    s3.getObject(getObject, file.toPath());
+
+                    outputs.add(file.toPath());
+                }
             }
         } catch (S3Exception e) {
             System.err.println(e.awsErrorDetails().errorMessage());
         } catch (IOException e) {
             System.err.println(e.getMessage());
         }
+
+        return outputs;
     }
 
     public static Object[][] readArrowFile(String path) throws Exception {
@@ -119,26 +111,18 @@ public class SSTableWriterTest {
         Dataset dataset = factory.finish();
         Scanner scanner = dataset.newScan(new ScanOptions(100));
         List<ArrowRecordBatch> batches = new ArrayList<>();
-//                StreamSupport.stream(
-//                        scanner.scan().spliterator(), false)
-//                .flatMap(t -> stream(t.execute()))
-//                .collect(Collectors.toList());
-//                new ArrayList<>();
         for (ScanTask task : scanner.scan()) {
             for (ScanTask.BatchIterator it = task.execute(); it.hasNext(); ) {
                 ArrowRecordBatch batch = it.next();
                 batches.add(batch);
-//                batch.getNodes()
             }
         }
-
 
         List<Field> fields = factory.inspect().getFields();
         List<FieldVector> vectors = fields.stream().map(field -> field.createVector(allocator)).collect(Collectors.toList());
         VectorSchemaRoot root = new VectorSchemaRoot(fields, vectors);
         VectorLoader loader = new VectorLoader(root);
-        loader.load(batches.get(0));
-
+        batches.forEach(batch -> loader.load(batch));
 
         Object[][] items = new Object[root.getRowCount()][fields.size()];
         System.out.println(root.getRowCount());
@@ -148,17 +132,6 @@ public class SSTableWriterTest {
                 items[j][i] = vectors.get(i).getObject(j);
             }
         }
-
-//        VectorLoader loader =
-
-//        int n = batches.get(0).getLength();
-//        for (int i = 0; i < n; i++) {
-//            for (ArrowRecordBatch batch : batches) {
-//                for (Object o : batch) {
-//
-//                }
-//            }
-//        }
 
         AutoCloseables.close(batches);
         AutoCloseables.close(factory, dataset, scanner);
