@@ -9,7 +9,9 @@ import org.apache.arrow.dataset.source.DatasetFactory;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.util.AutoCloseables;
-import org.apache.arrow.vector.*;
+import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.VectorLoader;
+import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.cassandra.SchemaLoader;
@@ -17,23 +19,32 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.io.sstable.CQLSSTableWriter;
 import org.apache.cassandra.service.StorageService;
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.ParseException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
+import java.util.ListIterator;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
-import static java.util.stream.StreamSupport.stream;
 
 public class SSTableWriterTest {
     public static void main(String[] args) throws Exception {
         System.setProperty("cassandra.system_view.only_local_and_peers_table", "true");
-//        System.out.println(readArrowFile("file:///Users/alex.cai/Documents/data/keyvalue-100.csv/keyvalue-000001.parquet"));
+
+//        Object[][] rows = readArrowFile("s3://astra-byob-dev/keyvalue-000001.parquet");
+//        for (Object[] row : rows) {
+//            System.out.println(Arrays.toString(row));
+//        }
+
 //        init();
 //        Object[] row = new Object[]{UUID.fromString("396f3d5d-8efa-444f-a809-b134beca04a8"),
 //                "power_factor",
@@ -42,25 +53,62 @@ public class SSTableWriterTest {
 //                100.4194,
 //                UUID.fromString("17057725-3482-405a-8744-74686c06ddc1")
 //        };
-        Object[][] rows = readArrowFile("file:///Users/alex.cai/Documents/data/keyvalue-100.csv/keyvalue-000001.parquet");
-        for (int i = 0; i < rows.length; i++) {
-            for (int j = 0; j < rows[i].length; j++) {
-                System.out.println(rows[i][j]);
-            }
-        }
-        writeCqlSSTable(rows);
 
-//        Region region = Region.US_WEST_2;
-//        S3Client s3 = S3Client.builder().region(region).build();
+//        Object[][] rows = readArrowFile("file:///Users/alex.cai/Documents/data/keyvalue-100.csv/keyvalue-000001.parquet");
+//        writeCqlSSTable(rows);
 //
-//        String bucket = "astra-byob-dev";
-//        String key = "key";
+        S3Client s3 = S3Client.builder()
+                .credentialsProvider(ProfileCredentialsProvider.create("alex.cai"))
+                .region(Region.US_WEST_2)
+                .build();
+
+        String bucket = "astra-byob-dev";
 //
 //        List<Bucket> buckets = s3.listBuckets().buckets();
 //        System.out.println("S3 buckets:");
 //        for (Bucket b : buckets) {
 //            System.out.println("* " + b.name());
 //        }
+
+        listBuckets(s3, bucket);
+    }
+
+    public static void listBuckets(S3Client s3, String bucketName) {
+        try {
+            ListObjectsRequest listObjects = ListObjectsRequest
+                    .builder()
+                    .bucket(bucketName)
+                    .build();
+
+            ListObjectsResponse res = s3.listObjects(listObjects);
+            List<S3Object> objects = res.contents();
+
+            Path dir = Files.createTempDirectory("download-");
+
+            for (ListIterator it = objects.listIterator(); it.hasNext(); ) {
+                S3Object value = (S3Object) it.next();
+                System.out.println(value.key());
+
+                File file = new File(dir + File.separator + value.key());
+                System.out.printf("writing file %s to dir %s - %s\n", value.key(), file.getParentFile().getPath(), file.getPath());
+                Path parent = Files.createDirectories(file.getParentFile().toPath());
+                System.out.println(parent.toFile().exists());
+//                assert file.getParentFile().canWrite();
+//                assert file.getParentFile().mkdirs();
+
+                GetObjectRequest getObject = GetObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(value.key())
+                        .build();
+
+                s3.getObject(getObject, file.toPath());
+                System.out.println("DONE WRITING FILE");
+            }
+        } catch (S3Exception e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        }
     }
 
     public static Object[][] readArrowFile(String path) throws Exception {
