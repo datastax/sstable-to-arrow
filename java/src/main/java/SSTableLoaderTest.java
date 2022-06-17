@@ -1,3 +1,5 @@
+import org.apache.arrow.vector.types.Types;
+import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.*;
@@ -20,9 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
 public class SSTableLoaderTest {
@@ -34,8 +34,7 @@ public class SSTableLoaderTest {
     public static String sstablePath;
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 1)
-        {
+        if (args.length < 1) {
             System.out.println("must pass path to folder with SSTable files");
             return;
         }
@@ -116,17 +115,16 @@ public class SSTableLoaderTest {
         StorageService.instance.initServer();
     }
 
-    private static final class TestClient extends SSTableLoader.Client
-    {
+    private static final class TestClient extends SSTableLoader.Client {
         private String keyspace;
-        public void init(String keyspace)
-        {
+
+        public void init(String keyspace) {
             this.keyspace = keyspace;
             for (Range<Token> range : StorageService.instance.getLocalRanges(KEYSPACE1))
                 addRangeForEndpoint(range, FBUtilities.getBroadcastAddress());
         }
-        public TableMetadataRef getTableMetadata(String tableName)
-        {
+
+        public TableMetadataRef getTableMetadata(String tableName) {
             return SchemaManager.instance.getTableMetadataRef(keyspace, tableName);
         }
     }

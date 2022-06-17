@@ -3,6 +3,9 @@ import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.ipc.ArrowStreamWriter;
+import org.apache.arrow.vector.types.Types;
+import org.apache.arrow.vector.types.Types.MinorType;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
@@ -32,6 +35,32 @@ public class ArrowTransferUtil {
     private int rowIndex = 0;
     private final Map<String, FieldVector> vectors = new HashMap();
     private List<FilteredPartition> partitions;
+
+
+    public static Map<String, Types.MinorType> typeMapping = new HashMap();
+
+    static {
+        typeMapping.put("ascii", Types.MinorType.VARCHAR);
+        typeMapping.put("bigint", Types.MinorType.BIGINT);
+        typeMapping.put("blob", Types.MinorType.LARGEVARBINARY);
+        typeMapping.put("boolean", Types.MinorType.BIT);
+        typeMapping.put("counter", Types.MinorType.BIGINT);
+        typeMapping.put("date", Types.MinorType.DATEDAY); // double check
+        typeMapping.put("decimal", Types.MinorType.DECIMAL); // double check
+        typeMapping.put("double", Types.MinorType.FLOAT8);
+        typeMapping.put("duration", Types.MinorType.TIMENANO); // double check
+        typeMapping.put("float", Types.MinorType.FLOAT4);
+        typeMapping.put("inet", Types.MinorType.VARCHAR); // treat as string
+        typeMapping.put("int", Types.MinorType.INT);
+        typeMapping.put("smallint", Types.MinorType.SMALLINT);
+        typeMapping.put("text", Types.MinorType.LARGEVARCHAR);
+        typeMapping.put("time", Types.MinorType.TIMENANO);
+        typeMapping.put("timestamp", Types.MinorType.TIMESTAMPMILLI);
+        typeMapping.put("timeuuid", Types.MinorType.FIXEDSIZEBINARY);
+        typeMapping.put("tinyint", Types.MinorType.TINYINT);
+        typeMapping.put("uuid", Types.MinorType.FIXEDSIZEBINARY);
+        typeMapping.put("varint", Types.MinorType.VARBINARY);
+    }
 
     public ArrowTransferUtil(List<FilteredPartition> partitions) {
         this.partitions = partitions;
@@ -343,6 +372,7 @@ public class ArrowTransferUtil {
             default:
                 System.out.println("ERROR: CQL3 type not implemented: " + cql3Type);
         }
+
     }
 
     /**
@@ -371,6 +401,14 @@ public class ArrowTransferUtil {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public static MinorType matchingType(AbstractType cassandraType) {
+        return typeMapping.get(cassandraType.asCQL3Type().toString());
+    }
+
+    public static boolean validType(AbstractType cassandraType, MinorType arrowType) {
+        return matchingType(cassandraType) == arrowType;
     }
 
 }
