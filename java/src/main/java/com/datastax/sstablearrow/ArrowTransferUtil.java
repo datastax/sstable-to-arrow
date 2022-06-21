@@ -1,14 +1,14 @@
+package com.datastax.sstablearrow;
+
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.ipc.ArrowStreamWriter;
 import org.apache.arrow.vector.types.Types;
-import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.CompositeType;
+import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.db.partitions.FilteredPartition;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
@@ -38,6 +38,8 @@ public class ArrowTransferUtil {
 
 
     public static Map<String, Types.MinorType> typeMapping = new HashMap();
+    public static Map<Types.MinorType, AbstractType> arrowToSSTableMapping = new HashMap<>();
+
 
     static {
         typeMapping.put("ascii", Types.MinorType.VARCHAR);
@@ -48,7 +50,7 @@ public class ArrowTransferUtil {
         typeMapping.put("date", Types.MinorType.DATEDAY); // double check
         typeMapping.put("decimal", Types.MinorType.DECIMAL); // double check
         typeMapping.put("double", Types.MinorType.FLOAT8);
-        typeMapping.put("duration", Types.MinorType.TIMENANO); // double check
+        typeMapping.put("duration", Types.MinorType.DURATION); // double check
         typeMapping.put("float", Types.MinorType.FLOAT4);
         typeMapping.put("inet", Types.MinorType.VARCHAR); // treat as string
         typeMapping.put("int", Types.MinorType.INT);
@@ -59,7 +61,19 @@ public class ArrowTransferUtil {
         typeMapping.put("timeuuid", Types.MinorType.FIXEDSIZEBINARY);
         typeMapping.put("tinyint", Types.MinorType.TINYINT);
         typeMapping.put("uuid", Types.MinorType.FIXEDSIZEBINARY);
-        typeMapping.put("varint", Types.MinorType.VARBINARY);
+        typeMapping.put("varint", Types.MinorType.BIGINT);
+
+
+        // TODO collections
+//        arrowToSSTableMapping.put(Types.MinorType.NULL, "");
+//        arrowToSSTableMapping.put(Types.MinorType.STRUCT, "");
+//        arrowToSSTableMapping.put(Types.MinorType.LIST, "");
+//        arrowToSSTableMapping.put(Types.MinorType.LARGELIST, "");
+//        arrowToSSTableMapping.put(Types.MinorType.FIXED_SIZE_LIST, "");
+//        arrowToSSTableMapping.put(Types.MinorType.UNION, "");
+//        arrowToSSTableMapping.put(Types.MinorType.DENSEUNION, "");
+//        arrowToSSTableMapping.put(Types.MinorType.MAP, "");
+//        arrowToSSTableMapping.put(Types.MinorType.EXTENSIONTYPE, "");
     }
 
     public ArrowTransferUtil(List<FilteredPartition> partitions) {
@@ -403,11 +417,15 @@ public class ArrowTransferUtil {
         }
     }
 
-    public static MinorType matchingType(AbstractType cassandraType) {
+    public static Types.MinorType matchingType(AbstractType cassandraType) {
         return typeMapping.get(cassandraType.asCQL3Type().toString());
     }
 
-    public static boolean validType(AbstractType cassandraType, MinorType arrowType) {
+    public static AbstractType getMatchingCassandraType(Types.MinorType arrowMinorType) {
+        return arrowToSSTableMapping.get(arrowMinorType);
+    }
+
+    public static boolean validType(AbstractType cassandraType, Types.MinorType arrowType) {
         return matchingType(cassandraType) == arrowType;
     }
 
