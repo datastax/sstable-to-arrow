@@ -1,11 +1,6 @@
 package com.datastax.sstablearrow;
 
-import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.marshal.DoubleType;
-import org.apache.cassandra.db.marshal.TimestampType;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.db.monitoring.Monitor;
 import org.apache.cassandra.db.partitions.FilteredPartition;
 import org.apache.cassandra.db.partitions.PartitionIterator;
@@ -13,7 +8,8 @@ import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.SSTableLoader;
-import org.apache.cassandra.schema.*;
+import org.apache.cassandra.schema.SchemaManager;
+import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.StreamEvent;
 import org.apache.cassandra.streaming.StreamEventHandler;
@@ -22,9 +18,6 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -52,20 +45,6 @@ public class SSTableToArrow {
         System.out.println("[PROFILE] done getting partitions: " + (System.nanoTime() - startTime));
 
         return partitions;
-    }
-
-    private static final class TestClient extends SSTableLoader.Client {
-        private String keyspace;
-
-        public void init(String keyspace) {
-            this.keyspace = keyspace;
-            for (Range<Token> range : StorageService.instance.getLocalRanges(keyspace))
-                addRangeForEndpoint(range, FBUtilities.getBroadcastAddress());
-        }
-
-        public TableMetadataRef getTableMetadata(String tableName) {
-            return SchemaManager.instance.getTableMetadataRef(keyspace, tableName);
-        }
     }
 
     public static StreamEventHandler completionStreamListener(final CountDownLatch latch) {
@@ -98,5 +77,19 @@ public class SSTableToArrow {
             }
         }
         return results;
+    }
+
+    public static final class TestClient extends SSTableLoader.Client {
+        private String keyspace;
+
+        public void init(String keyspace) {
+            this.keyspace = keyspace;
+            for (Range<Token> range : StorageService.instance.getLocalRanges(keyspace))
+                addRangeForEndpoint(range, FBUtilities.getBroadcastAddress());
+        }
+
+        public TableMetadataRef getTableMetadata(String tableName) {
+            return SchemaManager.instance.getTableMetadataRef(keyspace, tableName);
+        }
     }
 }
