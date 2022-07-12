@@ -24,8 +24,20 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 
+/**
+ * Class for converting SSTable files to Arrow vectors and tables.
+ */
 public class SSTableToArrow {
 
+    /**
+     * Read a table from a directory containing SSTable files.
+     * @param sstablePath The path to the directory containing the SSTable files.
+     * @param keyspace The keyspace the table belongs to.
+     * @param table The table to read.
+     * @return A list of FilteredPartitions.
+     * @throws ExecutionException
+     * @throws InterruptedException
+     */
     public static List<FilteredPartition> getPartitions(String sstablePath, String keyspace, String table) throws ExecutionException, InterruptedException {
         File dataDir = new File(sstablePath);
 

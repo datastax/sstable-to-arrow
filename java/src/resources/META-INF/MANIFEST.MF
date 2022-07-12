@@ -1,3 +1,0 @@
-Manifest-Version: 1.0
-com.datastax.sstablearrow.Main-Class: com.datastax.sstablearrow.SSTableToArrow
-

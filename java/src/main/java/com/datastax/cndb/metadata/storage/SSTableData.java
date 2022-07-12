@@ -70,7 +70,7 @@ public class SSTableData
     // The following properties have been available since the beginning (version 0 or no version)
 
     @JsonProperty("file_name")
-    public final String fileName;
+    public String fileName;
 
     @JsonProperty("min")
     public final long min; // should have been minToken
@@ -128,7 +128,7 @@ public class SSTableData
      * is empty.
      */
     @JsonProperty("operation_id")
-    public final Optional<UUID> operationId;
+    public Optional<UUID> operationId;
 
     // The following properties have been available since version 4 (CDNB-3721)
 
