@@ -1,7 +1,10 @@
 package com.datastax.sstablearrow;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileAttribute;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +15,8 @@ import org.apache.commons.lang3.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.datastax.cndb.bulkimport.BulkImportFileUtils;
+import com.datastax.cndb.metadata.backup.BulkImportTaskSpec;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -134,27 +139,26 @@ public class ArrowToSSTable
     /**
      * Downloads the given object from S3 into the given directory, preserving the relative path.
      *
-     * @param s3 the S3 client to query with
-     * @param bucket the name of the bucket that the object resides in
-     * @param object the name of the object to download
+     * @param taskSpec the task spec containing the bucket and object to use for the download
      * @param outdir the directory to download the object to
      *
      * @return the path to the downloaded object
      */
-    public static Path downloadFile(S3Client s3, String bucket, S3Object object, Path outdir)
+    public static Path downloadFile(BulkImportTaskSpec taskSpec, Path outdir) throws IOException
     {
-        Path output = outdir.resolve(object.key());
+        Path output = outdir.resolve(taskSpec.getObjectKey());
+        Files.createDirectories(output.getParent());
 
-        LOGGER.debug("Downloading {} from bucket {} to {}", object.key(), bucket, output);
+        LOGGER.debug("Downloading {} to {}", taskSpec.getFullURI(), output);
 
         GetObjectRequest getObject = GetObjectRequest.builder()
-                .bucket(bucket)
-                .key(object.key())
+                .bucket(taskSpec.getBucketName())
+                .key(taskSpec.getObjectKey())
                 .build();
 
-        s3.getObject(getObject, output);
+        BulkImportFileUtils.instance.s3Client(taskSpec.getRegion()).getObject(getObject, output);
 
-        LOGGER.debug("Downloaded {} from bucket {} to {}", object.key(), bucket, output);
+        LOGGER.debug("Successfully downloaded {} to {}", taskSpec.getFullURI(), output);
 
         return output;
     }

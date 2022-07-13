@@ -22,8 +22,14 @@ import java.util.Objects;
 public class DescriptorUtils
 {
 
-    public static Path addKeyspaceAndTable(Path p, TableMetadata metadata) {
-        return p.resolve(metadata.keyspace + File.separator + metadata.name);
+    /**
+     * Gets a directory nested two layers deep under basePath with the given keyspace and table name.
+     * @param basePath the path to extend
+     * @param metadata the table to get the directory for
+     * @return the path to the new nested directory
+     */
+    public static Path addKeyspaceAndTable(Path basePath, TableMetadata metadata) {
+        return basePath.resolve(metadata.keyspace).resolve(metadata.name);
     }
 
     /**
@@ -35,8 +41,7 @@ public class DescriptorUtils
      */
     public static Descriptor descriptorWithUlidGeneration(Path localDataFile, ULIDBasedSSTableUniqueIdentifierFactory.ULIDBasedSSTableUniqueIdentifier ulid) {
         Descriptor d = Descriptor.fromFilename(localDataFile);
-        Descriptor newDescriptor = new Descriptor(d.getDirectory(), d.ksname, d.cfname, ulid, d.formatType);
-        return newDescriptor;
+        return new Descriptor(d.getDirectory(), d.ksname, d.cfname, ulid, d.formatType);
     }
 
     public static Descriptor descriptorWithUlidGeneration(Path localDataFile) {

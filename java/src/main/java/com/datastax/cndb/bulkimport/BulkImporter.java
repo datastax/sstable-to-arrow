@@ -1,37 +1,48 @@
 package com.datastax.cndb.bulkimport;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 import java.util.zip.InflaterInputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.datastax.cndb.metadata.backup.BulkImportTaskSpec;
+import com.datastax.cndb.metadata.storage.SSTableData;
+import com.datastax.sstablearrow.ArrowToSSTable;
 import com.datastax.sstablearrow.DescriptorUtils;
-import org.apache.cassandra.io.sstable.Component;
+import com.datastax.sstablearrow.ParquetReaderUtils;
+import com.datastax.sstablearrow.SSTableWriterUtils;
+import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.Pair;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsResponse;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
+import static com.datastax.cndb.bulkimport.BulkImportUploadUtils.uploadSSTables;
+import static com.datastax.cndb.bulkimport.BulkImporterHttpResource.OBJECT_MAPPER;
+
+/**
+ * Handles the BulkImport task. Downloads files from the tenant's remote storage and uploads SSTables to CNDB storage.
+ */
 public class BulkImporter
 {
 
@@ -45,10 +56,9 @@ public class BulkImporter
     /**
      * Fetch the most recent schema file from a tenant's cloud storage bucket.
      *
-     * @param s3 the S3 client
      * @param datacenterId the tenant ID and bucket name, a UUID with a suffixed ordinal
      */
-    public static JSONObject fetchSchemaFile(S3Client s3, String datacenterId) throws IOException, ParseException
+    public static JSONObject fetchSchemaFile(String datacenterId) throws IOException, ParseException
     {
         LOGGER.debug("fetching schema file for {}", datacenterId);
 
@@ -58,7 +68,7 @@ public class BulkImporter
                 .prefix(prefix)
                 .build();
 
-        ListObjectsResponse res = s3.listObjects(listObjects);
+        ListObjectsResponse res = BulkImportFileUtils.instance.getCndbClient().listObjects(listObjects);
         String schemaKey = "";
         int recentVersion = 0;
         for (S3Object obj : res.contents())
@@ -91,7 +101,7 @@ public class BulkImporter
                 .bucket(datacenterId)
                 .key(schemaKey)
                 .build();
-        InputStream schemaFile = s3.getObjectAsBytes(getObject)
+        InputStream schemaFile = BulkImportFileUtils.instance.getCndbClient().getObjectAsBytes(getObject)
                 .asInputStream();
 
         LOGGER.debug("download complete, parsing to JSON");
@@ -109,140 +119,83 @@ public class BulkImporter
         return (JSONObject) parser.parse(builder.toString());
     }
 
+
     /**
-     * @param s3 the client to make the upload request with
-     * @param datacenterId the name of the bucket allocated for the tenant
-     * @param sstableDir the path to the local directory containing the SSTable files to upload
-     * @param schema the schema of the table to upload SSTables for
+     * Download a single parquet object from S3, split it into batches ("VectorSchemaRoot"s),
+     * and create an SSTable for each batch.
      *
-     * @return the descriptor for the remote SSTable
+     * @param taskSpec the specification of the bulk import task
+     * @param schemaFile the JSONObject containing the downloaded schema file
      */
-    public static String uploadSSTables(S3Client s3, String datacenterId, Path sstableDir, TableMetadata schema, boolean archive) throws IOException
+    public static List<BulkImportTaskResult> handleParquetObject(BulkImportTaskSpec taskSpec, JSONObject schemaFile)
     {
-        LOGGER.debug("uploading SSTables at directory {} for table {}.{} under tenant {}",
-                sstableDir, schema.keyspace, schema.name, datacenterId);
+        LOGGER.info("Handling parquet object {} in bucket {} for tenant {} and downloading to {}",
+                taskSpec.getObjectKey(), taskSpec.getBucketName(), taskSpec.getSingleTenant(), BulkImportFileUtils.instance.getBaseDir());
 
-        String tenantId = getTenantId(datacenterId);
-        String tableBucketPath = String.format("data/%s/%s/%s-%s/", tenantId, schema.keyspace, schema.name, schema.id.toHexString());
-
-        Path archivePath = Files.createTempFile("sstable-archive-", ".zip");
-
-        Path dataPath = null;
-        List<Path> filePaths = new ArrayList<>();
-        Descriptor descriptor = null;
-
-        // get path to Data.db file and zip all others
-        for (File sstableFile : Objects.requireNonNull(sstableDir.toFile().listFiles()))
+        Pair<String, String> keyspaceAndTableName = ArrowToSSTable.getKeyspaceAndTableName(Paths.get(taskSpec.getObjectKey()));
+        String tableId = keyspaceAndTableName.left + "." + keyspaceAndTableName.right;
+        TableMetadata metadata = ArrowToSSTable.getSchema(schemaFile, keyspaceAndTableName.left, keyspaceAndTableName.right);
+        if (metadata == null)
         {
-            if (!Descriptor.isValid(sstableFile.toPath())) continue;
-
-            Descriptor docDescriptor = Descriptor.fromFilename(sstableFile);
-            if (descriptor != null && !docDescriptor.equals(descriptor))
-            {
-                throw new RuntimeException(String.format("Documents have mismatched prefixes (%s != %s)", descriptor, docDescriptor));
-            }
-            else
-            {
-                descriptor = docDescriptor;
-            }
-
-            if (Descriptor.componentFromFilename(sstableFile).type == Component.Type.DATA)
-            {
-                dataPath = sstableFile.toPath();
-            }
-            else
-            {
-                filePaths.add(sstableFile.toPath());
-            }
+            LOGGER.info("Could not find schema for table {}", tableId);
+            return Collections.singletonList(BulkImportTaskResult.error(taskSpec.getObjectKey(), "Error getting Cassandra schema for table " + tableId));
         }
 
-        if (descriptor == null)
+        // each Parquet file may result in multiple SSTables
+        try
         {
-            LOGGER.error("No non-data SSTable files found in {}", sstableDir);
-            throw new FileNotFoundException("Additional SSTable files not found");
+            Path parquetPath = ArrowToSSTable.downloadFile(taskSpec, BulkImportFileUtils.instance.parquetDir());
+            List<BulkImportTaskResult> results = new ArrayList<>();
+            ParquetReaderUtils.read("file:" + parquetPath, root -> {
+                try
+                {
+                    results.addAll(processVectorSchemaRoot(root, metadata, taskSpec, BulkImportFileUtils.instance.sstableDir())
+                            .stream()
+                            .map(datum -> BulkImportTaskResult.success(parquetPath.toString(), datum))
+                            .collect(Collectors.toList()));
+                }
+                catch (Exception e)
+                {
+                    results.add(BulkImportTaskResult.error(taskSpec.getObjectKey(), "Error processing vector schema root: " + e.getMessage()));
+                }
+            });
+            LOGGER.debug("Processed results: {}", OBJECT_MAPPER.writeValueAsString(results));
+            return results;
         }
-        if (dataPath == null)
+        catch (Exception e)
         {
-            LOGGER.error("No Data.db file found in {}", sstableDir);
-            throw new FileNotFoundException("Data file not found");
+            return Collections.singletonList(BulkImportTaskResult.error(taskSpec.getObjectKey(), "Error reading Parquet file: " + e.getMessage()));
         }
-
-        // Create the new descriptor for remote storage
-        Descriptor withUlid = DescriptorUtils.descriptorWithUlidGeneration(dataPath);
-        if (archive)
-        {
-            compressFiles(filePaths, archivePath, withUlid);
-
-            // upload Archive.zip file
-            String archiveKey = tableBucketPath + withUlid.filenamePart() + "-Archive.zip";
-            LOGGER.info("uploading archive file {} to bucket {} at key {}", archivePath, datacenterId, archiveKey);
-            PutObjectRequest uploadArchive = PutObjectRequest.builder()
-                    .bucket(datacenterId)
-                    .key(archiveKey)
-                    .build();
-            s3.putObject(uploadArchive, archivePath);
-            LOGGER.debug("upload complete");
-        }
-        else
-        {
-            //  upload each of the files
-            for (Path filePath : filePaths)
-            {
-                Component component = Descriptor.componentFromFilename(filePath.getFileName().toString());
-                String fileKey = tableBucketPath + withUlid.filenamePart() + "-" + component.toString();
-                LOGGER.info("uploading file {} to bucket {} at key {}", filePath, datacenterId, fileKey);
-                PutObjectRequest uploadFile = PutObjectRequest.builder()
-                        .bucket(datacenterId)
-                        .key(fileKey)
-                        .build();
-                s3.putObject(uploadFile, filePath);
-                LOGGER.debug("upload complete");
-            }
-        }
-
-        //  upload Data.db file
-        String dataKey = tableBucketPath + withUlid.pathFor(Component.DATA).getFileName();
-        PutObjectRequest putObject = PutObjectRequest.builder()
-                .bucket(datacenterId)
-                .key(dataKey)
-                .build();
-        LOGGER.info("uploading data file {} to bucket {} at key {}", dataPath, datacenterId, dataKey);
-        s3.putObject(putObject, dataPath);
-        LOGGER.info("upload complete");
-
-        return dataKey;
     }
 
-    public static void compressFiles(List<Path> paths, Path outputPath, Descriptor descriptor) throws IOException
+
+    /**
+     * Upload an in-memory Arrow Table (VectorSchemaRoot) to the given tenant bucket.
+     *
+     * @param root the VectorSchemaRoot to upload
+     * @param cassandraSchema the Cassandra schema for the table
+     * @param taskSpec the specification of the bulk import task
+     * @param baseDir the base directory to store the SSTable files in
+     *
+     * @return SSTableData objects corresponding to the SSTable files created
+     * @throws IOException if there is an error writing the SSTable files
+     * @throws ExecutionException if there is an error writing the SSTable files
+     * @throws InterruptedException if there is an error writing the SSTable files
+     */
+    public static List<SSTableData> processVectorSchemaRoot(VectorSchemaRoot root, TableMetadata cassandraSchema, BulkImportTaskSpec taskSpec, Path baseDir) throws IOException, ExecutionException, InterruptedException
     {
-        LOGGER.debug("compressing {} files to {}", paths.size(), outputPath);
+        LOGGER.debug("Processing vector schema root with {} rows for table {}.{} and tenant {}", root.getRowCount(), cassandraSchema.keyspace, cassandraSchema.name, taskSpec.getSingleTenant());
 
-        try (OutputStream fos = Files.newOutputStream(outputPath))
+        Map<ColumnIdentifier, FieldVector> vectorMap = ArrowToSSTable.alignSchemas(root, cassandraSchema);
+        Descriptor writtenSSTableDescriptor = SSTableWriterUtils.writeCqlSSTable(cassandraSchema, vectorMap, baseDir, true);
+        List<SSTableData> ssTableData = SSTableWriterUtils.getSSTableData(writtenSSTableDescriptor.getDirectory());
+
+        String dataComponentPath = uploadSSTables(taskSpec, writtenSSTableDescriptor.getDirectory(), cassandraSchema);
+        for (SSTableData datum : ssTableData)
         {
-            ZipOutputStream zipOut = new ZipOutputStream(fos);
-            for (int i = paths.size() - 1; i >= 0; i--)
-            {
-                Path path = paths.get(i);
-                try (InputStream input = Files.newInputStream(path))
-                {
-                    Component c = Descriptor.componentFromFilename(path.getFileName()
-                            .toString());
-                    //                    if (c == Component.STATS) continue;
-                    ZipEntry zipEntry = new ZipEntry(descriptor.filenamePart() + "-" + c.toString());
-                    zipOut.putNextEntry(zipEntry);
-
-                    // write all other files to an archive
-                    int nread;
-                    byte[] buffer = new byte[1024];
-                    while ((nread = input.read(buffer)) != -1)
-                    {
-                        zipOut.write(buffer, 0, nread);
-                    }
-                }
-            }
-            zipOut.close();
+            datum.fileName = Paths.get(dataComponentPath).getFileName().toString();
+            datum.operationId = java.util.Optional.empty();
         }
-
-        LOGGER.debug("compression complete");
+        return ssTableData;
     }
 }

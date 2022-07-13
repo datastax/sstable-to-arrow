@@ -1,5 +1,6 @@
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -7,8 +8,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
@@ -17,6 +20,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import com.datastax.cndb.bulkimport.BulkImporterApplication;
+import com.datastax.cndb.metadata.backup.BulkImportTaskSpec;
 import com.datastax.sstablearrow.ArrowToSSTable;
 import com.datastax.sstablearrow.ArrowUtils;
 import com.datastax.sstablearrow.ParquetReaderUtils;
@@ -289,8 +293,18 @@ public class ArrowToSSTableTest
         {
             List<S3Object> parquetObjects = ArrowToSSTable.listParquetFiles(s3, BUCKET_NAME);
             Path tempDir = Files.createTempDirectory("parquet-output-");
+            Set<String> tenants = Collections.singleton("test");
             paths = parquetObjects.stream()
-                    .map(o -> ArrowToSSTable.downloadFile(s3, BUCKET_NAME, o, tempDir))
+                    .map(o -> {
+                        try
+                        {
+                            return ArrowToSSTable.downloadFile(new BulkImportTaskSpec(tenants, URI.create("s3://" + BUCKET_NAME + "/" + o.key()), Region.US_WEST_2, true), tempDir);
+                        }
+                        catch (IOException e)
+                        {
+                            throw new RuntimeException(e);
+                        }
+                    })
                     .collect(Collectors.toList());
         }
         catch (IOException e)
