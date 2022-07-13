@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -109,7 +109,7 @@ public class ArrowToSSTableTest
         }
         catch (Exception e)
         {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -292,7 +292,7 @@ public class ArrowToSSTableTest
         }
         catch (IOException e)
         {
-            Assert.fail("Error downloading parquet files: " + e.getMessage());
+            Assertions.fail("Error downloading parquet files: " + e.getMessage());
         }
         Path dataDir = Paths.get(System.getProperty("user.dir") + File.separator + "data" + File.separator + TEST_KEYSPACE + File.separator + TEST_TABLE);
 

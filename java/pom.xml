@@ -15,6 +15,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <java.version>8</java.version>
+        <dse.version>6.8.16-7f37a27</dse.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -62,12 +63,28 @@
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-memory-netty</artifactId>
             <version>5.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>netty-buffer</artifactId>
+                    <groupId>io.netty</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>netty-common</artifactId>
+                    <groupId>io.netty</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-vector</artifactId>
             <version>5.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>netty-common</artifactId>
+                    <groupId>io.netty</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -79,13 +96,13 @@
         <dependency>
             <groupId>com.datastax.dse</groupId>
             <artifactId>dse-commons</artifactId>
-            <version>6.8.16-ef94aee</version>
+            <version>${dse.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.datastax.dse</groupId>
             <artifactId>dse-db</artifactId>
-            <version>6.8.16-5ce17bf89</version>
+            <version>${dse.version}</version>
             <exclusions>
                 <exclusion>
                     <!--
@@ -103,7 +120,7 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>RELEASE</version>
+            <version>4.13.2</version>
             <scope>compile</scope>
         </dependency>
 
@@ -134,7 +151,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>RELEASE</version>
+            <version>5.8.2</version>
             <scope>test</scope>
         </dependency>
 

@@ -15,11 +15,17 @@ import org.apache.arrow.vector.ipc.ArrowReader;
 
 public class ParquetReaderUtils
 {
-    public static void read(String path, Consumer<VectorSchemaRoot> callback) throws Exception
+    /**
+     * Read a Parquet file and call a callback on each batch of 100 rows.
+     * @param path
+     * @param callback
+     * @throws Exception
+     */
+    public static void read(String path, Consumer<VectorSchemaRoot> callback, ScanOptions scanOptions) throws Exception
     {
         try (DatasetFactory factory = new FileSystemDatasetFactory(ArrowUtils.ALLOCATOR, NativeMemoryPool.getDefault(), FileFormat.PARQUET, path);
              Dataset dataset = factory.finish();
-             Scanner scanner = dataset.newScan(new ScanOptions(100)))
+             Scanner scanner = dataset.newScan(scanOptions))
         {
             for (ScanTask t : scanner.scan())
             {
@@ -32,5 +38,10 @@ public class ParquetReaderUtils
                 }
             }
         }
+    }
+
+    public static void read(String path, Consumer<VectorSchemaRoot> callback) throws Exception
+    {
+        read(path, callback, new ScanOptions(100));
     }
 }
