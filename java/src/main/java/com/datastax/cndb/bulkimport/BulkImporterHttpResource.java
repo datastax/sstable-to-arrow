@@ -66,6 +66,9 @@ public class BulkImporterHttpResource
      * @param tenantId the tenant ID, including the suffixed ordinal.
      * @param dataBucket The name of the bucket that the data is uploaded to. The script will look for Parquet files
      * under the prefix in ArrowToSSTable.
+     * @param noArchive Whether to upload the files individually or as a zipped archive.
+     * @param pretty Whether to pretty-print the JSON output.
+     * @param skipExtras Whether to skip columns that are in the Parquet table but not the Cassandra table.
      *
      * @return indicator of success
      */
@@ -76,7 +79,8 @@ public class BulkImporterHttpResource
             @PathParam("tenantId") String tenantId,
             @PathParam("dataBucket") String dataBucket,
             @QueryParam("noArchive") boolean noArchive,
-            @QueryParam("pretty") boolean pretty) throws JsonProcessingException
+            @QueryParam("pretty") boolean pretty,
+            @QueryParam("skipExtras") boolean skipExtras) throws JsonProcessingException
     {
         List<Path> paths;
         try

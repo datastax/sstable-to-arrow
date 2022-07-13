@@ -18,6 +18,7 @@ import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import com.datastax.cndb.bulkimport.BulkImporterApplication;
 import com.datastax.sstablearrow.ArrowToSSTable;
 import com.datastax.sstablearrow.ArrowUtils;
 import com.datastax.sstablearrow.ParquetReaderUtils;
@@ -91,7 +92,7 @@ public class ArrowToSSTableTest
     @BeforeAll
     public static void init()
     {
-        Main.init();
+        BulkImporterApplication.init();
     }
 
     @Test
