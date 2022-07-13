@@ -15,6 +15,9 @@ import java.util.zip.InflaterInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.datastax.sstablearrow.DescriptorUtils;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
@@ -32,6 +35,8 @@ import software.amazon.awssdk.services.s3.model.S3Object;
 public class BulkImporter
 {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(BulkImporter.class);
+
     public static String getTenantId(String datacenterId)
     {
         return datacenterId.substring(0, datacenterId.lastIndexOf('-'));
@@ -45,6 +50,8 @@ public class BulkImporter
      */
     public static JSONObject fetchSchemaFile(S3Client s3, String datacenterId) throws IOException, ParseException
     {
+        LOGGER.debug("fetching schema file for {}", datacenterId);
+
         String prefix = String.format("metadata_backup/%s/schema", getTenantId(datacenterId));
         ListObjectsRequest listObjects = ListObjectsRequest.builder()
                 .bucket(datacenterId)
@@ -69,9 +76,16 @@ public class BulkImporter
             }
             catch (NumberFormatException | ArrayIndexOutOfBoundsException e)
             {
-                continue;
+                LOGGER.warn("skipping invalid schema file {}", obj.key());
             }
         }
+
+        if (schemaKey.isEmpty())
+        {
+            throw new FileNotFoundException("no schema file found");
+        }
+
+        LOGGER.debug("found schema file {}, downloading", schemaKey);
 
         GetObjectRequest getObject = GetObjectRequest.builder()
                 .bucket(datacenterId)
@@ -79,6 +93,9 @@ public class BulkImporter
                 .build();
         InputStream schemaFile = s3.getObjectAsBytes(getObject)
                 .asInputStream();
+
+        LOGGER.debug("download complete, parsing to JSON");
+
         InflaterInputStream stream = new InflaterInputStream(schemaFile);
         StringBuilder builder = new StringBuilder();
         byte[] buffer = new byte[512];
@@ -89,9 +106,7 @@ public class BulkImporter
         }
 
         JSONParser parser = new JSONParser();
-        JSONObject allSchemas = (JSONObject) parser.parse(builder.toString());
-
-        return allSchemas;
+        return (JSONObject) parser.parse(builder.toString());
     }
 
     /**
@@ -104,6 +119,9 @@ public class BulkImporter
      */
     public static String uploadSSTables(S3Client s3, String datacenterId, Path sstableDir, TableMetadata schema, boolean archive) throws IOException
     {
+        LOGGER.debug("uploading SSTables at directory {} for table {}.{} under tenant {}",
+                sstableDir, schema.keyspace, schema.name, datacenterId);
+
         String tenantId = getTenantId(datacenterId);
         String tableBucketPath = String.format("data/%s/%s/%s-%s/", tenantId, schema.keyspace, schema.name, schema.id.toHexString());
 
@@ -113,9 +131,8 @@ public class BulkImporter
         List<Path> filePaths = new ArrayList<>();
         Descriptor descriptor = null;
 
-        //        get path to Data.db file and zip all others
-        for (File sstableFile : Objects.requireNonNull(sstableDir.toFile()
-                .listFiles()))
+        // get path to Data.db file and zip all others
+        for (File sstableFile : Objects.requireNonNull(sstableDir.toFile().listFiles()))
         {
             if (!Descriptor.isValid(sstableFile.toPath())) continue;
 
@@ -141,60 +158,65 @@ public class BulkImporter
 
         if (descriptor == null)
         {
+            LOGGER.error("No non-data SSTable files found in {}", sstableDir);
             throw new FileNotFoundException("Additional SSTable files not found");
         }
         if (dataPath == null)
         {
+            LOGGER.error("No Data.db file found in {}", sstableDir);
             throw new FileNotFoundException("Data file not found");
         }
 
-        //        Create the new descriptor for remote storage
+        // Create the new descriptor for remote storage
         Descriptor withUlid = DescriptorUtils.descriptorWithUlidGeneration(dataPath);
         if (archive)
         {
             compressFiles(filePaths, archivePath, withUlid);
 
-            //        upload Archive.zip file
+            // upload Archive.zip file
             String archiveKey = tableBucketPath + withUlid.filenamePart() + "-Archive.zip";
+            LOGGER.info("uploading archive file {} to bucket {} at key {}", archivePath, datacenterId, archiveKey);
             PutObjectRequest uploadArchive = PutObjectRequest.builder()
                     .bucket(datacenterId)
                     .key(archiveKey)
                     .build();
             s3.putObject(uploadArchive, archivePath);
-            System.out.println("Successfully uploaded " + archivePath + " to " + archiveKey);
+            LOGGER.debug("upload complete");
         }
         else
         {
-            //            upload each of the files
+            //  upload each of the files
             for (Path filePath : filePaths)
             {
-                Component component = Descriptor.componentFromFilename(filePath.getFileName()
-                        .toString());
+                Component component = Descriptor.componentFromFilename(filePath.getFileName().toString());
                 String fileKey = tableBucketPath + withUlid.filenamePart() + "-" + component.toString();
+                LOGGER.info("uploading file {} to bucket {} at key {}", filePath, datacenterId, fileKey);
                 PutObjectRequest uploadFile = PutObjectRequest.builder()
                         .bucket(datacenterId)
                         .key(fileKey)
                         .build();
                 s3.putObject(uploadFile, filePath);
-                System.out.println("Successfully uploaded " + filePath + " to " + fileKey);
+                LOGGER.debug("upload complete");
             }
         }
 
-        //        upload Data.db file
-        String dataKey = tableBucketPath + withUlid.pathFor(Component.DATA)
-                .getFileName();
+        //  upload Data.db file
+        String dataKey = tableBucketPath + withUlid.pathFor(Component.DATA).getFileName();
         PutObjectRequest putObject = PutObjectRequest.builder()
                 .bucket(datacenterId)
                 .key(dataKey)
                 .build();
+        LOGGER.info("uploading data file {} to bucket {} at key {}", dataPath, datacenterId, dataKey);
         s3.putObject(putObject, dataPath);
-        System.out.println("Successfully uploaded " + dataPath + " to " + dataKey);
+        LOGGER.info("upload complete");
 
         return dataKey;
     }
 
     public static void compressFiles(List<Path> paths, Path outputPath, Descriptor descriptor) throws IOException
     {
+        LOGGER.debug("compressing {} files to {}", paths.size(), outputPath);
+
         try (OutputStream fos = Files.newOutputStream(outputPath))
         {
             ZipOutputStream zipOut = new ZipOutputStream(fos);
@@ -220,5 +242,7 @@ public class BulkImporter
             }
             zipOut.close();
         }
+
+        LOGGER.debug("compression complete");
     }
 }

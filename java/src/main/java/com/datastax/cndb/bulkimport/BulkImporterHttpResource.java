@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -30,6 +31,7 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.Pair;
 import org.json.simple.JSONObject;
@@ -38,6 +40,7 @@ import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 /**
  * The HTTP service for bulk import. To be made part of CNDB.
@@ -61,6 +64,66 @@ public class BulkImporterHttpResource
             .registerModule(new Jdk8Module());
 
     /**
+     * Download a single parquet object from S3, split it into batches,.
+     */
+    public static List<BulkImportTaskResult> handleParquetObject(String bucket, S3Object object, JSONObject schemaFile, String tenantId, Path outdir, boolean archive)
+    {
+        LOGGER.info("Handling parquet object {} in bucket {} for tenant {} with schema file {} and downloading to {}", object.key(), bucket, tenantId, schemaFile, outdir);
+
+        Pair<String, String> keyspaceAndTableName = ArrowToSSTable.getKeyspaceAndTableName(Paths.get(object.key()));
+        String tableId = keyspaceAndTableName.left + "." + keyspaceAndTableName.right;
+        TableMetadata metadata = ArrowToSSTable.getSchema(schemaFile, keyspaceAndTableName.left, keyspaceAndTableName.right);
+        if (metadata == null)
+        {
+            LOGGER.info("Could not find schema for table {}", tableId);
+            return Collections.singletonList(BulkImportTaskResult.error(object.key(), "Error getting Cassandra schema for table " + tableId));
+        }
+
+        // each Parquet file may result in multiple SSTables
+        try
+        {
+            Path parquetPath = ArrowToSSTable.downloadFile(s3, bucket, object, outdir);
+            List<BulkImportTaskResult> results = new ArrayList<>();
+            ParquetReaderUtils.read("file:" + parquetPath, root -> {
+                try
+                {
+                    results.addAll(processVectorSchemaRoot(root, metadata, tenantId, archive).stream()
+                            .map(datum -> BulkImportTaskResult.success(parquetPath.toString(), datum))
+                            .collect(Collectors.toList()));
+                }
+                catch (Exception e)
+                {
+                    results.add(BulkImportTaskResult.error(object.key(), "Error processing vector schema root: " + e.getMessage()));
+                }
+            });
+            LOGGER.debug("Processed results: {}", OBJECT_MAPPER.writeValueAsString(results));
+            return results;
+        }
+        catch (Exception e)
+        {
+            return Collections.singletonList(BulkImportTaskResult.error(object.key(), "Error reading Parquet file: " + e.getMessage()));
+        }
+    }
+
+    public static List<SSTableData> processVectorSchemaRoot(VectorSchemaRoot root, TableMetadata cassandraSchema, String tenantId, boolean archive) throws IOException, ExecutionException, InterruptedException
+    {
+        LOGGER.debug("Processing vector schema root with {} rows for table {}.{} and tenant {}", root.getRowCount(), cassandraSchema.keyspace, cassandraSchema.name, tenantId);
+
+        Map<ColumnIdentifier, FieldVector> vectorMap = ArrowToSSTable.alignSchemas(root, cassandraSchema);
+        Path sstableDir = Files.createTempDirectory("sstables-");
+        Descriptor writtenSSTableDescriptor = SSTableWriterUtils.writeCqlSSTable(cassandraSchema, vectorMap, sstableDir, true);
+        List<SSTableData> ssTableData = SSTableWriterUtils.getSSTableData(writtenSSTableDescriptor.getDirectory());
+
+        String dataComponentPath = BulkImporter.uploadSSTables(s3Admin, tenantId, DescriptorUtils.addKeyspaceAndTable(sstableDir, cassandraSchema), cassandraSchema, archive);
+        for (SSTableData datum : ssTableData)
+        {
+            datum.fileName = Paths.get(dataComponentPath).getFileName().toString();
+            datum.operationId = java.util.Optional.empty();
+        }
+        return ssTableData;
+    }
+
+    /**
      * Load data from the given bucket into Astra.
      *
      * @param tenantId the tenant ID, including the suffixed ordinal.
@@ -82,10 +145,10 @@ public class BulkImporterHttpResource
             @QueryParam("pretty") boolean pretty,
             @QueryParam("skipExtras") boolean skipExtras) throws JsonProcessingException
     {
-        List<Path> paths;
+        List<S3Object> objects;
         try
         {
-            paths = ArrowToSSTable.downloadAllParquetFiles(s3, dataBucket);
+            objects = ArrowToSSTable.listParquetFiles(s3, dataBucket);
         }
         catch (S3Exception e)
         {
@@ -94,12 +157,26 @@ public class BulkImporterHttpResource
                             .errorMessage())
                     .build();
         }
+
+        Path outdir;
+        try
+        {
+            if (System.getProperty("cndb.bulkimport.outdir") != null)
+            {
+                outdir = Paths.get(System.getProperty("cndb.bulkimport.outdir"));
+            }
+            else
+            {
+                outdir = Files.createTempDirectory("bulkimport-");
+            }
+        }
         catch (IOException e)
         {
             return Response.serverError()
-                    .entity("Error fetching parquet files: " + e.getMessage())
+                    .entity("Error creating temp directory: " + e.getMessage())
                     .build();
         }
+
         JSONObject schemaFile;
         try
         {
@@ -118,58 +195,12 @@ public class BulkImporterHttpResource
                     .build();
         }
 
-        List<BulkImportTaskResult> taskResults = new ArrayList<>();
-
-        for (Path path : paths)
-        {
-            Pair<String, String> keyspaceAndTableName = ArrowToSSTable.getKeyspaceAndTableName(path);
-            String tableId = keyspaceAndTableName.left + "." + keyspaceAndTableName.right;
-            TableMetadata metadata = ArrowToSSTable.getSchema(schemaFile, keyspaceAndTableName.left, keyspaceAndTableName.right);
-            if (metadata == null)
-            {
-                taskResults.add(BulkImportTaskResult.error(path.toString(), "Error getting Cassandra schema for table " + tableId));
-                continue;
-            }
-
-            // each Parquet file may result in multiple SSTables
-            try
-            {
-                ParquetReaderUtils.read("file:" + path, root -> {
-                    try
-                    {
-                        List<BulkImportTaskResult> results = processVectorSchemaRoot(root, metadata, tenantId, !noArchive).stream()
-                                .map(datum -> BulkImportTaskResult.success(path.toString(), datum))
-                                .collect(Collectors.toList());
-                        taskResults.addAll(results);
-                    }
-                    catch (Exception e)
-                    {
-                        taskResults.add(BulkImportTaskResult.error(path.toString(), "Error processing vector schema root: " + e.getMessage()));
-                    }
-                });
-            }
-            catch (Exception e)
-            {
-                taskResults.add(BulkImportTaskResult.error(path.toString(), "Error reading Parquet file: " + e.getMessage()));
-            }
-        }
+        List<BulkImportTaskResult> taskResults = objects.stream()
+                .flatMap(object -> handleParquetObject(dataBucket, object, schemaFile, tenantId, outdir, !noArchive).stream())
+                .collect(Collectors.toList());
 
         if (pretty)
             return Response.ok(OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(taskResults)).build();
         return Response.ok(OBJECT_MAPPER.writeValueAsString(taskResults)).build();
-    }
-
-    public List<SSTableData> processVectorSchemaRoot(VectorSchemaRoot root, TableMetadata cassandraSchema, String tenantId, boolean archive) throws IOException, ExecutionException, InterruptedException
-    {
-        Map<ColumnIdentifier, FieldVector> vectorMap = ArrowToSSTable.alignSchemas(root, cassandraSchema);
-        Path sstableDir = Files.createTempDirectory("sstables-");
-        List<SSTableData> ssTableData = SSTableWriterUtils.writeCqlSSTable(cassandraSchema, vectorMap, sstableDir, true);
-        String dataComponentPath = BulkImporter.uploadSSTables(s3Admin, tenantId, DescriptorUtils.addKeyspaceAndTable(sstableDir, cassandraSchema), cassandraSchema, archive);
-        for (SSTableData datum : ssTableData)
-        {
-            datum.fileName = Paths.get(dataComponentPath).getFileName().toString();
-            datum.operationId = java.util.Optional.empty();
-        }
-        return ssTableData;
     }
 }

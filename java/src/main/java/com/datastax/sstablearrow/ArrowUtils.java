@@ -63,9 +63,9 @@ public class ArrowUtils
     public static Map<String, Types.MinorType> typeMapping = new HashMap();
     //    A mapping from Cassandra column names to Arrow FieldVectors.
     private final Map<String, FieldVector> vectors = new HashMap();
+    private final List<FilteredPartition> partitions;
     //    keeps track of the index to insert into each vector
     private int rowIndex = 0;
-    private List<FilteredPartition> partitions;
 
     public ArrowUtils(List<FilteredPartition> partitions)
     {

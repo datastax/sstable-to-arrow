@@ -1,11 +1,9 @@
-import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -74,6 +72,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -288,13 +287,18 @@ public class ArrowToSSTableTest
         List<Path> paths = null;
         try
         {
-            paths = ArrowToSSTable.downloadAllParquetFiles(s3, BUCKET_NAME);
+            List<S3Object> parquetObjects = ArrowToSSTable.listParquetFiles(s3, BUCKET_NAME);
+            Path tempDir = Files.createTempDirectory("parquet-output-");
+            paths = parquetObjects.stream()
+                    .map(o -> ArrowToSSTable.downloadFile(s3, BUCKET_NAME, o, tempDir))
+                    .collect(Collectors.toList());
         }
         catch (IOException e)
         {
             Assertions.fail("Error downloading parquet files: " + e.getMessage());
         }
-        Path dataDir = Paths.get(System.getProperty("user.dir") + File.separator + "data" + File.separator + TEST_KEYSPACE + File.separator + TEST_TABLE);
+
+        // Path dataDir = Paths.get(System.getProperty("user.dir") + File.separator + "data" + File.separator + TEST_KEYSPACE + File.separator + TEST_TABLE);
 
         paths.forEach(path -> {
             try

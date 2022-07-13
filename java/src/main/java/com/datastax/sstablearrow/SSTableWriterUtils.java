@@ -1,6 +1,5 @@
 package com.datastax.sstablearrow;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,9 +10,11 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.datastax.cndb.metadata.storage.SSTableCreation;
 import com.datastax.cndb.metadata.storage.SSTableData;
-import com.datastax.cndb.sstable.ULIDBasedSSTableUniqueIdentifierFactory;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.compaction.OperationType;
@@ -27,6 +28,8 @@ import org.apache.cassandra.utils.OutputHandler;
 
 public class SSTableWriterUtils
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SSTableWriterUtils.class);
+
     /**
      * Get a CQL INSERT statement for all of the columns in a table.
      *
@@ -61,29 +64,25 @@ public class SSTableWriterUtils
      * Writes the given data (see params) to an SSTable on disk. Note that the resulting SSTable's generation will be
      * whatever CQLSSTableWriter generates (1, 2, etc) instead of the ULID expected by CNDB.
      *
-     * @param metadata the schema of the Cassandra table
-     * @param data a mapping from Cassandra column identifiers to Arrow field vectors
-     * @param dataDir the directory for the SSTable files to be written to
+     * @param metadata The schema of the Cassandra table.
+     * @param data A mapping from Cassandra column identifiers to Arrow field vectors.
+     * @param baseDir The base directory for the SSTable files.
+     * The SSTable files will be written under nested directories of the keyspace and table name.
      *
-     * @return a list of SSTableData objects for passing to etcd
+     * @return a descriptor identifying the written SSTable
      */
-    public static List<SSTableData> writeCqlSSTable(TableMetadata metadata, Map<ColumnIdentifier, FieldVector> data, Path dataDir, boolean useUlid) throws IOException, ExecutionException, InterruptedException
+    public static Descriptor writeCqlSSTable(TableMetadata metadata, Map<ColumnIdentifier, FieldVector> data, Path baseDir, boolean useUlid) throws IOException, ExecutionException, InterruptedException
     {
-        dataDir = dataDir.resolve(metadata.keyspace + File.separator + metadata.name);
+        Path dataDir = baseDir.resolve(metadata.keyspace).resolve(metadata.name);
         Files.createDirectories(dataDir);
-        assert dataDir.toFile()
-                .exists();
-        System.out.println("writing SSTables to " + dataDir.toAbsolutePath());
+        assert dataDir.toFile().exists();
 
         Descriptor desc = new Descriptor(dataDir.toFile(), metadata.keyspace, metadata.name, DescriptorUtils.fromNextValue());
-
-        //        BigTableWriter.create(desc, )
-
+        String insertStatement = getInsertStatement(metadata);
         CQLSSTableWriter writer = CQLSSTableWriter.builder()
-                .inDirectory(desc.getDirectory()
-                        .toFile())
+                .inDirectory(desc.getDirectory().toFile())
                 .forTable(metadata.toCQLCreateStatement())
-                .using(getInsertStatement(metadata))
+                .using(insertStatement)
                 .build();
 
         int size = data.values()
@@ -91,6 +90,8 @@ public class SSTableWriterUtils
                 .findFirst()
                 .get()
                 .getValueCount();
+
+        LOGGER.info("Writing SSTable {} with {} rows and with schema {}", desc, size, insertStatement);
 
         Map<String, Object> row = new HashMap<>();
         for (int i = 0; i < size; i++)
@@ -114,17 +115,27 @@ public class SSTableWriterUtils
 
         writer.close();
 
-        //        if (useUlid) {
-        //            for (File file : dataDir.toFile()
-        //                    .listFiles()) {
-        //                Files.move(file.toPath(), desc.pathFor(Descriptor.componentFromFilename(file)));
-        //            }
-        //        }
+        LOGGER.info("Wrote SSTable {}", desc);
+        return desc;
+    }
 
+    /**
+     * Loads an SSTable at the given path and returns a list of SSTableData objects for that table.
+     *
+     * @param dataDir The directory containing the SSTable files.
+     *
+     * @return A list of SSTableData objects for the SSTable files in the given directory.
+     * @throws ExecutionException if the SSTable files could not be loaded.
+     * @throws InterruptedException if the SSTable files could not be loaded.
+     */
+    public static List<SSTableData> getSSTableData(Path dataDir) throws ExecutionException, InterruptedException
+    {
+        LOGGER.info("Loading SSTable at directory {}", dataDir);
         SSTableLoader loader = new SSTableLoader(dataDir.toFile(), new SSTableToArrow.TestClient(), new OutputHandler.SystemOutput(true, true));
-        loader.stream()
-                .get();
+        loader.stream().get();
         List<SSTableReader> readers = loader.streamedSSTables();
+
+        LOGGER.info("Loaded {} SSTables", readers.size());
 
         return readers.stream()
                 .map(ssTableReader -> SSTableData.create(ssTableReader, SSTableCreation.withoutId(OperationType.UNKNOWN)))

@@ -1,19 +1,19 @@
 package com.datastax.sstablearrow;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.NotImplementedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.Types;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -52,6 +52,7 @@ public class ArrowToSSTable
 {
 
     public static final String DATA_PREFIX = "__astra_data__";
+    private static final Logger LOGGER = LoggerFactory.getLogger(ArrowToSSTable.class);
 
     /**
      * Get a keyspace and table name from the path to the SSTable files within the bucket.
@@ -101,47 +102,70 @@ public class ArrowToSSTable
      *
      * @return a list of Paths to the Parquet files on the local filesystem
      */
-    public static List<Path> downloadAllParquetFiles(S3Client s3, String bucketName) throws S3Exception, IOException
+    public static List<S3Object> listParquetFiles(S3Client s3, String bucketName, String prefix) throws S3Exception
     {
-        List<Path> outputs = new ArrayList<>();
-
+        LOGGER.debug("Listing Parquet files in bucket {} under {}", bucketName, prefix);
         ListObjectsRequest listObjects = ListObjectsRequest.builder()
                 .bucket(bucketName)
-                .prefix(DATA_PREFIX)
+                .prefix(prefix)
                 .build();
 
         ListObjectsResponse res = s3.listObjects(listObjects);
-        List<S3Object> objects = res.contents();
 
-        Path dir = Files.createTempDirectory("download-s3-");
+        LOGGER.debug("Found {} files in bucket {} under {}", res.contents().size(), bucketName, prefix);
 
-        for (S3Object object : objects)
-        {
-            String[] parts = object.key()
-                    .split("/");
-            if (parts.length != 4 || !object.key()
-                    .endsWith("parquet")) continue;
-            File file = new File(dir + File.separator + object.key());
-            file.getParentFile()
-                    .mkdirs();
-            assert file.getParentFile()
-                    .exists();
+        List<S3Object> parquetObjects = res.contents().stream().filter(object -> {
+            String[] parts = object.key().split("/");
+            return parts.length >= 4 && object.key().endsWith("parquet");
+        }).collect(Collectors.toList());
 
-            GetObjectRequest getObject = GetObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(object.key())
-                    .build();
+        LOGGER.debug("Found {} Parquet files in bucket {} under {}: {}",
+                parquetObjects.size(), bucketName, prefix,
+                parquetObjects.stream().map(S3Object::key).collect(Collectors.toList()));
 
-            s3.getObject(getObject, file.toPath());
+        return parquetObjects;
+    }
 
-            outputs.add(file.toPath());
-        }
+    public static List<S3Object> listParquetFiles(S3Client s3, String bucketName) throws S3Exception
+    {
+        return listParquetFiles(s3, bucketName, DATA_PREFIX);
+    }
 
-        return outputs;
+    /**
+     * Downloads the given object from S3 into the given directory, preserving the relative path.
+     *
+     * @param s3 the S3 client to query with
+     * @param bucket the name of the bucket that the object resides in
+     * @param object the name of the object to download
+     * @param outdir the directory to download the object to
+     *
+     * @return the path to the downloaded object
+     */
+    public static Path downloadFile(S3Client s3, String bucket, S3Object object, Path outdir)
+    {
+        Path output = outdir.resolve(object.key());
+
+        LOGGER.debug("Downloading {} from bucket {} to {}", object.key(), bucket, output);
+
+        GetObjectRequest getObject = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(object.key())
+                .build();
+
+        s3.getObject(getObject, output);
+
+        LOGGER.debug("Downloaded {} from bucket {} to {}", object.key(), bucket, output);
+
+        return output;
     }
 
     public static Map<ColumnIdentifier, FieldVector> alignSchemas(VectorSchemaRoot root, TableMetadata cassandraMetadata) throws RuntimeException
     {
+        LOGGER.debug("Aligning root with columns {} to Cassandra table {}.{} with columns {}",
+                root.getFieldVectors().stream().map(ValueVector::getName).collect(Collectors.toList()),
+                cassandraMetadata.keyspace, cassandraMetadata.name,
+                cassandraMetadata.columns().stream().map(column -> column.name).collect(Collectors.toList()));
+
         Map<ColumnIdentifier, FieldVector> positionMapping = new HashMap<>();
         List<FieldVector> vectors = root.getFieldVectors();
         Map<ColumnIdentifier, String> errors = new HashMap<>();
@@ -154,7 +178,7 @@ public class ArrowToSSTable
                     .getBytes()));
             if (col == null)
             {
-                System.err.println("column " + vector.getName() + " not found in Cassandra table, skipping");
+                LOGGER.error("column " + vector.getName() + " not found in Cassandra table, skipping");
             }
             else if (!col.type.isValueCompatibleWith(getMatchingCassandraType(vector.getMinorType())))
             {
@@ -172,6 +196,8 @@ public class ArrowToSSTable
             }
         }
 
+        LOGGER.debug("Done mapping columns for Cassandra table {}.{}", cassandraMetadata.keyspace, cassandraMetadata.name);
+
         //        check that data is provided for all of the cassandra columns
         List<String> mismatch = cassandraMetadata.columns()
                 .stream()
@@ -182,10 +208,12 @@ public class ArrowToSSTable
                     }
                     return null;
                 })
-                .filter(col -> col != null)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         mismatch.addAll(errors.values());
+
+        LOGGER.debug("Errors aligning schemas: {}", mismatch);
 
         if (mismatch.size() > 0)
         {
