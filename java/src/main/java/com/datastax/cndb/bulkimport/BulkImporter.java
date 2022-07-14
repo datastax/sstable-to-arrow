@@ -156,6 +156,7 @@ public class BulkImporter
                 }
                 catch (Exception e)
                 {
+                    LOGGER.error("Error processing vector schema root", e);
                     results.add(BulkImportTaskResult.error(taskSpec.getObjectKey(), "Error processing vector schema root: " + e.getMessage()));
                 }
             });
@@ -164,6 +165,7 @@ public class BulkImporter
         }
         catch (Exception e)
         {
+            LOGGER.error("Error processing parquet file {}: {}", taskSpec.getFullURI(), e.getMessage());
             return Collections.singletonList(BulkImportTaskResult.error(taskSpec.getObjectKey(), "Error reading Parquet file: " + e.getMessage()));
         }
     }

@@ -15,6 +15,7 @@ import java.util.zip.ZipOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.arrow.util.AutoCloseables;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
@@ -33,6 +34,18 @@ public class BulkImportFileUtils
     private final Path baseDir;
     private final String s3ProfileName;
     private Map<Region, S3Client> regionalClients = new HashMap<>();
+
+    static
+    {
+        try
+        {
+            instance = new BulkImportFileUtils();
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException("Error creating directory: " + e);
+        }
+    }
 
     public BulkImportFileUtils() throws IOException
     {
@@ -134,15 +147,15 @@ public class BulkImportFileUtils
         return baseDir.resolve("sstables");
     }
 
-    static
-    {
+    @Override
+    protected void finalize() {
         try
         {
-            instance = new BulkImportFileUtils();
+            AutoCloseables.close(regionalClients.values());
         }
-        catch (IOException e)
+        catch (Exception e)
         {
-            throw new RuntimeException("Error creating directory: " + e);
+            LOGGER.error("Error closing S3 clients", e);
         }
     }
 }

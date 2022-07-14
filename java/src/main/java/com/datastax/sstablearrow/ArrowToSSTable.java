@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileAttribute;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -156,7 +155,8 @@ public class ArrowToSSTable
                 .key(taskSpec.getObjectKey())
                 .build();
 
-        BulkImportFileUtils.instance.s3Client(taskSpec.getRegion()).getObject(getObject, output);
+        BulkImportFileUtils.instance.s3Client(taskSpec.getRegion())
+                .getObject(getObject, output);
 
         LOGGER.debug("Successfully downloaded {} to {}", taskSpec.getFullURI(), output);
 
