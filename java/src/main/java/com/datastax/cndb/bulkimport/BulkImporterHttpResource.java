@@ -28,7 +28,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 /**
- * The HTTP service for bulk import. To be made part of CNDB.
+ * The HTTP service for bulk import. Listens for bulk import requests.
  */
 @javax.ws.rs.Path("/api/v0/bulkimport")
 public class BulkImporterHttpResource
@@ -105,12 +105,12 @@ public class BulkImporterHttpResource
         }
 
         List<BulkImportTaskResult> taskResults = objects.stream()
-                .flatMap(object -> {
+                .map(object -> {
 
                     BulkImportTaskSpec taskSpec = new BulkImportTaskSpec(
                             Collections.singleton(tenantId), URI.create("s3://" + dataBucket + "/" + object.key()), region, !noArchive);
 
-                    return BulkImporter.handleParquetObject(taskSpec, schemaFile).stream();
+                    return BulkImporter.doRunTask(taskSpec, schemaFile);
                 })
                 .collect(Collectors.toList());
 

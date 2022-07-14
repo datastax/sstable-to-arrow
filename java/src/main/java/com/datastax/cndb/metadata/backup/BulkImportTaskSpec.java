@@ -3,11 +3,9 @@ package com.datastax.cndb.metadata.backup;
 import java.net.URI;
 import java.util.Set;
 
-import com.datastax.cndb.bulkimport.BulkImportFileUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
 
 import static java.util.Objects.requireNonNull;
 
@@ -29,16 +27,12 @@ public class BulkImportTaskSpec
     @JsonProperty("archive")
     private final boolean archive;
 
-    public BulkImportTaskSpec(
-            @JsonProperty("tenants") Set<String> tenants,
-            @JsonProperty("parquet_path") URI parquetPath,
-            @JsonProperty("region") Region region,
-            @JsonProperty("archive") boolean archive)
+    public BulkImportTaskSpec(@JsonProperty("tenants") Set<String> tenants, @JsonProperty("parquet_path") URI parquetPath, @JsonProperty("region") Region region, @JsonProperty("archive") boolean archive)
     {
         this.tenants = requireNonNull(tenants);
         this.parquetPath = requireNonNull(parquetPath);
         this.region = requireNonNull(region);
-        this.archive = requireNonNull(archive);
+        this.archive = archive;
     }
 
     public String getSingleTenant()
@@ -66,11 +60,13 @@ public class BulkImportTaskSpec
     }
 
     @JsonIgnore
-    public Region getRegion() {return region;}
+    public Region getRegion()
+    {
+        return region;
+    }
 
     public boolean isArchive()
     {
         return archive;
     }
-
 }

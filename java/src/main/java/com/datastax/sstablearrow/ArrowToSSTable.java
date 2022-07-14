@@ -90,8 +90,7 @@ public class ArrowToSSTable
                 JSONObject table = (JSONObject) tableObj;
                 if (((String) table.get("name")).endsWith(tableName))
                 {
-                    return CreateTableStatement.parse((String) table.get("create_statement"), prefixedKeyspace)
-                            .build();
+                    return CreateTableStatement.parse((String) table.get("create_statement"), prefixedKeyspace).build();
                 }
             }
         }

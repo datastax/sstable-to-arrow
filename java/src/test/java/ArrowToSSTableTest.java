@@ -23,7 +23,6 @@ import com.datastax.cndb.bulkimport.BulkImporterApplication;
 import com.datastax.cndb.metadata.backup.BulkImportTaskSpec;
 import com.datastax.sstablearrow.ArrowToSSTable;
 import com.datastax.sstablearrow.ArrowUtils;
-import com.datastax.sstablearrow.ParquetReaderUtils;
 import com.datastax.sstablearrow.SSTableWriterUtils;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
@@ -271,7 +270,7 @@ public class ArrowToSSTableTest
 
         Path sstablePath = Files.createTempDirectory("sstable-output-");
         System.out.println("writing SSTable to " + sstablePath);
-        SSTableWriterUtils.writeCqlSSTable(cassandraTable, mapping, sstablePath, true);
+//        sstableWriter.writeRows(mapping);
     }
 
     @Test
@@ -314,21 +313,21 @@ public class ArrowToSSTableTest
 
         // Path dataDir = Paths.get(System.getProperty("user.dir") + File.separator + "data" + File.separator + TEST_KEYSPACE + File.separator + TEST_TABLE);
 
-        paths.forEach(path -> {
-            try
-            {
-                String uri = path.toUri()
-                        .toString();
-                System.out.println("reading from " + uri);
-                ParquetReaderUtils.read(uri, root -> System.out.println(root.contentToTSVString()));
-                //                Map<ColumnIdentifier, FieldVector> aligned = ArrowToSSTable.alignSchemas(root, allNativeTypesTable);
-                System.out.println("writing to SSTable");
-                //                ArrowToSSTable.writeCqlSSTable(allNativeTypesTable, aligned, dataDir);
-            }
-            catch (Exception e)
-            {
-                throw new RuntimeException(e);
-            }
-        });
+        //        paths.forEach(path -> {
+        //            try
+        //            {
+        //                String uri = path.toUri()
+        //                        .toString();
+        //                System.out.println("reading from " + uri);
+        //                ParquetReaderUtils.read(uri, root -> System.out.println(root.contentToTSVString()));
+        //                Map<ColumnIdentifier, FieldVector> aligned = ArrowToSSTable.alignSchemas(root, allNativeTypesTable);
+        //                System.out.println("writing to SSTable");
+        //                ArrowToSSTable.writeCqlSSTable(allNativeTypesTable, aligned, dataDir);
+        //            }
+        //            catch (Exception e)
+        //            {
+        //                throw new RuntimeException(e);
+        //            }
+        //        });
     }
 }

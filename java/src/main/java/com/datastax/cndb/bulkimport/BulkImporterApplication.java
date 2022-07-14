@@ -17,7 +17,7 @@ import org.apache.cassandra.service.StorageService;
 public class BulkImporterApplication extends Application
 {
 
-    private Set<Object> singletons = new HashSet<>();
+    private final Set<Object> singletons = new HashSet<>();
 
     public BulkImporterApplication() {
         super();

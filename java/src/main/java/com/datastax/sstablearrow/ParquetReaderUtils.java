@@ -1,6 +1,6 @@
 package com.datastax.sstablearrow;
 
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +22,14 @@ public class ParquetReaderUtils
 
     /**
      * Read a Parquet file and call a callback on each batch of 100 rows. Closes each batch after use.
+     *
      * @param path the path to the Parquet file, prefixed with "file:"
      * @param callback the callback to call on each batch of 100 rows
+     *
+     * @return whether or not the operation terminated successfully
      * @throws Exception if an error occurs in try-with-resources
      */
-    public static void read(String path, Consumer<VectorSchemaRoot> callback, ScanOptions scanOptions) throws Exception
+    public static <T> T read(String path, Function<VectorSchemaRoot, T> callback, ScanOptions scanOptions) throws Exception
     {
         LOGGER.debug("reading parquet file at {} with batch size {}", path, scanOptions.getBatchSize());
         try (DatasetFactory factory = new FileSystemDatasetFactory(ArrowUtils.ALLOCATOR, NativeMemoryPool.getDefault(), FileFormat.PARQUET, path);
@@ -41,16 +44,18 @@ public class ParquetReaderUtils
                     {
                         try (VectorSchemaRoot root = reader.getVectorSchemaRoot())
                         {
-                            callback.accept(root);
+                            T error = callback.apply(root);
+                            if (error != null) return error;
                         }
                     }
                 }
             }
         }
+        return null;
     }
 
-    public static void read(String path, Consumer<VectorSchemaRoot> callback) throws Exception
+    public static <T> T read(String path, Function<VectorSchemaRoot, T> callback) throws Exception
     {
-        read(path, callback, new ScanOptions(100));
+        return read(path, callback, new ScanOptions(100));
     }
 }

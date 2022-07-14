@@ -23,7 +23,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
 /**
- * Utilities for storing where downloaded files are written to on disk.
+ * Singleton class for storing where downloaded files are written to on disk.
  */
 public class BulkImportFileUtils
 {
@@ -33,19 +33,7 @@ public class BulkImportFileUtils
     private static final Region CNDB_REGION = Region.US_EAST_1;
     private final Path baseDir;
     private final String s3ProfileName;
-    private Map<Region, S3Client> regionalClients = new HashMap<>();
-
-    static
-    {
-        try
-        {
-            instance = new BulkImportFileUtils();
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException("Error creating directory: " + e);
-        }
-    }
+    private final Map<Region, S3Client> regionalClients = new HashMap<>();
 
     public BulkImportFileUtils() throws IOException
     {
@@ -77,6 +65,7 @@ public class BulkImportFileUtils
         {
             s3ProfileName = "default";
         }
+
         LOGGER.info("Using credentials profile {}", s3ProfileName);
     }
 
@@ -100,7 +89,7 @@ public class BulkImportFileUtils
 
                     // write all other files to an archive
                     int nread;
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[2048];
                     while ((nread = input.read(buffer)) != -1)
                     {
                         zipOut.write(buffer, 0, nread);
@@ -113,11 +102,16 @@ public class BulkImportFileUtils
         LOGGER.debug("compression complete");
     }
 
+    /**
+     * Gets a cached S3 client for the given region.
+     */
     public S3Client s3Client(Region region)
     {
         if (!regionalClients.containsKey(region))
         {
-            ProfileCredentialsProvider provider = ProfileCredentialsProvider.builder().profileName(s3ProfileName).build();
+            ProfileCredentialsProvider provider = ProfileCredentialsProvider.builder()
+                    .profileName(s3ProfileName)
+                    .build();
             S3Client client = S3Client.builder()
                     .region(region)
                     .credentialsProvider(provider)
@@ -148,7 +142,8 @@ public class BulkImportFileUtils
     }
 
     @Override
-    protected void finalize() {
+    protected void finalize()
+    {
         try
         {
             AutoCloseables.close(regionalClients.values());
@@ -156,6 +151,18 @@ public class BulkImportFileUtils
         catch (Exception e)
         {
             LOGGER.error("Error closing S3 clients", e);
+        }
+    }
+
+    static
+    {
+        try
+        {
+            instance = new BulkImportFileUtils();
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException("Error creating directory: " + e);
         }
     }
 }
