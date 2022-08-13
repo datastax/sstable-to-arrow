@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:20.04 as builder
 
 # set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -35,7 +35,7 @@ RUN curl -LO https://github.com/kaitai-io/kaitai_struct_compiler/releases/downlo
 WORKDIR /tmp/boost_1_76_0
 RUN ./bootstrap.sh \
         --with-python="$(which python3)" \
-        --with-libraries=filesystem,log,python,iostreams,program_options && \
+        --with-libraries=filesystem,log,python,iostreams,program_options,system && \
     ./b2 install
 
 # install kaitai-struct-compiler and the kaitai struct C++ stl runtime
@@ -77,6 +77,12 @@ WORKDIR /home/build
 RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release .. && \
     cmake --build . && \
     cmake --install .
+
+
+
+FROM builder
+
+COPY --from=builder /usr/local /usr/local
 
 EXPOSE 9143
 
