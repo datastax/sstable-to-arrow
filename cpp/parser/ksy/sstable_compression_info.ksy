@@ -1,7 +1,6 @@
 meta:
   id: sstable_compression_info
   endian: be
-
 seq:
   - id: algorithm
     type: string
@@ -21,6 +20,8 @@ seq:
     doc: |
       The size of each chunk that the uncompressed data is split into. Defaults
       to 65536 (1 << 16) but can be any power of 2
+  - id: noidea
+    type: u4
   - id: data_length
     type: u8
     doc: The total length of the uncompressed data

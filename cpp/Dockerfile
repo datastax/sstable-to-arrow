@@ -27,7 +27,7 @@ WORKDIR /tmp
 RUN curl -LO https://github.com/kaitai-io/kaitai_struct_compiler/releases/download/0.9/kaitai-struct-compiler_0.9_all.deb && \
     curl -LO https://boostorg.jfrog.io/artifactory/main/release/1.76.0/source/boost_1_76_0.tar.bz2 && \
     git clone https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime.git && \
-    git clone https://github.com/apache/arrow.git && \
+    git clone -b apache-arrow-8.0.1 https://github.com/apache/arrow.git && \
     git clone https://github.com/lz4/lz4 && \
     tar --bzip2 -xf ./boost_1_76_0.tar.bz2
 

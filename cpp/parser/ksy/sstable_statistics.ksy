@@ -14,6 +14,8 @@ types:
     seq:
       - id: length
         type: s4
+      - id: idk
+        type: s4
       - id: array
         type: toc_entry
         repeat: expr
@@ -46,22 +48,11 @@ types:
     seq: # modified UTF-8 format, might need external opaque type
       - id: partitioner_name
         type: modified_utf8
+#        type: str
+#        size: 45
+#        encoding: utf8
       - id: bloom_filter_fp_chance
         type: f8
-
-  compaction_metadata:
-    seq:
-      - id: length
-        type: s4
-      - id: array
-        size: 1
-        repeat: expr
-        repeat-expr: length
-    doc: |
-      Serialized HyperLogLogPlus which can be used to estimate the number of partition keys in the SSTable.
-      If this is not present then the same estimation can be computed using Summary file.
-      Encoding is described in:
-      https://github.com/addthis/stream-lib/blob/master/src/main/java/com/clearspring/analytics/stream/cardinality/HyperLogLogPlus.java
 
   statistics:
     seq:
@@ -91,16 +82,50 @@ types:
         type: s4
       - id: repaired_at
         type: s8
-      - id: min_clustering_key
-        type: clustering_bound
-      - id: max_clustering_key
-        type: clustering_bound
-      - id: has_legacy_counters
-        type: s1 # bool
+      - id: clustering_types
+        type: clustering_type_list
+      - id: covered_clustering_start_kind
+        type: s1
+      - id: covered_clustering_start_length
+        type: s2
+      - id: covered_clustering_start
+        type:
+          switch-on: covered_clustering_start_kind
+          cases:
+          # TODO support other cases
+            1: incl_start_bound
+            6: incl_end_bound
+      # TODO: support the case where the lengths are different for start and end bounds
+      # currently this end length gets ignored
+      - id: covered_clustering_end_kind
+        type: s1
+      - id: covered_clustering_end_length
+        type: s2
+      - id: covered_clustering_end
+        type:
+          switch-on: covered_clustering_end_kind
+          cases:
+          # TODO support other cases
+            1: incl_start_bound
+            6: incl_end_bound
+      - id: has_legacy_counter_shards
+        type: b1
+        # TODO: actually pull data in this scenario
+#      - id: legacy_counter_shards
+#        type: u1
+#        if: has_legacy_counter_shards
       - id: number_of_columns
         type: s8
       - id: number_of_rows
         type: s8
+
+#      - id: min_clustering_key
+#        type: clustering_bound
+#      - id: max_clustering_key
+#        type: clustering_bound
+#      - id: has_legacy_counters
+#        type: s1 # bool
+
 
       # version MA of SSTable 3.x ends here
 
@@ -111,6 +136,95 @@ types:
 
       - id: commit_log_intervals
         type: commit_log_intervals
+        
+        # TODO: some new MISSING STUFF
+        # pending repair
+        # zero copy metadata
+        # incremental node sync info
+        # [max] column value lengths
+        # partition level deletes
+        # originating host id
+
+  incl_start_bound:
+    seq:
+      - id: header # used for a null check? don't think it ever happens from valid sstables
+        #type: u1 # vint
+        type: vint
+# This logic is based on the data type which is pretty hairy
+# https://github.com/riptano/bdp/blob/6.8-dev/dse-db/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L480
+      - id: value
+        repeat: expr
+        repeat-expr: _parent.covered_clustering_start_length
+        if:  ( _parent.clustering_types.entry[4].type == _parent.clustering_types.entry[0].type )
+#        if: _parent.clustering_types.entry[_index] = 'apache.cassandra.db.marshal.UTF8Type'
+#        if: false
+        type:
+          switch-on: _parent.clustering_types.entry[_index].type
+          cases:
+# TODO:  add other types
+            '"org.apache.cassandra.db.marshal.Int32Type"': int32type
+            '"org.apache.cassandra.db.marshal.LongType"': longtype
+            '"org.apache.cassandra.db.marshal.UTF8Type"': utf8type
+            '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)"': utf8type
+
+  incl_end_bound:
+    seq:
+      - id: header # used for a null check? don't think it ever happens from valid sstables
+        #type: u1 # vint
+        type: vint
+# TODO: this thing actually gets bounds per column type
+# this means the logic is based on the data type which is pretty hairy
+# https://github.com/riptano/bdp/blob/6.8-dev/dse-db/src/java/org/apache/cassandra/db/ClusteringPrefix.java#L480
+      - id: value
+        repeat: expr
+        repeat-expr: _parent.covered_clustering_end_length
+        if:  ( _parent.clustering_types.entry[4].type == _parent.clustering_types.entry[0].type )
+#        if: _parent.clustering_types.entry[_index] = 'apache.cassandra.db.marshal.UTF8Type'
+#        if: false
+        type:
+          switch-on: _parent.clustering_types.entry[_index].type
+          cases:
+# TODO:  add other types
+            '"org.apache.cassandra.db.marshal.Int32Type"': int32type
+            '"org.apache.cassandra.db.marshal.LongType"': longtype
+            '"org.apache.cassandra.db.marshal.UTF8Type"': utf8type
+            '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)"': utf8type
+
+            
+  int32type:
+    seq:
+      - id: value
+        type: s4
+            
+  longtype:
+    seq:
+      - id: value
+        type: s8
+
+  utf8type:
+    seq:
+      - id: length
+        #type: u1 # vint
+        type: vint
+      - id: value
+        type: str
+        encoding: utf-8
+        size: length.val.as<u4>
+
+  compaction_metadata:
+    seq:
+      - id: length
+        type: s4
+      - id: array
+        size: 1
+        repeat: expr
+        repeat-expr: length
+    doc: |
+      Serialized HyperLogLogPlus which can be used to estimate the number of partition keys in the SSTable.
+      If this is not present then the same estimation can be computed using Summary file.
+      Encoding is described in:
+      https://github.com/addthis/stream-lib/blob/master/src/main/java/com/clearspring/analytics/stream/cardinality/HyperLogLogPlus.java
+
 
   estimated_histogram:
     seq:
@@ -139,6 +253,25 @@ types:
         type: s8
       - id: value
         type: s8
+
+  clustering_type_list:
+    seq:
+      - id: size
+        type: u1
+      - id: entry
+        type: clustering_type_list_entry
+        repeat: expr
+        repeat-expr: size
+
+  clustering_type_list_entry:
+    seq:
+      - id: length
+        type: u1
+      - id: type
+        type: str
+        encoding: UTF-8
+        size: length
+
 
   commit_log_position:
     seq:
@@ -186,11 +319,14 @@ types:
   serialization_header:
     seq:
       - id: min_timestamp
+        #type: u8 # vint # u8
         type: vint # u8
       - id: min_local_deletion_time
+        #type: u4 # vint # u4
         type: vint # u4
       - id: min_ttl
-        type: vint # u4
+        #type:  u4 # vint # u4
+        type:  vint # u4
       - id: partition_key_type
         type: string_type
       - id: clustering_key_types
@@ -203,19 +339,23 @@ types:
   clustering_key_types:
     seq:
       - id: length
-        type: vint # u4
+        #type: u4 # u4 # vint
+        type: vint
       - id: array
         type: string_type
         repeat: expr
+        #repeat-expr: length #.val.as<u4>
         repeat-expr: length.val.as<u4>
 
   columns:
     seq:
       - id: length
+        #type: u4 # vint
         type: vint
       - id: array
         type: column
         repeat: expr
+        #repeat-expr: length #.val.as<u4>
         repeat-expr: length.val.as<u4>
 
   column:
@@ -228,8 +368,10 @@ types:
   string_type:
     seq:
       - id: length
+        #type: u4 # vint
         type: vint
       - id: body
+        #size: length #.val.as<u4>
         size: length.val.as<u4>
         type: str
         encoding: UTF-8
