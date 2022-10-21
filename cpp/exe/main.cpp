@@ -55,11 +55,13 @@ int main(int argc, char *argv[])
     if (!args.read_sstable_dir)
         return 0;
 
+    std::cout << "Starting to read SSTables: \n";
     auto result = sstable_to_arrow::read_sstables(args.sstable_dir_path);
     EXIT_NOT_OK(result.status(), "error reading sstables");
     auto sstables = result.ValueOrDie();
 
     if (args.write_parquet)
+        std::cout << "Starting to write parquet: \n";
         EXIT_NOT_OK(sstable_to_arrow::io::write_parquet(args.parquet_dst_path, sstables), "error writing parquet");
 
     if (args.listen)

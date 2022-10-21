@@ -11,6 +11,7 @@
 #include <string.h>               // for memset
 #include <sys/socket.h>           // for accept, bind, listen, setsockopt
 #include <unistd.h>               // for write, close, read
+#include <arrow/memory_pool.h>    // For MemoryPool
 
 #include <iostream> // for operator<<, basic_ostream::operator<<
 
@@ -112,15 +113,31 @@ arrow::Status send_table(std::shared_ptr<arrow::Table> table, int cli_sockfd)
  *
  * @param table the arrow table to write
  */
+
 arrow::Status write_parquet(const std::string &path, std::vector<std::shared_ptr<arrow::Table>> tables,
                             arrow::MemoryPool *pool)
 {
+    // How much memory used used at this point
+    std::cout << "Memory prior to concatenation: " << pool->bytes_allocated() << " bytes" << std::endl;
+
+    // What are the schemas?
+    for (int i = 0; i < tables.size(); ++i) {
+        std::cout << "Table " << i << " schema:\n" << tables[i]->schema()->ToString() << std::endl;
+    }
+
     arrow::ConcatenateTablesOptions options;
     options.unify_schemas = true;
     ARROW_ASSIGN_OR_RAISE(auto final_table, arrow::ConcatenateTables(tables, options));
+
+    // How much memory used used at this point?
+    std::cout << "Memory after concatenation: " << pool->bytes_allocated() << " bytes" << std::endl;
+
+    // What is the unified schema?
+    std::cout << "Combined table schema:\n" << final_table->schema()->ToString() << std::endl;
+
     std::shared_ptr<arrow::io::FileOutputStream> outfile;
     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(path));
-    return parquet::arrow::WriteTable(*final_table, pool, outfile, 3);
+    return parquet::arrow::WriteTable(*final_table, pool, outfile, 1000000);
 }
 
 } // namespace io
