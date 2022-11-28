@@ -105,11 +105,16 @@ class sstable_t
      * @brief Reads the kaitai objects from the file paths or streams stored in the member objects
      */
     arrow::Status init();
+    
+    arrow::Status init_stats();
+
+    arrow::Status fetch_data();
 
     /**
      * @brief Initializes the data object. Requires that the compression_info is already loaded
      */
     arrow::Status read_decompressed_sstable();
+    arrow::Status stream_decompressed_sstable();
 
     const std::unique_ptr<sstable_statistics_t> &statistics() const;
     const std::unique_ptr<sstable_data_t> &data() const;

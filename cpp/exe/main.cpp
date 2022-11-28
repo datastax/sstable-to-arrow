@@ -56,19 +56,25 @@ int main(int argc, char *argv[])
         return 0;
 
     std::cout << "Starting to read SSTables: \n";
-    auto result = sstable_to_arrow::read_sstables(args.sstable_dir_path);
+    //auto result = sstable_to_arrow::read_sstables(args.sstable_dir_path);
+    auto result = sstable_to_arrow::scan_sstable(args.sstable_dir_path);
+    //ARROW_ASSIGN_OR_RAISE(auto sstables, sstable_to_arrow::scan_sstable(args.sstable_dir_path));
+    auto status = result.status();
     EXIT_NOT_OK(result.status(), "error reading sstables");
     auto sstables = result.ValueOrDie();
+    //std::shared_ptr<arrow::RecordBatchReader> sstables = std::move(result).ValueOrDie();
 
-    if (args.write_parquet)
+
+    if (args.write_parquet){
         std::cout << "Starting to write parquet: \n";
         EXIT_NOT_OK(sstable_to_arrow::io::write_parquet(args.parquet_dst_path, sstables), "error writing parquet");
-
-    if (args.listen)
-        EXIT_NOT_OK(sstable_to_arrow::io::send_tables(sstables), "error sending tables");
-    else
-        for (auto &entry : sstables)
-            std::cout << entry->ToString() << '\n';
+    }
+    //TODO: support streaming mode for send
+    //if (args.listen)
+    //    EXIT_NOT_OK(sstable_to_arrow::io::send_tables(sstables), "error sending tables");
+    //else
+    //    for (auto &entry : sstables)
+    //        std::cout << entry->ToString() << '\n';
 
     return 0;
 }

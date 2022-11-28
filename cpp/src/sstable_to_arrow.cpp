@@ -22,6 +22,9 @@
 #include <string>                       // for string, char_traits, operator+
 #include <unordered_map>                // for unordered_map
 #include <vector>                       // for vector
+#include "sstable.h"
+#include "sstable_data.h"
+#include "streaming_sstable_data.h"
 class sstable_statistics_t;             // lines 31-31
 namespace arrow
 {
@@ -31,6 +34,49 @@ class Table;
 
 namespace sstable_to_arrow
 {
+
+arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
+    const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,
+    arrow::MemoryPool *pool)
+{
+    ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
+    ARROW_RETURN_NOT_OK(helper->init(pool));
+
+    auto sstablegt = sstable.get();
+    auto m__io = sstablegt->_io();
+    auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
+
+    int i = 0;
+    while (!m__io->is_eof()) {
+        //m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, this, m__root))));
+        m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, nullptr, nullptr))));
+        i++;
+    }
+
+    for (const auto &partition : *sstable->partitions())
+        ARROW_RETURN_NOT_OK(process_partition(partition, helper, pool));
+
+    // finish the arrays and store them into a vector
+    return helper->to_table();
+/*
+    ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
+    ARROW_RETURN_NOT_OK(helper->init(pool));
+
+    auto m__io = sstable.get()->_io();
+    auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
+
+    int i = 0;
+    while (!m__io->is_eof()) {
+        //m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, this, m__root))));
+        i++;
+    }
+    for (const auto &partition : *sstable->partitions())
+        ARROW_RETURN_NOT_OK(process_partition(partition, helper, pool));
+
+    // finish the arrays and store them into a vector
+    return helper->to_table();
+*/
+}
 
 arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
     const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,
@@ -44,6 +90,23 @@ arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
 
     // finish the arrays and store them into a vector
     return helper->to_table();
+}
+
+arrow::Result<std::shared_ptr<arrow::Schema>> common_arrow_schema(
+    const std::vector<std::shared_ptr<sstable_t>>& tables
+) {
+
+    std::vector<std::shared_ptr<arrow::Schema>> schemas(tables.size());
+
+    for (int i = 0; i < schemas.size(); ++i) {
+        const auto& statistics = tables[i]->statistics();
+        ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
+        // TODO: Maybe need to init too?
+        auto schema = helper->schema();
+        schemas[i] = schema;
+    }
+
+    return arrow::UnifySchemas(schemas);
 }
 
 arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_t> &partition,

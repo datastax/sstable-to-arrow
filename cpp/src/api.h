@@ -6,7 +6,10 @@
 #include <memory>         // for shared_ptr
 #include <string_view>    // for string_view
 #include <vector>         // for vector
-namespace arrow { class Table; }
+namespace arrow { 
+  class Table; 
+  class RecordBatchReader;
+}
 
 namespace sstable_to_arrow
 {
@@ -43,6 +46,8 @@ arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> convert_sstables(
  * @return std::map<int, std::shared_ptr<sstable_t>> sstable_t objects mapped by their generation number
  */
 arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> read_sstables(std::string_view path);
+
+arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> scan_sstable(std::string_view path);
 
 } // namespace sstable_to_arrow
 

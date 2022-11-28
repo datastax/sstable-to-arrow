@@ -48,6 +48,32 @@ void init_deserialization_helper(sstable_statistics_t::serialization_header_t *s
 }
 } // namespace
 
+
+arrow::Status sstable_t::init_stats()
+{
+    ARROW_RETURN_NOT_OK(m_statistics.init());
+    init_deserialization_helper(get_serialization_header(statistics()));
+    return arrow::Status::OK();
+}
+
+arrow::Status sstable_t::fetch_data(){
+    if (m_compression_info.path() != "") // if the SSTable is compressed
+    {
+        ARROW_RETURN_NOT_OK(m_compression_info.init());
+        stream_decompressed_sstable();
+    }
+    else
+        ARROW_RETURN_NOT_OK(m_data.init());
+
+    // TODO check for validity
+    // if (sstable->statistics == nullptr || sstable->data == nullptr ||
+    // sstable->index == nullptr || sstable->summary == nullptr) return
+    // arrow::Status::Invalid("Failed parsing SSTable");
+
+    return arrow::Status::OK();
+
+
+}
 arrow::Status sstable_t::init()
 {
     ARROW_RETURN_NOT_OK(m_statistics.init());
@@ -68,6 +94,79 @@ arrow::Status sstable_t::init()
 
     return arrow::Status::OK();
 }
+arrow::Status sstable_t::stream_decompressed_sstable()
+{
+    if (m_data.file().get() == nullptr){
+        ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(m_data.path()));
+
+        // get the number of compressed bytes
+        istream->seekg(0, std::ios::end);
+        int64_t src_size = istream->tellg(); // the total size of the uncompressed file
+        std::cout << "compressed size: " << src_size << "\n";
+        assert(src_size >= 0);
+
+        size_t nchunks = compression_info()->chunk_count();
+        //nchunks = 100;
+        const auto &offsets = *compression_info()->chunk_offsets();
+        size_t total_decompressed_size = 0;
+        // loop through chunks to get total decompressed size (written by Cassandra)
+        for (size_t i = 0; i < nchunks; ++i)
+        {
+            istream->seekg(offsets[i]);
+            int32_t decompressed_size = ((istream->get() & 0xff) << 0x00) | ((istream->get() & 0xff) << 0x08) |
+                                        ((istream->get() & 0xff) << 0x10) | ((istream->get() & 0xff) << 0x18);
+            total_decompressed_size += decompressed_size;
+        }
+        std::cout << "total decompressed size: " << total_decompressed_size << '\n';
+        m_decompressed_data.resize(total_decompressed_size);
+
+        size_t chunk_length = compression_info()->chunk_length();
+        for (size_t i = 0; i < nchunks; ++i) // read each chunk at a time
+        {
+            uint64_t offset = offsets[i];
+            // get size based on offset with special case for last chunk
+            uint64_t chunk_size = (i == nchunks - 1 ? src_size : offsets[i + 1]) - offset;
+            // TODO: fix for actual last chunk
+            //uint64_t chunk_size = (offsets[i + 1]) - offset;
+
+            std::vector<char> buffer(chunk_size);
+
+            // skip 4 bytes written by Cassandra at beginning of each chunk and 4
+            // bytes at end for Adler32 checksum
+            istream->seekg(offset + 4, std::ios::beg);
+            istream->read(buffer.data(), chunk_size - 8);
+
+            int ntransferred =
+                LZ4_decompress_safe(buffer.data(), &m_decompressed_data[i * chunk_length], chunk_size - 8, chunk_length);
+
+            if (ntransferred < 0)
+                return arrow::Status::SerializationError("decompression of block " + std::to_string(i) +
+                                                        " failed with error code " + std::to_string(ntransferred));
+        }
+
+        // TODO see if can do it in a different way than putting the whole thing in a
+        // string auto bs =
+        // std::make_shared<boost::iostreams::stream<boost::iostreams::array_source>>(decompressed.data(),
+        // decompressed.size()); naked new to convert from a boost stream to
+        // std::istream
+        auto *bs = new boost::interprocess::ibufferstream(m_decompressed_data.data(), m_decompressed_data.size());
+        auto is = std::unique_ptr<std::istream>(bs);
+        if (!is)
+        {
+            return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
+        }
+
+        ARROW_RETURN_NOT_OK(m_data.init(std::move(is)));
+    }
+
+    //auto step = m_data.file()->get_step();
+    //m_data.file()->set_offset(1);
+    m_data.file()->read_some();
+
+    return arrow::Status::OK();
+}
+
+
 
 arrow::Status sstable_t::read_decompressed_sstable()
 {

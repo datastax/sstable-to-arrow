@@ -209,7 +209,7 @@ types:
       - id: value
         type: str
         encoding: utf-8
-        size: length.val.as<u4>
+        size: length.val.as<u1>
 
   compaction_metadata:
     seq:
