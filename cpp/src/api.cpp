@@ -98,6 +98,7 @@ struct SSTableRecordBatchReader : public arrow::RecordBatchReader
         int sstable_id = sstable_ids[sstable_i];
 
         if (sstables.size() <= sstable_i){
+            *batch = nullptr;
             return arrow::Status::OK();
         }
 
@@ -153,7 +154,6 @@ arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> scan_sstable(std::strin
     int i = 0;
     for (auto &entry : sstables)
     {
-        // TODO: is this init required? Why is it slow?
         ARROW_RETURN_NOT_OK(entry.second->init_stats());
         all_tables[i] = entry.second;
         i++;
