@@ -142,6 +142,8 @@ arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Reco
     // TODO: is this required? Write file footer and close
     ARROW_RETURN_NOT_OK(writer->Close());
     ARROW_RETURN_NOT_OK(outfile->Close());
+
+    return arrow::Status::OK();
 }
 
 /**
