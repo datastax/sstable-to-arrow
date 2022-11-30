@@ -59,7 +59,6 @@ int main(int argc, char *argv[])
     //auto result = sstable_to_arrow::read_sstables(args.sstable_dir_path);
     auto result = sstable_to_arrow::scan_sstable(args.sstable_dir_path);
     //ARROW_ASSIGN_OR_RAISE(auto sstables, sstable_to_arrow::scan_sstable(args.sstable_dir_path));
-    auto status = result.status();
     EXIT_NOT_OK(result.status(), "error reading sstables");
     auto sstables = result.ValueOrDie();
     //std::shared_ptr<arrow::RecordBatchReader> sstables = std::move(result).ValueOrDie();

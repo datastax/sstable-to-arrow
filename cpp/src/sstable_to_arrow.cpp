@@ -24,7 +24,6 @@
 #include <vector>                       // for vector
 #include "sstable.h"
 #include "sstable_data.h"
-#include "streaming_sstable_data.h"
 class sstable_statistics_t;             // lines 31-31
 namespace arrow
 {
@@ -44,7 +43,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
 
     auto sstablegt = sstable.get();
     auto m__io = sstablegt->_io();
-    auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
+    auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<sstable_data_t::partition_t>>());
 
     int i = 0;
     while (!m__io->is_eof()) {

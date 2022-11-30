@@ -105,11 +105,12 @@ struct SSTableRecordBatchReader : public arrow::RecordBatchReader
         std::shared_ptr<sstable_t> sstable = sstables[sstable_i];
         std::cout << "========== Reading Chunk from SSTable #" << sstable_id << " ==========\n";
 
-        // Load as a table
-        // Reinit?
+        std::cout << "Fetching data\n";
         if (offset == 0){
         ARROW_RETURN_NOT_OK(sstable->fetch_data());
         }
+        std::cout << "Converting to columnar table\n";
+        // Load as a table
         ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Table> in_table,
                               vector_to_columnar_table(sstable->statistics(), sstable->data()));
 

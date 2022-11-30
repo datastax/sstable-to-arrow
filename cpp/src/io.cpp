@@ -139,8 +139,9 @@ arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Reco
         ARROW_RETURN_NOT_OK(writer->WriteTable(*table.get(), batch->num_rows()));
     }
 
-    // Write file footer and close
+    // TODO: is this required? Write file footer and close
     ARROW_RETURN_NOT_OK(writer->Close());
+    ARROW_RETURN_NOT_OK(outfile->Close());
 }
 
 /**
