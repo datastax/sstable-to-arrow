@@ -2,7 +2,7 @@
 #define SSTABLE_H_
 
 #include "sstable_compression_info.h" // for sstable_compression_info_t
-#include "sstable_data.h"             // for sstable_data_t
+#include "streaming_sstable_data.h"   // for streaming_sstable_data_t
 #include "sstable_index.h"            // for sstable_index_t
 #include "sstable_statistics.h"       // for sstable_statistics_t
 #include "sstable_summary.h"          // for sstable_summary_t
@@ -95,7 +95,7 @@ class sstable_t
 {
     std::vector<char> m_decompressed_data;
     file_container<sstable_statistics_t> m_statistics;
-    file_container<sstable_data_t> m_data;
+    file_container<streaming_sstable_data_t> m_data;
     file_container<sstable_index_t> m_index;
     file_container<sstable_summary_t> m_summary;
     file_container<sstable_compression_info_t> m_compression_info;
@@ -117,7 +117,7 @@ class sstable_t
     arrow::Status stream_decompressed_sstable();
 
     const std::unique_ptr<sstable_statistics_t> &statistics() const;
-    const std::unique_ptr<sstable_data_t> &data() const;
+    const std::unique_ptr<streaming_sstable_data_t> &data() const;
     const std::unique_ptr<sstable_index_t> &index() const;
     const std::unique_ptr<sstable_summary_t> &summary() const;
     const std::unique_ptr<sstable_compression_info_t> &compression_info() const;

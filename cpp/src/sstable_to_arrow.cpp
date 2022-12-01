@@ -23,7 +23,7 @@
 #include <unordered_map>                // for unordered_map
 #include <vector>                       // for vector
 #include "sstable.h"
-#include "sstable_data.h"
+#include "streaming_sstable_data.h"
 class sstable_statistics_t;             // lines 31-31
 namespace arrow
 {
@@ -35,7 +35,7 @@ namespace sstable_to_arrow
 {
 
 arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
-    const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,
+    const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<streaming_sstable_data_t> &sstable,
     arrow::MemoryPool *pool)
 {
     ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
@@ -43,42 +43,25 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
 
     auto sstablegt = sstable.get();
     auto m__io = sstablegt->_io();
-    auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<sstable_data_t::partition_t>>());
-
-    int i = 0;
-    while (!m__io->is_eof()) {
-        //m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, this, m__root))));
-        m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, nullptr, nullptr))));
-        i++;
-    }
-
-    for (const auto &partition : *sstable->partitions())
-        ARROW_RETURN_NOT_OK(process_partition(partition, helper, pool));
-
-    // finish the arrays and store them into a vector
-    return helper->to_table();
-/*
-    ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
-    ARROW_RETURN_NOT_OK(helper->init(pool));
-
-    auto m__io = sstable.get()->_io();
     auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
 
     int i = 0;
     while (!m__io->is_eof()) {
         //m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, this, m__root))));
+        m_partitions->push_back(std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(new streaming_sstable_data_t::partition_t(m__io, nullptr, nullptr))));
         i++;
     }
+
     for (const auto &partition : *sstable->partitions())
         ARROW_RETURN_NOT_OK(process_partition(partition, helper, pool));
 
     // finish the arrays and store them into a vector
     return helper->to_table();
-*/
 }
 
 arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
-    const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<sstable_data_t> &sstable,
+    const std::unique_ptr<sstable_statistics_t> &statistics, 
+    const std::unique_ptr<streaming_sstable_data_t> &sstable,
     arrow::MemoryPool *pool)
 {
     ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
@@ -108,7 +91,7 @@ arrow::Result<std::shared_ptr<arrow::Schema>> common_arrow_schema(
     return arrow::UnifySchemas(schemas);
 }
 
-arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_t> &partition,
+arrow::Status process_partition(const std::unique_ptr<streaming_sstable_data_t::partition_t> &partition,
                                 std::unique_ptr<conversion_helper_t> &helper, arrow::MemoryPool *pool)
 {
     const std::string &partition_key = partition->header()->key();
@@ -125,7 +108,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
             break;
         else if ((unfiltered->flags() & 0x02) != 0) // range tombstone
             ARROW_RETURN_NOT_OK(
-                process_marker(dynamic_cast<sstable_data_t::range_tombstone_marker_t *>(unfiltered->body())));
+                process_marker(dynamic_cast<streaming_sstable_data_t::range_tombstone_marker_t *>(unfiltered->body())));
         else // row
         {
             no_rows = false;
@@ -133,7 +116,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
             // append partition deletion info
             if (global_flags.include_metadata)
                 ARROW_RETURN_NOT_OK(helper->append_partition_deletion_time(local_deletion_time, marked_for_delete_at));
-            auto row = dynamic_cast<sstable_data_t::row_t *>(unfiltered->body());
+            auto row = dynamic_cast<streaming_sstable_data_t::row_t *>(unfiltered->body());
             bool is_static = ((unfiltered->flags() & 0x80) != 0) && ((row->extended_flags() & 0x01) != 0);
             ARROW_RETURN_NOT_OK(process_row(row, is_static, helper, pool));
         }
@@ -166,7 +149,7 @@ arrow::Status process_partition(const std::unique_ptr<sstable_data_t::partition_
     return arrow::Status::OK();
 }
 
-arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker)
+arrow::Status process_marker(streaming_sstable_data_t::range_tombstone_marker_t *marker)
 {
     (void)marker;
     std::cout << "MARKER FOUND\n";
@@ -174,7 +157,7 @@ arrow::Status process_marker(sstable_data_t::range_tombstone_marker_t *marker)
 }
 
 // Add the cells and time data in `row` to the columns in `helper`.
-arrow::Status process_row(sstable_data_t::row_t *row, bool is_static,
+arrow::Status process_row(streaming_sstable_data_t::row_t *row, bool is_static,
                           const std::unique_ptr<conversion_helper_t> &helper, arrow::MemoryPool *pool)
 {
     // append row deletion time info
@@ -284,9 +267,9 @@ arrow::Status append_cell(kaitai::kstruct *cell, const std::unique_ptr<conversio
                           std::shared_ptr<column_t> col, arrow::MemoryPool *pool)
 {
     if (conversions::is_multi_cell(col->cassandra_type))
-        return append_complex(col, helper, dynamic_cast<sstable_data_t::complex_cell_t *>(cell), pool);
+        return append_complex(col, helper, dynamic_cast<streaming_sstable_data_t::complex_cell_t *>(cell), pool);
     else
-        return append_simple(col, helper, dynamic_cast<sstable_data_t::simple_cell_t *>(cell), pool);
+        return append_simple(col, helper, dynamic_cast<streaming_sstable_data_t::simple_cell_t *>(cell), pool);
 }
 
 template <typename T>
@@ -310,7 +293,7 @@ arrow::Status initialize_ts_list_builder(const std::unique_ptr<arrow::ArrayBuild
 }
 
 arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_ptr<conversion_helper_t> &helper,
-                             const sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
+                             const streaming_sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
 {
     if (conversions::is_map(col->cassandra_type))
     {
@@ -436,7 +419,7 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
 }
 
 arrow::Status append_simple(std::shared_ptr<column_t> col, const std::unique_ptr<conversion_helper_t> &helper,
-                            sstable_data_t::simple_cell_t *cell, arrow::MemoryPool *pool)
+                            streaming_sstable_data_t::simple_cell_t *cell, arrow::MemoryPool *pool)
 {
     if (global_flags.include_metadata)
     {
@@ -643,7 +626,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
 } // namespace
 
 arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
-                                  sstable_data_t::simple_cell_t *cell)
+                                  streaming_sstable_data_t::simple_cell_t *cell)
 {
     if (cell->_is_null_delta_timestamp())
         return builder->AppendNull();
@@ -655,7 +638,7 @@ arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::un
 }
 arrow::Status append_local_del_time_if_exists(column_t::local_del_time_builder_t *builder,
                                               const std::unique_ptr<conversion_helper_t> &helper,
-                                              sstable_data_t::simple_cell_t *cell)
+                                              streaming_sstable_data_t::simple_cell_t *cell)
 {
     if (cell->_is_null_delta_local_deletion_time())
         return builder->AppendNull();
@@ -666,7 +649,7 @@ arrow::Status append_local_del_time_if_exists(column_t::local_del_time_builder_t
     }
 }
 arrow::Status append_ttl_if_exists(column_t::ttl_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
-                                   sstable_data_t::simple_cell_t *cell)
+                                   streaming_sstable_data_t::simple_cell_t *cell)
 {
     if (cell->_is_null_delta_ttl())
         return builder->AppendNull();
@@ -679,7 +662,7 @@ arrow::Status append_ttl_if_exists(column_t::ttl_builder_t *builder, const std::
 
 // idx is the index of the desired column in the superset of columns contained
 // in this SSTable
-bool does_cell_exist(sstable_data_t::row_t *row, const uint64_t &idx)
+bool does_cell_exist(streaming_sstable_data_t::row_t *row, const uint64_t &idx)
 {
     return row->_is_null_columns_bitmask() || (row->columns_bitmask()->bitmask & (1U << idx)) == 0;
 }

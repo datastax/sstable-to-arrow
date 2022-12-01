@@ -235,7 +235,7 @@ const std::unique_ptr<sstable_statistics_t> &sstable_t::statistics() const
 {
     return m_statistics.file();
 }
-const std::unique_ptr<sstable_data_t> &sstable_t::data() const
+const std::unique_ptr<streaming_sstable_data_t> &sstable_t::data() const
 {
     return m_data.file();
 }
