@@ -75,9 +75,29 @@ template <typename T> class file_container
         }
     }
 
+    arrow::Status init_for_streaming(std::unique_ptr<std::istream> stream)
+    {
+        try
+        {
+            m_stream = std::move(stream);
+            m_ks = std::make_unique<kaitai::kstream>(m_stream.get());
+            return arrow::Status::OK();
+        }
+        catch (const std::exception &err)
+        {
+            return arrow::Status::SerializationError("error streaming \"" + m_path + "\": " + err.what());
+        }
+    }
+
+
     const std::string &path() const
     {
         return m_path;
+    }
+
+    const std::unique_ptr<kaitai::kstream>& ks() const
+    {
+        return m_ks;
     }
 
     const std::unique_ptr<T> &file() const
@@ -118,6 +138,7 @@ class sstable_t
 
     const std::unique_ptr<sstable_statistics_t> &statistics() const;
     const std::unique_ptr<streaming_sstable_data_t> &data() const;
+    const std::unique_ptr<kaitai::kstream> &data_ks() const;
     const std::unique_ptr<sstable_index_t> &index() const;
     const std::unique_ptr<sstable_summary_t> &summary() const;
     const std::unique_ptr<sstable_compression_info_t> &compression_info() const;

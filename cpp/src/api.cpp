@@ -10,6 +10,7 @@
 #include <ext/alloc_traits.h>                   // for __alloc_traits<>::va...
 #include <iostream>                             // for operator<<, basic_os...
 #include <utility>                              // for pair
+#include <ctime>                                // for ctime
 namespace arrow { class Table; }
 
 namespace sstable_to_arrow
@@ -104,25 +105,38 @@ struct SSTableRecordBatchReader : public arrow::RecordBatchReader
 
         std::shared_ptr<sstable_t> sstable = sstables[sstable_i];
         std::cout << "========== Reading Chunk from SSTable #" << sstable_id << " ==========\n";
-
-        std::cout << "Fetching data\n";
+        time_t now = time(nullptr);
+        std::cout << "Time: " << ctime(&now) << " - Fetching data\n";
+        
         if (offset == 0){
         ARROW_RETURN_NOT_OK(sstable->fetch_data());
         }
-        std::cout << "Converting to columnar table\n";
+
+        now = time(nullptr);
+        std::cout << "Time: " << ctime(&now) << " - Converting to columnar table\n";
         // Load as a table
         ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Table> in_table,
-                              vector_to_columnar_table(sstable->statistics(), sstable->data()));
+                              streaming_vector_to_columnar_table(
+                                  sstable->statistics(), 
+                                  sstable->data_ks().get()
+                              ));
+
+        now = time(nullptr);
+        std::cout << "Time: " << ctime(&now) << " - Promoting schema\n";
 
         // Promote the schema
         ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Table> table,
                               arrow::PromoteTableToSchema(in_table, output_schema, pool));
 
+        now = time(nullptr);
+        std::cout << "Time: " << ctime(&now) << " - Making Batch\n";
         // Make into a batch (should be zero-copy)
         ARROW_ASSIGN_OR_RAISE(*batch, table->CombineChunksToBatch(pool));
 
+        now = time(nullptr);
+        std::cout << "Time: " << ctime(&now) << " - Performing Done Check\n";
         // TODO: bump if we're done with the current sstable
-        if (sstable->data()->is_eof()){
+        if (sstable->data_ks()->is_eof()){
           sstable_i++;
         }
 

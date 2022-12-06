@@ -52,6 +52,7 @@ std::string deserialization_helper_t::get_col_type(int kind, int i)
     CHECK_KIND(kind);
     return (*colkinds[kind])[i];
 }
+
 /** Set the data type stored in this column */
 void deserialization_helper_t::set_col_type(int kind, int i, const std::string &val)
 {
@@ -145,4 +146,8 @@ int deserialization_helper_t::get_n_cells_in_row()
 int deserialization_helper_t::get_col_size()
 {
     return conversions::get_col_size(get_col_type(curkind, idx), _io());
+}
+
+void deserialization_helper_t::_read()
+{
 }

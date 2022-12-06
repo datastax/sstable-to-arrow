@@ -58,3 +58,7 @@ std::vector<std::string> *clustering_blocks_t::values()
 {
     return &values_;
 }
+
+void clustering_blocks_t::_read()
+{
+}

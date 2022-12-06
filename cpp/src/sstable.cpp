@@ -1,4 +1,5 @@
 #include "sstable.h"
+#include "streaming_sstable_data.h"
 #include "conversion_helper.h"                         // for get_serializa...
 #include "deserialization_helper.h"                    // for deserializati...
 #include "opts.h"                                      // for flags, global...
@@ -96,7 +97,7 @@ arrow::Status sstable_t::init()
 }
 arrow::Status sstable_t::stream_decompressed_sstable()
 {
-    if (m_data.file().get() == nullptr){
+    if (m_data.ks().get() == nullptr || m_data.ks()->is_eof()){
         ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(m_data.path()));
 
         // get the number of compressed bytes
@@ -156,13 +157,9 @@ arrow::Status sstable_t::stream_decompressed_sstable()
             return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
         }
 
-        ARROW_RETURN_NOT_OK(m_data.init(std::move(is)));
+        ARROW_RETURN_NOT_OK(m_data.init_for_streaming(std::move(is)));
+        //ARROW_RETURN_NOT_OK(m_data.init(std::move(is)));
     }
-
-    //auto step = m_data.file()->get_step();
-    //m_data.file()->set_offset(1);
-    m_data.file()->read_some();
-
     return arrow::Status::OK();
 }
 
@@ -235,6 +232,11 @@ const std::unique_ptr<sstable_statistics_t> &sstable_t::statistics() const
 {
     return m_statistics.file();
 }
+const std::unique_ptr<kaitai::kstream> &sstable_t::data_ks() const
+{
+    return m_data.ks();
+}
+
 const std::unique_ptr<streaming_sstable_data_t> &sstable_t::data() const
 {
     return m_data.file();

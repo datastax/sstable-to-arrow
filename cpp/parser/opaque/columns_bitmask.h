@@ -13,6 +13,7 @@ class columns_bitmask_t : public kaitai::kstruct
   public:
     uint64_t bitmask;
     columns_bitmask_t(kaitai::kstream *ks);
+    void _read();
 };
 
 #endif

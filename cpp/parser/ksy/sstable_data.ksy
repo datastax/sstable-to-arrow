@@ -19,6 +19,8 @@ seq:
   - id: deserialization_helper
     type: deserialization_helper
   - id: partitions
+    # hack to allow manual parsing
+    if: false
     type: partition
     repeat: eos
 

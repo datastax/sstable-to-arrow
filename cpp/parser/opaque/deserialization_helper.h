@@ -48,11 +48,13 @@ class deserialization_helper_t : public kaitai::kstruct
     static int set_static();
     static int set_regular();
     static int get_n_cells_in_row();
+
     static bool is_multi_cell();
     static bool is_multi_cell(const std::string &type);
     static bool is_multi_cell(int kind, int i);
 
     static int inc();
+    void _read();
 };
 
 #endif

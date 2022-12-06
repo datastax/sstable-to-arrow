@@ -19,3 +19,5 @@ modified_utf8_t::modified_utf8_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
         p = c;
     }
 }
+
+void modified_utf8_t::_read(){}

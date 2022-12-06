@@ -24,6 +24,7 @@ add_library(
   io.cpp
   opts.cpp
   sstable_to_arrow.cpp
+  streaming_sstable_data.cpp
   sstable.cpp)
 
 # TODO is there a better way to propagate the include directories from

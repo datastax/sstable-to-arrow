@@ -17,6 +17,7 @@ class clustering_blocks_t : public kaitai::kstruct
   public:
     clustering_blocks_t(kaitai::kstream *ks);
     std::vector<std::string> *values();
+    void _read();
 };
 
 bool is_null(uint64_t header, int i);

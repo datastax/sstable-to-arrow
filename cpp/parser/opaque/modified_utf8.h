@@ -14,6 +14,7 @@ class modified_utf8_t : public kaitai::kstruct
 
   public:
     modified_utf8_t(kaitai::kstream *ks);
+    void _read();
 };
 
 #endif

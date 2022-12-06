@@ -50,7 +50,8 @@ arrow::Result<std::shared_ptr<arrow::Table>> vector_to_columnar_table(
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
-    const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<streaming_sstable_data_t> &sstable,
+    const std::unique_ptr<sstable_statistics_t> &statistics, 
+    kaitai::kstream* m__io,
     arrow::MemoryPool *pool = arrow::default_memory_pool());
 
 

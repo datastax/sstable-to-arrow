@@ -42,3 +42,7 @@ uint64_t vint_t::val() const
 {
     return val_;
 }
+
+void vint_t::_read()
+{
+}

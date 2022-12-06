@@ -35,25 +35,30 @@ namespace sstable_to_arrow
 {
 
 arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
-    const std::unique_ptr<sstable_statistics_t> &statistics, const std::unique_ptr<streaming_sstable_data_t> &sstable,
+    const std::unique_ptr<sstable_statistics_t> &statistics, 
+    kaitai::kstream* m__io,
     arrow::MemoryPool *pool)
 {
     ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
     ARROW_RETURN_NOT_OK(helper->init(pool));
 
-    auto sstablegt = sstable.get();
-    auto m__io = sstablegt->_io();
+    auto root = std::make_unique<streaming_sstable_data_t>(m__io);
+
+    auto m_deserialization_helper = std::unique_ptr<deserialization_helper_t>(new deserialization_helper_t(m__io));
     auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
-
-    int i = 0;
-    while (!m__io->is_eof()) {
-        //m_partitions->push_back(std::move(std::unique_ptr<sstable_data_t::partition_t>(new sstable_data_t::partition_t(m__io, this, m__root))));
-        m_partitions->push_back(std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(new streaming_sstable_data_t::partition_t(m__io, nullptr, nullptr))));
-        i++;
-    }
-
-    for (const auto &partition : *sstable->partitions())
-        ARROW_RETURN_NOT_OK(process_partition(partition, helper, pool));
+    time_t now = time(nullptr);
+    {
+        std::cout << "Time: " << ctime(&now) << " - Getting a step worth of partitions\n";
+        int i = 0;
+        while (!m__io->is_eof() && i < 100000) {
+            auto partition = std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(
+                new streaming_sstable_data_t::partition_t(m__io, nullptr, root.get())
+            ));
+            // This part could be parallelized
+            ARROW_RETURN_NOT_OK(process_partition(partition,helper,pool));
+            i++;
+        }
+    } 
 
     // finish the arrays and store them into a vector
     return helper->to_table();

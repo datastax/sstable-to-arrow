@@ -53,3 +53,7 @@ columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
         deserialization_helper_t::set_bitmask(bitmask);
     }
 }
+
+void columns_bitmask_t::_read()
+{
+}
