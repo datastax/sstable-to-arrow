@@ -155,7 +155,7 @@ types:
       - id: value
         repeat: expr
         repeat-expr: _parent.covered_clustering_start_length
-        if:  ( _parent.clustering_types.entry[4].type == _parent.clustering_types.entry[0].type )
+#        if:  ( _parent.clustering_types.entry[4].type == _parent.clustering_types.entry[0].type )
 #        if: _parent.clustering_types.entry[_index] = 'apache.cassandra.db.marshal.UTF8Type'
 #        if: false
         type:
@@ -166,7 +166,7 @@ types:
             '"org.apache.cassandra.db.marshal.LongType"': longtype
             '"org.apache.cassandra.db.marshal.UTF8Type"': utf8type
             '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)"': utf8type
-
+            '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.LongType)"': longtype
   incl_end_bound:
     seq:
       - id: header # used for a null check? don't think it ever happens from valid sstables
@@ -178,7 +178,7 @@ types:
       - id: value
         repeat: expr
         repeat-expr: _parent.covered_clustering_end_length
-        if:  ( _parent.clustering_types.entry[4].type == _parent.clustering_types.entry[0].type )
+#        if:  ( _parent.clustering_types.entry[4].type == _parent.clustering_types.entry[0].type )
 #        if: _parent.clustering_types.entry[_index] = 'apache.cassandra.db.marshal.UTF8Type'
 #        if: false
         type:
@@ -189,6 +189,7 @@ types:
             '"org.apache.cassandra.db.marshal.LongType"': longtype
             '"org.apache.cassandra.db.marshal.UTF8Type"': utf8type
             '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)"': utf8type
+            '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.LongType)"': longtype
 
             
   int32type:
