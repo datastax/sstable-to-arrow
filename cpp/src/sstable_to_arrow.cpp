@@ -50,7 +50,9 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     {
         std::cout << "Time: " << ctime(&now) << " - Getting a step worth of partitions\n";
         int i = 0;
-        while (!m__io->is_eof() && i < 100000) {
+        int stepsize = 100000;
+        //int stepsize = 1;
+        while (!m__io->is_eof() && i < stepsize) {
             auto partition = std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(
                 new streaming_sstable_data_t::partition_t(m__io, nullptr, root.get())
             ));
@@ -443,6 +445,10 @@ namespace
 {
 arrow::Status append_scalar(std::shared_ptr<column_t> col, std::string_view value, arrow::MemoryPool *pool)
 {
+    if (value == ""){
+        col->append_null();
+        return arrow::Status::OK();                                                                                    \
+    }
     return append_scalar(col->cassandra_type, col->builder.get(), col->has_second ? col->second.get() : nullptr, value,
                          pool);
 }
@@ -453,6 +459,11 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     // for all other types, we parse the data using kaitai, which might end up
     // being a performance bottleneck
     // TODO look into potential uses of memcpy for optimization
+    /*
+    if (bytes == ""){
+        std::cout << "null bytes";
+    }
+    */
     auto ks = kaitai::kstream(std::string(bytes));
 
     if (conversions::is_composite(coltype))
@@ -597,6 +608,9 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
 #define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                                                       \
     else if (coltype == conversions::types::cassandra_type##Type)                                                      \
     {                                                                                                                  \
+        if (ks.is_eof()){                                                                                                \
+            return arrow::Status::OK();                                                                                \
+        }                                                                                                              \
         auto val = ks.read_##read_size();                                                                              \
         auto builder = dynamic_cast<arrow::arrow_type##Builder *>(builder_ptr);                                        \
         ARROW_RETURN_NOT_OK(builder->Append(val));                                                                     \

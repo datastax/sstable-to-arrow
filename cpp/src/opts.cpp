@@ -32,7 +32,8 @@ void add_file_to_sstables(const std::string &full_path, const std::string &file_
         return;
     }
 
-    if (sscanf(file_name.data(), "%2c-%d-big-%19[^.]", fmt, &num, db_type_buf) != 3) // number of arguments filled
+    //if (sscanf(file_name.data(), "%2c-%d-big-%19[^.]", fmt, &num, db_type_buf) != 3) // number of arguments filled
+    if (sscanf(file_name.data(), "%2c-%d-bti-%19[^.]", fmt, &num, db_type_buf) != 3) // number of arguments filled
     {
         std::cout << "Error reading formatted filename " << file_name << ", skipping\n";
         return;
