@@ -25,7 +25,7 @@ namespace lz4_stream {
  * decompress its output data to that stream.
  *
  */
-template <size_t SrcBufSize = 256, size_t DestBufSize = 256>
+template <size_t SrcBufSize = 65536, size_t DestBufSize = 65536>
 class basic_istream : public std::istream
 {
  public:
@@ -34,7 +34,7 @@ class basic_istream : public std::istream
    *
    * @param source The stream to read LZ4 compressed data from
    */
-  basic_istream(std::istream& source, std::unique_ptr<sstable_compression_info_t> compression_info)
+  basic_istream(std::unique_ptr<std::istream> source, std::unique_ptr<sstable_compression_info_t> compression_info)
     : std::istream(new input_buffer(source, compression_info)),
       buffer_(dynamic_cast<input_buffer*>(rdbuf())) {
     assert(buffer_);
@@ -50,8 +50,8 @@ class basic_istream : public std::istream
  private:
   class input_buffer : public std::streambuf {
   public:
-    input_buffer(std::istream &source,std::unique_ptr<sstable_compression_info_t>& compression_info)
-      : source_(source),
+    input_buffer(std::unique_ptr<std::istream>& source,std::unique_ptr<sstable_compression_info_t>& compression_info)
+      : source_(std::move(source)),
         compression_info_(std::move(compression_info)),
         offset_(0),
         src_buf_size_(0)
@@ -70,7 +70,7 @@ class basic_istream : public std::istream
       auto i = 0;
       uint64_t offset = offsets[i];
 
-      int64_t src_size = source_.tellg(); // the total size of the uncompressed file
+      int64_t src_size = source_->tellg(); // the total size of the uncompressed file
       // get size based on offset with special case for last chunk
       uint64_t chunk_size = (i == nchunks - 1 ? src_size : offsets[i + 1]) - offset;
       // TODO: fix for actual last chunk
@@ -80,8 +80,8 @@ class basic_istream : public std::istream
 
       // skip 4 bytes written by Cassandra at beginning of each chunk and 4
       // bytes at end for Adler32 checksum
-      source_.seekg(offset + 4, std::ios::beg);
-      source_.read(buffer.data(), chunk_size - 8);
+      source_->seekg(offset + 4, std::ios::beg);
+      source_->read(buffer.data(), chunk_size - 8);
 
       int ntransferred =
           LZ4_decompress_safe(&src_buf_.front(), &dest_buf_.front(), chunk_size - 8, chunk_length);
@@ -99,7 +99,7 @@ class basic_istream : public std::istream
     input_buffer(const input_buffer&) = delete;
     input_buffer& operator= (const input_buffer&) = delete;
   private:
-    std::istream& source_;
+    std::unique_ptr<std::istream> source_;
     std::unique_ptr<sstable_compression_info_t> compression_info_;
     std::array<char, SrcBufSize> src_buf_;
     std::array<char, DestBufSize> dest_buf_;

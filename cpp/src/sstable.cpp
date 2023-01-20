@@ -105,7 +105,8 @@ arrow::Status sstable_t::stream_decompressed_sstable()
         // Do I need to reset this stream?
         cistream->seek(0);
         auto ci = std::make_unique<sstable_compression_info_t>(cistream);
-        std::unique_ptr<lz4_stream::istream> decompressed_stream = std::make_unique<lz4_stream::istream>(*istream, std::move(ci));
+        //auto is = std::make_unique<std::istream>(istream);
+        std::unique_ptr<lz4_stream::istream> decompressed_stream = std::make_unique<lz4_stream::istream>(std::move(istream), std::move(ci));
 
         
         /*
