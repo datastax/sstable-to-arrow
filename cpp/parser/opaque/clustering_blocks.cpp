@@ -27,7 +27,8 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
 
             if (is_null(header, offset))
             {
-                values_[offset] = nullptr; // this is probably unsafe but idk a better way
+                //values_[offset] = nullptr; // this is probably unsafe but idk a better way
+                values_[offset] = std::string();
             }
             else if (is_empty(header, offset))
             {

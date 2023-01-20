@@ -50,7 +50,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     {
         std::cout << "Time: " << ctime(&now) << " - Getting a step worth of partitions\n";
         int i = 0;
-        int stepsize = 100000;
+        int stepsize = 1000000;
         //int stepsize = 1;
         while (!m__io->is_eof() && i < stepsize) {
             auto partition = std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(
@@ -160,6 +160,11 @@ arrow::Status process_marker(streaming_sstable_data_t::range_tombstone_marker_t 
 {
     (void)marker;
     std::cout << "MARKER FOUND\n";
+    std::cout << marker->kind();
+    std::cout << marker->start_deletion_time();
+    std::cout << marker->deletion_time();
+    std::cout << marker->end_deletion_time();
+    std::cout << "\n";
     return arrow::Status::OK();
 }
 
@@ -262,7 +267,8 @@ arrow::Status process_row(streaming_sstable_data_t::row_t *row, bool is_static,
     for (size_t i = 0, cell_idx = 0; i < helper->regular_cols.size(); ++i)
     {
         if (!is_static && does_cell_exist(row, i))
-            ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->regular_cols[i], pool));
+            if(row->cells()->size() > cell_idx)
+                ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->regular_cols[i], pool));
         else
             ARROW_RETURN_NOT_OK(helper->regular_cols[i]->append_null());
     }

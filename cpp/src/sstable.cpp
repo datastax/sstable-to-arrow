@@ -14,6 +14,7 @@
 #include <sstream>                                     // for basic_istring...
 #include <stddef.h>                                    // for size_t
 #include <stdint.h>                                    // for uint64_t, int...
+#include <lz4_stream.h>
 
 namespace sstable_to_arrow
 {
@@ -99,6 +100,15 @@ arrow::Status sstable_t::stream_decompressed_sstable()
 {
     if (m_data.ks().get() == nullptr || m_data.ks()->is_eof()){
         ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(m_data.path()));
+        
+        auto cistream = m_compression_info.ks().get();
+        // Do I need to reset this stream?
+        cistream->seek(0);
+        auto ci = std::make_unique<sstable_compression_info_t>(cistream);
+        std::unique_ptr<lz4_stream::istream> decompressed_stream = std::make_unique<lz4_stream::istream>(*istream, std::move(ci));
+
+        
+        /*
 
         // get the number of compressed bytes
         istream->seekg(0, std::ios::end);
@@ -107,7 +117,6 @@ arrow::Status sstable_t::stream_decompressed_sstable()
         assert(src_size >= 0);
 
         size_t nchunks = compression_info()->chunk_count();
-        //nchunks = 100;
         const auto &offsets = *compression_info()->chunk_offsets();
         size_t total_decompressed_size = 0;
         // loop through chunks to get total decompressed size (written by Cassandra)
@@ -137,27 +146,61 @@ arrow::Status sstable_t::stream_decompressed_sstable()
             istream->seekg(offset + 4, std::ios::beg);
             istream->read(buffer.data(), chunk_size - 8);
 
-            int ntransferred =
-                LZ4_decompress_safe(buffer.data(), &m_decompressed_data[i * chunk_length], chunk_size - 8, chunk_length);
+            //int ntransferred =
+            //    LZ4_decompress_safe(buffer.data(), &m_decompressed_data[i * chunk_length], chunk_size - 8, chunk_length);
 
-            if (ntransferred < 0)
-                return arrow::Status::SerializationError("decompression of block " + std::to_string(i) +
-                                                        " failed with error code " + std::to_string(ntransferred));
+            //if (ntransferred < 0)
+            //    return arrow::Status::SerializationError("decompression of block " + std::to_string(i) +
+            //                                            " failed with error code " + std::to_string(ntransferred));
+            // Create the streaming decompression context
+            LZ4_streamDecode_t* ctx = LZ4_createStreamDecode();
+
+            // Initialize variables for tracking the current position in the buffer and the decompressed data
+            int ntransferred = 0;
+            int buffer_pos = 0;
+            int decompressed_pos = i * chunk_length;
+            while (buffer_pos < chunk_size - 8)
+            {
+                // Use LZ4_decompress_safe_continue to decompress the next chunk of data
+                ntransferred = LZ4_decompress_safe_continue(ctx, buffer.data() + buffer_pos, &m_decompressed_data[decompressed_pos], chunk_size - 8 - buffer_pos, chunk_length - decompressed_pos);
+
+                // Create the ibufferstream and the unique pointer to the istream
+                auto *bs = new boost::interprocess::ibufferstream(&m_decompressed_data[decompressed_pos], ntransferred);
+                auto is = std::unique_ptr<std::istream>(bs);
+
+                // Check if the pointer is not null
+                if (!is)
+                {
+                    return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
+                }
+
+                // Use the istream here
+                ARROW_RETURN_NOT_OK(m_data.init_for_streaming(std::move(is)));
+
+                // Update the buffer and decompressed data positions
+                buffer_pos += ntransferred;
+                decompressed_pos += ntransferred;
+            }
         }
+        */
 
         // TODO see if can do it in a different way than putting the whole thing in a
         // string auto bs =
         // std::make_shared<boost::iostreams::stream<boost::iostreams::array_source>>(decompressed.data(),
         // decompressed.size()); naked new to convert from a boost stream to
         // std::istream
-        auto *bs = new boost::interprocess::ibufferstream(m_decompressed_data.data(), m_decompressed_data.size());
-        auto is = std::unique_ptr<std::istream>(bs);
-        if (!is)
-        {
-            return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
-        }
 
-        ARROW_RETURN_NOT_OK(m_data.init_for_streaming(std::move(is)));
+        //auto *bs = new boost::interprocess::ibufferstream(m_decompressed_data.data(), m_decompressed_data.size());
+        //auto is = std::unique_ptr<std::istream>(bs);
+        //if (!is)
+        //{
+        //    return arrow::Status::IOError("Could not cast boost vector stream to std::istream");
+        //}
+
+        //uint64_t chunk_size = 27762;
+        //std::vector<char> buffer(chunk_size);
+        ARROW_RETURN_NOT_OK(m_data.init_for_streaming(std::move(decompressed_stream)));
+
         //ARROW_RETURN_NOT_OK(m_data.init(std::move(is)));
     }
     return arrow::Status::OK();
