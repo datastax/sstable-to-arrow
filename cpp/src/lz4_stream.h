@@ -71,17 +71,14 @@ class basic_istream : public std::istream
       uint64_t offset = offsets[i];
 
       int64_t src_size = source_->tellg(); // the total size of the uncompressed file
-      // get size based on offset with special case for last chunk
       uint64_t chunk_size = (i == nchunks - 1 ? src_size : offsets[i + 1]) - offset;
-      // TODO: fix for actual last chunk
-      //uint64_t chunk_size = (offsets[i + 1]) - offset;
 
-      std::vector<char> buffer(chunk_size);
+      //std::vector<char> buffer(chunk_size);
 
       // skip 4 bytes written by Cassandra at beginning of each chunk and 4
       // bytes at end for Adler32 checksum
       source_->seekg(offset + 4, std::ios::beg);
-      source_->read(buffer.data(), chunk_size - 8);
+      source_->read(src_buf_.data(), chunk_size - 8);
 
       int ntransferred =
           LZ4_decompress_safe(&src_buf_.front(), &dest_buf_.front(), chunk_size - 8, chunk_length);

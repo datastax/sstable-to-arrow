@@ -121,6 +121,8 @@ struct SSTableRecordBatchReader : public arrow::RecordBatchReader
                                   sstable->data_ks().get()
                               ));
 
+        ARROW_RETURN_NOT_OK(in_table->ValidateFull());
+
         now = time(nullptr);
         std::cout << "Time: " << ctime(&now) << " - Promoting schema\n";
 

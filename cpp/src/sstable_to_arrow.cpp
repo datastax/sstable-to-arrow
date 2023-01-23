@@ -50,7 +50,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     {
         std::cout << "Time: " << ctime(&now) << " - Getting a step worth of partitions\n";
         int i = 0;
-        int stepsize = 1000000;
+        int stepsize = 10000;
         //int stepsize = 1;
         while (!m__io->is_eof() && i < stepsize) {
             auto partition = std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(
