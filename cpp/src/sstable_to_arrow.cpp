@@ -50,7 +50,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     {
         std::cout << "Time: " << ctime(&now) << " - Getting a step worth of partitions\n";
         int i = 0;
-        int stepsize = 10000;
+        int stepsize = 1;
         //int stepsize = 1;
         while (!m__io->is_eof() && i < stepsize) {
             auto partition = std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(
@@ -120,6 +120,9 @@ arrow::Status process_partition(const std::unique_ptr<streaming_sstable_data_t::
         {
             no_rows = false;
             ARROW_RETURN_NOT_OK(append_scalar(helper->partition_key, partition_key, pool));
+            std::cout << "partition key " << partition_key << "\n" ;
+            if (partition_key == "0x2c21b9405de68b80eb02d1f2e64cefba51d12b9b105cef0188774160cbc4d7b9")
+              std::cout << "partition key " << partition_key << "\n" ;
             // append partition deletion info
             if (global_flags.include_metadata)
                 ARROW_RETURN_NOT_OK(helper->append_partition_deletion_time(local_deletion_time, marked_for_delete_at));
@@ -266,11 +269,22 @@ arrow::Status process_row(streaming_sstable_data_t::row_t *row, bool is_static,
     // see above re `i` and `cell_idx`
     for (size_t i = 0, cell_idx = 0; i < helper->regular_cols.size(); ++i)
     {
-        if (!is_static && does_cell_exist(row, i))
+        if (!is_static && does_cell_exist(row, i)){
+            if(cell_idx == 6 || cell_idx == 7){
+                std::cout << "cell number " << cell_idx << "\n";
+            }
+            std::cout << "cell exists: " ;
             if(row->cells()->size() > cell_idx)
                 ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->regular_cols[i], pool));
-        else
+            else{
+                std::cout << "row size check fails" << "\n";
+                ARROW_RETURN_NOT_OK(helper->regular_cols[i]->append_null());
+            }
+        }
+        else{
+            std::cout << "cell does not exist" << "\n";
             ARROW_RETURN_NOT_OK(helper->regular_cols[i]->append_null());
+        }
     }
 
     return arrow::Status::OK();
@@ -282,6 +296,7 @@ arrow::Status append_cell(kaitai::kstruct *cell, const std::unique_ptr<conversio
     if (conversions::is_multi_cell(col->cassandra_type))
         return append_complex(col, helper, dynamic_cast<streaming_sstable_data_t::complex_cell_t *>(cell), pool);
     else
+        //TODO stop here for the bad cell
         return append_simple(col, helper, dynamic_cast<streaming_sstable_data_t::simple_cell_t *>(cell), pool);
 }
 
@@ -434,6 +449,14 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
 arrow::Status append_simple(std::shared_ptr<column_t> col, const std::unique_ptr<conversion_helper_t> &helper,
                             streaming_sstable_data_t::simple_cell_t *cell, arrow::MemoryPool *pool)
 {
+    std::cout << col->field->name() << "\n";
+    /*
+    if (cell->_is_null_value()){
+        //std::cout << "null"  << "\n";
+        col->append_null();
+        return arrow::Status::OK();
+    }
+    */
     if (global_flags.include_metadata)
     {
         auto ts_builder = dynamic_cast<column_t::ts_builder_t *>(col->ts_builder.get());
@@ -466,10 +489,11 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     // being a performance bottleneck
     // TODO look into potential uses of memcpy for optimization
     /*
-    if (bytes == ""){
-        std::cout << "null bytes";
-    }
     */
+    if (bytes.length() > 1000000){
+        std::cout << "very big cell " << bytes.length()  << " bytes \n";
+    }
+
     auto ks = kaitai::kstream(std::string(bytes));
 
     if (conversions::is_composite(coltype))

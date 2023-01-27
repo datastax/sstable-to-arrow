@@ -69,7 +69,6 @@ arrow::Status column_t::reserve(uint32_t nrows)
 arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
 {
     uint8_t n_cols_finished = 0;
-
 #define NEXT_ITEM (ptr + n_cols_finished++)
     ARROW_RETURN_NOT_OK(builder->Finish(NEXT_ITEM));
     if (has_second)
@@ -82,7 +81,6 @@ arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
         ARROW_RETURN_NOT_OK(ttl_builder->Finish(NEXT_ITEM));
     }
 #undef NEXT_ITEM
-
     return n_cols_finished;
 }
 
@@ -347,6 +345,8 @@ arrow::Result<std::shared_ptr<arrow::Table>> conversion_helper_t::to_table() con
         for (auto &col : group)
         {
             ARROW_ASSIGN_OR_RAISE(uint8_t n, col->finish(&finished_arrays[i]));
+            std::cout << "name: " << col->field->name() << "\n";
+            std::cout << finished_arrays.data()->get()->length() << "\n";
             i += n;
         }
     }

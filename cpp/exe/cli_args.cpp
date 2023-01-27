@@ -74,6 +74,9 @@ cli_args read_options(int argc, char *const argv[])
             }
             args.sstable_dir_path = sample_data_path;
             break;
+        case 'u':
+            args.only_uncompress = true;
+            break;
         case ':':
             args.errors.push_back("missing argument for option " + std::to_string(optopt));
             break;

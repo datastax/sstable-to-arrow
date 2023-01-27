@@ -15,6 +15,7 @@
 #include <string>                     // for string, operator+, char_traits
 #include <utility>                    // for move
 #include <vector>                     // for vector
+#include <lz4_stream.h>
 
 namespace sstable_to_arrow
 {
@@ -114,6 +115,7 @@ template <typename T> class file_container
 class sstable_t
 {
     std::vector<char> m_decompressed_data;
+    std::unique_ptr<lz4_stream::istream> m_decompressed_stream;
     file_container<sstable_statistics_t> m_statistics;
     file_container<streaming_sstable_data_t> m_data;
     file_container<sstable_index_t> m_index;
@@ -136,6 +138,8 @@ class sstable_t
     arrow::Status read_decompressed_sstable();
     arrow::Status stream_decompressed_sstable();
 
+    arrow::Status init_decompressed_stream();
+
     const std::unique_ptr<sstable_statistics_t> &statistics() const;
     const std::unique_ptr<streaming_sstable_data_t> &data() const;
     const std::unique_ptr<kaitai::kstream> &data_ks() const;
@@ -148,6 +152,11 @@ class sstable_t
     void set_index_path(const std::string &path);
     void set_summary_path(const std::string &path);
     void set_compression_info_path(const std::string &path);
+
+    const std::unique_ptr<lz4_stream::istream> &decompressed_stream() 
+    {
+        return m_decompressed_stream;
+    }
 };
 
 } // namespace sstable_to_arrow

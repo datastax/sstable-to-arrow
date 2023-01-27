@@ -121,6 +121,7 @@ struct SSTableRecordBatchReader : public arrow::RecordBatchReader
                                   sstable->data_ks().get()
                               ));
 
+        auto test = in_table->ValidateFull();
         ARROW_RETURN_NOT_OK(in_table->ValidateFull());
 
         now = time(nullptr);
@@ -180,5 +181,52 @@ arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> scan_sstable(std::strin
 
     return std::make_shared<SSTableRecordBatchReader>(sstables, output_schema, arrow::default_memory_pool());
 }
+
+arrow::Status decompress_sstable(std::string_view path)
+{
+
+    // open output file
+    std::ofstream outfile;
+    outfile.open("decompressed.db");
+
+    std::map<int, std::shared_ptr<sstable_t>> sstables;
+    if (boost::istarts_with(path, "s3://"))
+    {
+        s3_connection conn;
+        ARROW_ASSIGN_OR_RAISE(sstables, get_file_paths_from_s3(path));
+    }
+    else
+    {
+        sstables = get_file_paths_from_local(path);
+    }
+
+    // Get unified schema
+    std::vector<std::shared_ptr<sstable_t>>all_tables(sstables.size());
+    int i = 0;
+    for (auto &entry : sstables)
+    {
+        auto sstable = entry.second;
+        ARROW_RETURN_NOT_OK(sstable->init_decompressed_stream());
+        auto is = std::move(sstable->decompressed_stream().get());
+        std::cout << "========== Writing Chunk from SSTable to file #" << i << " ==========\n";
+        // get buffer for is
+        constexpr int buffer_size = 4096;
+        std::vector<char> buffer(buffer_size);
+
+        // Read data from the input stream and write it to the output file
+        while(is) {
+            is->read(buffer.data(), buffer_size);
+            outfile.write(buffer.data(), is->gcount());
+        }
+
+        time_t now = time(nullptr);
+        std::cout << "Time: " << ctime(&now) << " - done writing to file\n";
+    }
+    //close output file
+    outfile.close();
+
+    return arrow::Status::OK();
+}
+
 
 } // namespace sstable_to_arrow

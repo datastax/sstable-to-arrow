@@ -14,7 +14,6 @@
 #include <sstream>                                     // for basic_istring...
 #include <stddef.h>                                    // for size_t
 #include <stdint.h>                                    // for uint64_t, int...
-#include <lz4_stream.h>
 
 namespace sstable_to_arrow
 {
@@ -96,22 +95,26 @@ arrow::Status sstable_t::init()
 
     return arrow::Status::OK();
 }
+
 arrow::Status sstable_t::stream_decompressed_sstable()
 {
     if (m_data.ks().get() == nullptr || m_data.ks()->is_eof()){
-        ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(m_data.path()));
-        
-        auto cistream = m_compression_info.ks().get();
-        // Do I need to reset this stream?
-        cistream->seek(0);
-        auto ci = std::make_unique<sstable_compression_info_t>(cistream);
-        std::unique_ptr<lz4_stream::istream> decompressed_stream = std::make_unique<lz4_stream::istream>(std::move(istream), std::move(ci));
-
-        ARROW_RETURN_NOT_OK(m_data.init_for_streaming(std::move(decompressed_stream)));
+        init_decompressed_stream();
+        ARROW_RETURN_NOT_OK(m_data.init_for_streaming(std::move(m_decompressed_stream)));
     }
     return arrow::Status::OK();
 }
 
+arrow::Status sstable_t::init_decompressed_stream()
+{
+    ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(m_data.path()));
+    auto cistream = m_compression_info.ks().get();
+    // Do I need to reset this stream?
+    cistream->seek(0);
+    auto ci = std::make_unique<sstable_compression_info_t>(cistream);
+    m_decompressed_stream = std::make_unique<lz4_stream::istream>(std::move(istream), std::move(ci));
+    return arrow::Status::OK();
+}
 
 
 arrow::Status sstable_t::read_decompressed_sstable()
