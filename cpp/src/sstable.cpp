@@ -107,6 +107,10 @@ arrow::Status sstable_t::stream_decompressed_sstable()
 
 arrow::Status sstable_t::init_decompressed_stream()
 {
+    if (m_compression_info.ks() == nullptr)
+    {
+        ARROW_RETURN_NOT_OK(m_compression_info.init());
+    }
     ARROW_ASSIGN_OR_RAISE(auto istream, open_stream(m_data.path()));
     auto cistream = m_compression_info.ks().get();
     // Do I need to reset this stream?

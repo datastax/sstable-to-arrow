@@ -206,6 +206,7 @@ arrow::Status decompress_sstable(std::string_view path)
     for (auto &entry : sstables)
     {
         auto sstable = entry.second;
+        ARROW_RETURN_NOT_OK(sstable->init_stats());
         ARROW_RETURN_NOT_OK(sstable->init_decompressed_stream());
         auto is = std::move(sstable->decompressed_stream().get());
         std::cout << "========== Writing Chunk from SSTable to file #" << i << " ==========\n";

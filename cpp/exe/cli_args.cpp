@@ -13,7 +13,7 @@ cli_args read_options(int argc, char *const argv[])
     cli_args args;
 
     int opt;
-    while ((opt = getopt(argc, argv, ":m:t:i:p:dvcxhs")) != -1)
+    while ((opt = getopt(argc, argv, ":m:t:i:p:udvcxhs")) != -1)
     {
         switch (opt)
         {
