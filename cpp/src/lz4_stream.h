@@ -54,30 +54,37 @@ class basic_istream : public std::istream
       : source_(std::move(source)),
         compression_info_(std::move(compression_info)),
         offset_(0),
+        cur_offset_id_(0),
         src_buf_size_(0)
         {
       setg(&src_buf_.front(), &src_buf_.front(), &src_buf_.front());
+      source_->seekg(0, std::ios::end);
+      src_buf_size_ = source_->tellg();
+      source_->seekg(0, std::ios::beg);
+
+      nchunks = compression_info_->chunk_count();
+      chunk_length = compression_info_->chunk_length();
     }
 
     ~input_buffer() {
     }
 
     int_type underflow() override {
-      size_t nchunks = compression_info_->chunk_count();
+      if (cur_offset_id_ >= nchunks)
+      {
+          return traits_type::eof();
+      }
       const auto &offsets = *compression_info_->chunk_offsets();
-      size_t chunk_length = compression_info_->chunk_length();
+      offset_ = offsets[cur_offset_id_];
+      
+      //std::cout << "offset: " << offset_ << "\n";
+      //std::cout << "offset id: " << cur_offset_id_ << "\n";
 
-      auto i = 0;
-      uint64_t offset = offsets[i];
-
-      int64_t src_size = source_->tellg(); // the total size of the uncompressed file
-      uint64_t chunk_size = (i == nchunks - 1 ? src_size : offsets[i + 1]) - offset;
-
-      //std::vector<char> buffer(chunk_size);
+      uint64_t chunk_size = (cur_offset_id_ == nchunks - 1 ? src_buf_size_ : offsets[cur_offset_id_ + 1]) - offset_;
 
       // skip 4 bytes written by Cassandra at beginning of each chunk and 4
       // bytes at end for Adler32 checksum
-      source_->seekg(offset + 4, std::ios::beg);
+      source_->seekg(offset_ + 4, std::ios::beg);
       source_->read(src_buf_.data(), chunk_size - 8);
 
       int ntransferred =
@@ -85,12 +92,76 @@ class basic_istream : public std::istream
 
       if (ntransferred < 0)
           throw std::runtime_error(std::string(
-            "decompression of block " + std::to_string(i) +
+            "decompression of block " + std::to_string(cur_offset_id_) +
             " failed with error code " + std::to_string(ntransferred)
           ));
 
       setg(&dest_buf_.front(), &dest_buf_.front(), &dest_buf_.front() + chunk_length);
+      cur_offset_id_++;
       return traits_type::to_int_type(*gptr());
+    }
+
+    std::streampos seekoff(std::streamoff off, std::ios_base::seekdir way, std::ios_base::openmode which) override
+    {
+      const auto &offsets = *compression_info_->chunk_offsets();
+      int64_t src_size = source_->tellg();
+      uint64_t chunk_size = (cur_offset_id_ == nchunks - 1 ? src_buf_size_ : offsets[cur_offset_id_ + 1]) - offset_;
+
+      // Check which direction to move
+      if (way == std::ios_base::beg)
+      {
+          seekpos(off, which);
+      }
+      else if (way == std::ios_base::cur)
+      {
+          //auto get_area_current = std::distance(dest_buf_.eback(), dest_buf_.gptr());
+          auto get_area_current = std::distance(eback(), gptr());
+          auto pos = off + get_area_current + cur_offset_id_ * chunk_length;
+          seekpos(pos, which);
+      }
+      else
+      {
+          auto pos = src_size - off;
+          seekpos(pos, which);
+      }
+
+      return pos_type(gptr() - eback());
+    }
+
+    std::streampos seekpos(std::streampos pos, std::ios_base::openmode which) override {
+      const auto &offsets = *compression_info_->chunk_offsets();
+      // calculate the cur_offset_id_ from the `pos`
+      cur_offset_id_ = pos / chunk_length;
+      if (cur_offset_id_ >= nchunks)
+      {
+          return traits_type::eof();
+      }
+      offset_ = offsets[cur_offset_id_];
+
+      uint64_t chunk_size = (cur_offset_id_ == nchunks - 1 ? src_buf_size_ : offsets[cur_offset_id_ + 1]) - offset_;
+
+      // skip 4 bytes written by Cassandra at beginning of each chunk and 4
+      // bytes at end for Adler32 checksum
+      source_->seekg(offset_ + 4, std::ios::beg);
+      source_->read(src_buf_.data(), chunk_size - 8);
+
+      int ntransferred =
+          LZ4_decompress_safe(&src_buf_.front(), &dest_buf_.front(), chunk_size - 8, chunk_length);
+
+      if (ntransferred < 0)
+          throw std::runtime_error(std::string(
+            "decompression of block " + std::to_string(cur_offset_id_) +
+            " failed with error code " + std::to_string(ntransferred)
+          ));
+
+
+      setg(&dest_buf_.front(), &dest_buf_.front() + (pos % chunk_length),
+           &dest_buf_.front() + chunk_length);
+
+      cur_offset_id_++;
+
+      // return the `pos`
+      return pos;
     }
 
     input_buffer(const input_buffer&) = delete;
@@ -101,7 +172,11 @@ class basic_istream : public std::istream
     std::array<char, SrcBufSize> src_buf_;
     std::array<char, DestBufSize> dest_buf_;
     size_t offset_;
-    size_t src_buf_size_;
+    size_t cur_offset_id_;
+    uint64_t src_buf_size_;
+    size_t nchunks;
+    uint32_t chunk_length;
+
   };
 
   input_buffer* buffer_;
