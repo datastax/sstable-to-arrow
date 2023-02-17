@@ -345,8 +345,6 @@ arrow::Result<std::shared_ptr<arrow::Table>> conversion_helper_t::to_table() con
         for (auto &col : group)
         {
             ARROW_ASSIGN_OR_RAISE(uint8_t n, col->finish(&finished_arrays[i]));
-            std::cout << "name: " << col->field->name() << "\n";
-            std::cout << finished_arrays.data()->get()->length() << "\n";
             i += n;
         }
     }

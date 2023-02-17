@@ -44,6 +44,8 @@ void init_deserialization_helper(sstable_statistics_t::serialization_header_t *s
     i = 0;
     for (auto &column : *regular_columns)
     {
+        //std::cout << "column name: " << column->name()->body() << "\n";
+        //std::cout << "column type: " << column->column_type()->body() << "\n";
         deserialization_helper_t::set_col_type(deserialization_helper_t::REGULAR, i++, column->column_type()->body());
     }
 }

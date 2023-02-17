@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <ext/alloc_traits.h>
 #include <kaitai/kaitaistream.h>
+//#include <iostream>
 
 const int CLUSTERING = deserialization_helper_t::CLUSTERING;
 
@@ -37,6 +38,11 @@ clustering_blocks_t::clustering_blocks_t(kaitai::kstream *ks) : kaitai::kstruct(
             else
             {
                 values_[offset] = ks->read_bytes(conversions::get_col_size(cql_type, _io()));
+                /*
+                if (values_[offset] == "0xf7e5ac5d7a6f6068b50ff7cc2982ea0c94d0c57714797a60f165f456a9efe438"){
+                    std::cout << "clustering_column " << values_[offset] << "\n";
+                }
+                */
             }
             offset++;
         }

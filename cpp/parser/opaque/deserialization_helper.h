@@ -34,6 +34,7 @@ class deserialization_helper_t : public kaitai::kstruct
 
     // a bitmask storing the missing columns
     static uint64_t bitmask;
+    static int clear_bitmask();
     static void set_bitmask(uint64_t bitmask);
 
     static int get_n_clustering_cells(int block);

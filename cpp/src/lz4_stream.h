@@ -80,13 +80,23 @@ class basic_istream : public std::istream
       //std::cout << "offset: " << offset_ << "\n";
       //std::cout << "offset id: " << cur_offset_id_ << "\n";
 
-      uint64_t chunk_size = (cur_offset_id_ == nchunks - 1 ? src_buf_size_ : offsets[cur_offset_id_ + 1]) - offset_;
+      uint64_t chunk_size;
+      if (cur_offset_id_ == nchunks - 1){
+        // last chunk
+        chunk_size = src_buf_size_ - offset_;
+        // clear the source buffer to ensure we don't keep data from the last chunk
+        std::fill(dest_buf_.begin(), dest_buf_.end(), 0);
+      }
+      else{
+        chunk_size = offsets[cur_offset_id_ + 1] - offset_;
+      }
 
       // skip 4 bytes written by Cassandra at beginning of each chunk and 4
       // bytes at end for Adler32 checksum
       source_->seekg(offset_ + 4, std::ios::beg);
       source_->read(src_buf_.data(), chunk_size - 8);
 
+      //TODO: look into decompress_fast for performance
       int ntransferred =
           LZ4_decompress_safe(&src_buf_.front(), &dest_buf_.front(), chunk_size - 8, chunk_length);
 
@@ -96,6 +106,14 @@ class basic_istream : public std::istream
             " failed with error code " + std::to_string(ntransferred)
           ));
 
+      if (cur_offset_id_ == nchunks - 1){
+        size_t last_non_null = chunk_length;
+        while (last_non_null > 0 && dest_buf_[last_non_null-1] == 0) {
+            last_non_null--;
+        }
+        // -3 removes the Adler32 checksum
+        chunk_length = last_non_null-3;
+      }
       setg(&dest_buf_.front(), &dest_buf_.front(), &dest_buf_.front() + chunk_length);
       cur_offset_id_++;
       return traits_type::to_int_type(*gptr());

@@ -217,11 +217,21 @@ arrow::Status decompress_sstable(std::string_view path)
         // Read data from the input stream and write it to the output file
         while(is) {
             is->read(buffer.data(), buffer_size);
+            if (is->fail() && !is->eof()) {
+                return arrow::Status::Invalid("Error reading from input stream");
+            }
+            //std::cout << "gcount: " << is->gcount() << "\n";
             outfile.write(buffer.data(), is->gcount());
+            
+            if (is->eof())
+            {
+                break;
+            }
         }
 
         time_t now = time(nullptr);
         std::cout << "Time: " << ctime(&now) << " - done writing to file\n";
+
     }
     //close output file
     outfile.close();
