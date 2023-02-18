@@ -44,16 +44,8 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     ARROW_RETURN_NOT_OK(helper->init(pool));
 
     auto root = std::make_unique<streaming_sstable_data_t>(m__io);
-    //m__io->seek(2246846739);
-    //m__io->seek(1223905746);
-    //m__io->seek(1223904667);
-    //m__io->seek(1223904600);
-    //m__io->seek(1223845599);
 
-
-
-    // 1223981799
-    //m__io->seek(0);
+    //m__io->seek(2813165220);
 
     auto m_deserialization_helper = std::unique_ptr<deserialization_helper_t>(new deserialization_helper_t(m__io));
     auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
@@ -61,7 +53,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     {
         std::cout << "Time: " << ctime(&now) << " - Getting a step worth of partitions\n";
         int i = 0;
-        int stepsize = 100000;
+        int stepsize = 1000;
         //int stepsize = 1;
         while (!m__io->is_eof() && i < stepsize) {
             if (m__io->is_eof())

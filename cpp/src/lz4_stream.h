@@ -111,8 +111,7 @@ class basic_istream : public std::istream
         while (last_non_null > 0 && dest_buf_[last_non_null-1] == 0) {
             last_non_null--;
         }
-        // -3 removes the Adler32 checksum
-        chunk_length = last_non_null-3;
+        chunk_length = last_non_null;
       }
       setg(&dest_buf_.front(), &dest_buf_.front(), &dest_buf_.front() + chunk_length);
       cur_offset_id_++;
