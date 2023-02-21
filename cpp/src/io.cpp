@@ -117,7 +117,8 @@ arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Reco
 
     // Choose compression
     std::shared_ptr<WriterProperties> props =
-        WriterProperties::Builder().compression(arrow::Compression::LZ4)->build();
+        WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
+        //WriterProperties::Builder().compression(arrow::Compression::LZ4)->build();
 
     // Opt to store Arrow schema for easier reads back into Arrow
     std::shared_ptr<ArrowWriterProperties> arrow_props = ArrowWriterProperties::Builder().store_schema()->build();

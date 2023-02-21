@@ -44,8 +44,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
     ARROW_RETURN_NOT_OK(helper->init(pool));
 
     auto root = std::make_unique<streaming_sstable_data_t>(m__io);
-
-    //m__io->seek(2813165220);
+    //m__io->seek(157738602);
 
     auto m_deserialization_helper = std::unique_ptr<deserialization_helper_t>(new deserialization_helper_t(m__io));
     auto m_partitions = std::unique_ptr<std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>>(new std::vector<std::unique_ptr<streaming_sstable_data_t::partition_t>>());
@@ -60,11 +59,15 @@ arrow::Result<std::shared_ptr<arrow::Table>> streaming_vector_to_columnar_table(
             {
                 std::cout << "Done\n";
             }
+            try{
             auto partition = std::move(std::unique_ptr<streaming_sstable_data_t::partition_t>(
                 new streaming_sstable_data_t::partition_t(m__io, nullptr, root.get())
             ));
             // This part could be parallelized
             ARROW_RETURN_NOT_OK(process_partition(partition,helper,pool));
+            }catch(...){
+                std::cout << "failed to process partition, this is likely a bug \n";
+            }
             i++;
         }
     } 
@@ -652,7 +655,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
 
     // handle "primitive" types with a macro
     //std::cout << "coltype: " << coltype << "\n";
-    //std::cout << "value: " << val << "\n";  //backslash here
+    //    std::cout << "value: " << val << "\n";  //backslash 
 #define APPEND_TO_BUILDER(cassandra_type, arrow_type, read_size)                                                       \
     else if (coltype == conversions::types::cassandra_type##Type)                                                      \
     {                                                                                                                  \

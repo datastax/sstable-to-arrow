@@ -7,8 +7,5 @@ print(con.fetchall())
 con.execute("describe table './out.parquet'")
 print(con.fetchall())
 
-
-
-#con.execute("SELECT * FROM './out.parquet'")
-#con.execute("SELECT * FROM './out.parquet' limit 1")
-#print(con.fetchall())
+con.execute("SELECT * FROM './out.parquet' limit 10")
+print(con.fetchall())
