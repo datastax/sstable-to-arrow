@@ -131,5 +131,5 @@ This will open a GUI where you can observe the code branching and performance of
 - Improve error handling system and logging system
 - Improve documentation and user friendliness with the CLI
 - Improve Python bindings
-- Refactor to allow conversion of larger-than-memory SSTables
-- Include support for SSTables written by DSE (DataStax Enterprise)
+- ~Refactor to allow conversion of larger-than-memory SSTables~
+- ~Include support for SSTables written by DSE (DataStax Enterprise)~
