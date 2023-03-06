@@ -49,6 +49,8 @@ arrow::Result<std::vector<std::shared_ptr<arrow::Table>>> read_sstables(std::str
 
 arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> scan_sstable(std::string_view path);
 
+arrow::Status decompress_sstable(std::string_view path);
+
 } // namespace sstable_to_arrow
 
 #endif

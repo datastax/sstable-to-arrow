@@ -15,6 +15,8 @@ vint_t::vint_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
                                          : __builtin_clz(~first_byte & 0xff) -
                                                24; // -24 since C++ treats it as a 4-byte integer but we only
                                                    // want the number of leading zeros in the single byte
+
+        // https://github.com/riptano/bdp/blob/d96027857317ddd79ab4d0044eb784e53e3a7919/dse-db/src/java/org/apache/cassandra/io/util/RebufferingInputStream.java#L222
         val_ = first_byte & (0xff >> size);        // get the value of the remaining part of it
 
         for (size_t i = 0; i < size; i++)

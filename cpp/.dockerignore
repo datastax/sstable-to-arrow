@@ -2,3 +2,6 @@ build
 python
 .git
 .vscode
+./*.db
+./*.parquet
+sample_data

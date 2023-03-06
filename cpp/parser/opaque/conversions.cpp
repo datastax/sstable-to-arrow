@@ -8,6 +8,7 @@
 #include <stdexcept>                            // for runtime_error, out_of_range
 #include <string>                               // for operator+, to_string, string, char_traits
 #include <utility>                              // for pair
+//#include <iostream> 
 
 #include "vint.h" // for vint_t
 namespace arrow
@@ -123,6 +124,8 @@ size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
     // otherwise read the length as a varint
     else
         len = vint_t(ks).val();
+    //std::cout << "coltype: " << coltype << "\n" ;
+    //std::cout << "size: " << len << "\n" ;
     return len;
 }
 

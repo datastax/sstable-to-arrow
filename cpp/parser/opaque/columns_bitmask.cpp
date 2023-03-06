@@ -2,6 +2,7 @@
 #include "deserialization_helper.h" // for deserialization_helper_t, deseri...
 #include "vint.h"                   // for vint_t
 #include <stddef.h>                 // for size_t
+//#include <iostream>
 namespace kaitai { class kstream; }
 
 // see Columns::deserializeSubset
@@ -11,6 +12,7 @@ namespace kaitai { class kstream; }
 columns_bitmask_t::columns_bitmask_t(kaitai::kstream *ks) : kaitai::kstruct(ks)
 {
     bitmask = vint_t(ks).val();
+    //std::cout << "!!! got column bitmask: " << unsigned(bitmask) << "\n";
 
     size_t superset_count = deserialization_helper_t::get_n_cols(deserialization_helper_t::curkind);
     if (superset_count >= 64)

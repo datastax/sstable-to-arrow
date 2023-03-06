@@ -9,6 +9,7 @@
 #include <algorithm>          // for min
 #include <cassert>            // for assert
 #include <ext/alloc_traits.h> // for __alloc_traits<>::value_type
+#include <iostream>
 
 constexpr void CHECK_KIND(int kind)
 {
@@ -91,6 +92,12 @@ bool deserialization_helper_t::is_multi_cell()
  * imperatively due to restrictions with Kaitai Struct
  */
 
+int deserialization_helper_t::clear_bitmask()
+{
+    bitmask = 0;
+    return 0;
+}
+
 void deserialization_helper_t::set_bitmask(uint64_t bitmask_)
 {
     bitmask = bitmask_;
@@ -104,9 +111,17 @@ int deserialization_helper_t::inc()
         // if this column is not missing
         if (!(bitmask & (1 << i)))
         {
+            //std::cout << "bitmask:" << bitmask << "\n";
+            //std::cout << "bitmask column i:" << i << " idx: " << idx << " not missing \n";
             idx = i;
             break;
         }
+        /*
+        else{
+            std::cout << "bitmask:" << bitmask << "\n";
+            std::cout << "bitmask column i:" << i << " idx: " << idx << " is missing \n";
+        }
+        */
     }
     return 0;
 }
@@ -145,6 +160,8 @@ int deserialization_helper_t::get_n_cells_in_row()
 // Get the size of the current cell value in bytes
 int deserialization_helper_t::get_col_size()
 {
+    //std::cout << "curkind: " << curkind << "\n";
+    //std::cout << "type: " << get_col_type(curkind, idx)<< "\n";
     return conversions::get_col_size(get_col_type(curkind, idx), _io());
 }
 

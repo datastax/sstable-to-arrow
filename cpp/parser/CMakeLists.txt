@@ -20,7 +20,8 @@ foreach(KSY_FILE ${KSY_TYPES})
            "${CMAKE_CURRENT_BINARY_DIR}/ksy/${KSY_FILE}.cpp"
     COMMAND
 #      ${KSC} --no-auto-read --target cpp_stl --cpp-standard 11 --opaque-types true --outdir
-      ${KSC} --target cpp_stl --cpp-standard 11 --opaque-types true --outdir
+#      ${KSC} --target cpp_stl --cpp-standard 11 --opaque-types true --outdir
+      ${KSC}  --ksc-exceptions --target cpp_stl --cpp-standard 11 --opaque-types true --outdir
       "${CMAKE_CURRENT_BINARY_DIR}/ksy"
       "${CMAKE_CURRENT_SOURCE_DIR}/ksy/${KSY_FILE}.ksy"
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ksy/${KSY_FILE}.ksy)

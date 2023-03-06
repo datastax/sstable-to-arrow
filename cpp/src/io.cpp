@@ -118,8 +118,7 @@ arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Reco
     // Choose compression
     std::shared_ptr<WriterProperties> props =
         WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
-        //TODO figure out how to build for compression
-        //WriterProperties::Builder().compression(arrow::Compression::SNAPPY)->build();
+        //WriterProperties::Builder().compression(arrow::Compression::LZ4)->build();
 
     // Opt to store Arrow schema for easier reads back into Arrow
     std::shared_ptr<ArrowWriterProperties> arrow_props = ArrowWriterProperties::Builder().store_schema()->build();
@@ -132,8 +131,10 @@ arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Reco
         parquet::arrow::FileWriter::Open(*reader->schema().get(), pool, outfile, props, arrow_props, &writer));
 
     // Write each batch as a row_group
+    int batch_num = 0;
     for (arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch : *reader)
     {
+        std::cout << "BATCH NUMBER " << batch_num++ << "\n";
         ARROW_ASSIGN_OR_RAISE(auto batch, maybe_batch);
         ARROW_ASSIGN_OR_RAISE(auto table, arrow::Table::FromRecordBatches(batch->schema(), {batch}));
         ARROW_RETURN_NOT_OK(writer->WriteTable(*table.get(), batch->num_rows()));

@@ -16,6 +16,7 @@ struct cli_args
     bool for_cudf = false;        // x
     bool show_help = false;       // h
     bool use_sample_data = false; // s
+    bool only_uncompress = false; // u
     bool read_sstable_dir = true;
     bool is_s3 = false;
 

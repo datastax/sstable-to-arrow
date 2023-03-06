@@ -57,6 +57,11 @@ int main(int argc, char *argv[])
 
     std::cout << "Starting to read SSTables: \n";
     //auto result = sstable_to_arrow::read_sstables(args.sstable_dir_path);
+    if(args.only_uncompress){
+        std::cout << "Starting to uncompress SSTables: \n";
+        EXIT_NOT_OK(sstable_to_arrow::decompress_sstable(args.sstable_dir_path), "error uncompressing sstable");
+        return 0;
+    }
     auto result = sstable_to_arrow::scan_sstable(args.sstable_dir_path);
     //ARROW_ASSIGN_OR_RAISE(auto sstables, sstable_to_arrow::scan_sstable(args.sstable_dir_path));
     EXIT_NOT_OK(result.status(), "error reading sstables");
