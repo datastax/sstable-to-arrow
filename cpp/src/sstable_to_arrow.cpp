@@ -97,10 +97,13 @@ arrow::Result<std::shared_ptr<arrow::Schema>> common_arrow_schema(
 
     std::vector<std::shared_ptr<arrow::Schema>> schemas(tables.size());
 
+    arrow::MemoryPool *pool = arrow::default_memory_pool();
+
     for (int i = 0; i < schemas.size(); ++i) {
         const auto& statistics = tables[i]->statistics();
         ARROW_ASSIGN_OR_RAISE(auto helper, conversion_helper_t::create(statistics));
         // TODO: Maybe need to init too?
+        helper->init(pool);
         auto schema = helper->schema();
         schemas[i] = schema;
     }

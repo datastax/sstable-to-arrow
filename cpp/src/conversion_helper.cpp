@@ -89,29 +89,36 @@ uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema) const
     return append_to_schema(schema, field->name());
 }
 
+
+void addFieldToSchema(std::shared_ptr<arrow::Field> *schema, uint8_t& n_cols_finished, const std::shared_ptr<arrow::Field>& field)
+{
+    schema[n_cols_finished++] = field;
+}
+
 uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema, const std::string &ts_name) const
 {
     uint8_t n_cols_finished = 0;
 
-#define NEXT_ITEM *(schema + n_cols_finished++)
     if (has_second)
     {
-        NEXT_ITEM = field->WithName(field->name() + "_part1");
-        NEXT_ITEM = field->WithName(field->name() + "_part2"); // duplicate the type
+        addFieldToSchema(schema, n_cols_finished, field->WithName(field->name() + "_part1"));
+        addFieldToSchema(schema, n_cols_finished, field->WithName(field->name() + "_part2")); // duplicate the type
     }
     else
-        NEXT_ITEM = field;
+    {
+        addFieldToSchema(schema, n_cols_finished, field);
+    }
 
     if (has_metadata())
     {
-        NEXT_ITEM = arrow::field("_ts_" + ts_name, ts_builder->type());
-        NEXT_ITEM = arrow::field("_del_time_" + ts_name, local_del_time_builder->type());
-        NEXT_ITEM = arrow::field("_ttl_" + ts_name, ttl_builder->type());
+        addFieldToSchema(schema, n_cols_finished, arrow::field("_ts_" + ts_name, ts_builder->type()));
+        addFieldToSchema(schema, n_cols_finished, arrow::field("_del_time_" + ts_name, local_del_time_builder->type()));
+        addFieldToSchema(schema, n_cols_finished, arrow::field("_ttl_" + ts_name, ttl_builder->type()));
     }
-#undef NEXT_ITEM
 
     return n_cols_finished;
 }
+
 
 arrow::Status column_t::append_null()
 {

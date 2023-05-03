@@ -48,7 +48,7 @@ cli_args read_options(int argc, char *const argv[])
             args.write_parquet = true;
             args.parquet_dst_path = optarg;
             args.listen = false;
-            args.include_metadata = false;
+            //args.include_metadata = false;
             break;
         case 'd': // turn off sending via network
             args.listen = false;
