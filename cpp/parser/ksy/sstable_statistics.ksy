@@ -134,8 +134,8 @@ types:
 
       # version MB of SSTable 3.x ends here
 
-      - id: commit_log_intervals
-        type: commit_log_intervals
+      #- id: commit_log_intervals
+      #  type: commit_log_intervals
         
         # TODO: some new MISSING STUFF
         # pending repair
@@ -299,21 +299,21 @@ types:
         repeat: expr
         repeat-expr: length
 
-  commit_log_interval:
-    seq:
-      - id: start
-        type: commit_log_position
-      - id: end
-        type: commit_log_position
+  #commit_log_interval:
+  #  seq:
+  #    - id: start
+  #      type: commit_log_position
+  #    - id: end
+  #      type: commit_log_position
 
-  commit_log_intervals:
-    seq:
-      - id: length
-        type: s4
-      - id: array
-        type: commit_log_interval
-        repeat: expr
-        repeat-expr: length
+  #commit_log_intervals:
+  #  seq:
+  #    - id: length
+  #      type: s4
+  #    - id: array
+  #      type: commit_log_interval
+  #      repeat: expr
+  #      repeat-expr: length
 
   # ==========
 
