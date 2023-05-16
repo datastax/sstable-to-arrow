@@ -67,7 +67,7 @@ const std::vector<std::string_view> multi_cell_types{types::ListType, types::Map
 // see https://docs.rapids.ai/api/cudf/stable/basics.html
 // for a list of types that cudf supports
 const std::unordered_map<std::string_view, cassandra_type> type_info{
-    {types::AsciiType, {"ascii", 0, arrow::utf8()}},         // ascii
+    {types::AsciiType, {"ascii", 0, arrow::large_utf8()}},         // ascii
     {types::BooleanType, {"boolean", 1, arrow::boolean()}},  // boolean
     {types::ByteType, {"tinyint", 0, arrow::int8()}},        // tinyint
     {types::BytesType, {"blob", 0, arrow::binary(), false}}, // blob
@@ -96,7 +96,7 @@ const std::unordered_map<std::string_view, cassandra_type> type_info{
     {types::TimeUUIDType, {"timeuuid", 16, arrow::fixed_size_binary(16), false}},       // timeuuid
     {types::TimestampType, {"timestamp", 8, arrow::timestamp(arrow::TimeUnit::MILLI)}}, // timestamp
     // {"org.apache.cassandra.db.marshal.TupleType", { "", 0 }},
-    {types::UTF8Type, {"text", 0, arrow::utf8()}},                        // text, varchar
+    {types::UTF8Type, {"text", 0, arrow::large_utf8()}},                        // text, varchar
     {types::UUIDType, {"uuid", 16, arrow::fixed_size_binary(16), false}}, // uuid
     // {"org.apache.cassandra.db.marshal.UserType", { "", 0 }},
 };
@@ -206,7 +206,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> get_arrow_type(std::string_view 
             return arrow::uint64();
         }
         if (options.for_cudf && !_t.cudf_supported)
-            return arrow::utf8(); // pass unsupported types as hexadecimal strings
+            return arrow::large_utf8(); // pass unsupported types as hexadecimal strings
         return _t.arrow_type;
     }
 

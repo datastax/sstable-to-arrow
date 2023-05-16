@@ -678,7 +678,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     if (false)
     {
     }
-    APPEND_TO_BUILDER(Ascii, String, bytes_full)
+    APPEND_TO_BUILDER(Ascii, LargeString, bytes_full)
     APPEND_TO_BUILDER(Boolean, Boolean, u1)
     APPEND_TO_BUILDER(Byte, Int8, s1)
     APPEND_TO_BUILDER(Bytes, Binary, bytes_full)
@@ -689,7 +689,7 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     APPEND_TO_BUILDER(Short, Int16, s2be)
     APPEND_TO_BUILDER(Time, Time64, s8be)
     APPEND_TO_BUILDER(Timestamp, Timestamp, s8be)
-    APPEND_TO_BUILDER(UTF8, String, bytes_full)
+    APPEND_TO_BUILDER(UTF8, LargeString, bytes_full)
 
 #undef APPEND_TO_BUILDER
 
