@@ -13,10 +13,14 @@ cli_args read_options(int argc, char *const argv[])
     cli_args args;
 
     int opt;
-    while ((opt = getopt(argc, argv, ":m:t:i:p:udvcxhs")) != -1)
+    while ((opt = getopt(argc, argv, ":b:m:t:i:p:udvcxhs")) != -1)
     {
         switch (opt)
         {
+        case 'b':
+            sstable_to_arrow::global_flags.batchstepsize = std::atoi(optarg);
+            break;
+ 
         case 'm':
             args.summary_only = true;
             if (!is_regular_file(optarg))
@@ -122,6 +126,7 @@ const std::string help_msg{"\n"
                            "analytics using a GPU.\n"
                            "\n"
                            "Usage:\n"
+                           "      ./sstable-to-arrow -b <batch_step_size>\n"
                            "      ./sstable-to-arrow -h\n"
                            "      ./sstable-to-arrow -m <summary_file_path>\n"
                            "      ./sstable-to-arrow -t <statistics_file_path>\n"

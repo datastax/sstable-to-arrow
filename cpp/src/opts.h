@@ -35,6 +35,7 @@ struct flags
     bool for_cudf = false;
     bool is_s3 = false;
     bool verbose = false;
+    int batchstepsize = 100;
 
     std::shared_ptr<arrow::fs::S3FileSystem> s3fs;
 };

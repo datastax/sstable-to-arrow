@@ -134,6 +134,9 @@ arrow::Status write_parquet(const std::string &path, std::shared_ptr<arrow::Reco
     int batch_num = 0;
     for (arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch : *reader)
     {
+        // How much memory used used at this point
+        std::cout << "Memory prior to concatenation: " << pool->bytes_allocated() << " bytes" << std::endl;
+
         std::cout << "BATCH NUMBER " << batch_num++ << "\n";
         ARROW_ASSIGN_OR_RAISE(auto batch, maybe_batch);
         ARROW_ASSIGN_OR_RAISE(auto table, arrow::Table::FromRecordBatches(batch->schema(), {batch}));
