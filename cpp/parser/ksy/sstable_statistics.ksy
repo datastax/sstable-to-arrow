@@ -165,8 +165,11 @@ types:
             '"org.apache.cassandra.db.marshal.Int32Type"': int32type
             '"org.apache.cassandra.db.marshal.LongType"': longtype
             '"org.apache.cassandra.db.marshal.UTF8Type"': utf8type
+            '"org.apache.cassandra.db.marshal.TimestampType"': timestamptype
             '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)"': utf8type
             '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.LongType)"': longtype
+            '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.TimestampType)"': timestamptype
+
   incl_end_bound:
     seq:
       - id: header # used for a null check? don't think it ever happens from valid sstables
@@ -188,8 +191,10 @@ types:
             '"org.apache.cassandra.db.marshal.Int32Type"': int32type
             '"org.apache.cassandra.db.marshal.LongType"': longtype
             '"org.apache.cassandra.db.marshal.UTF8Type"': utf8type
+            '"org.apache.cassandra.db.marshal.TimestampType"': timestamptype
             '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)"': utf8type
             '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.LongType)"': longtype
+            '"org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.TimestampType)"': timestamptype
 
             
   int32type:
@@ -212,6 +217,11 @@ types:
         encoding: utf-8
         size: length.val.as<u1>
 
+  timestamptype:
+    seq:
+      - id: value
+        type: s8
+ 
   compaction_metadata:
     seq:
       - id: length
