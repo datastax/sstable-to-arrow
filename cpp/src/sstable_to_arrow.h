@@ -74,20 +74,23 @@ arrow::Status append_cell(kaitai::kstruct *cell, const std::unique_ptr<conversio
 // Takes a collection of values in a complex cell and appends them to the
 // corresponding arrow builder.
 arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_ptr<conversion_helper_t> &helper,
-                             const streaming_sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
+                             streaming_sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool);
 
 // Adds the timestamp information in a cell as well as the value to the
 // corresponding arrow builder.
 arrow::Status append_simple(std::shared_ptr<column_t> col, const std::unique_ptr<conversion_helper_t> &helper,
                             streaming_sstable_data_t::simple_cell_t *cell, arrow::MemoryPool *pool);
 
-template <typename T>
+template <typename T, typename K>
 arrow::Status initialize_ts_map_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr,
-                                        arrow::MapBuilder **builder_ptr, T **item_ptr);
+                                        arrow::MapBuilder **builder_ptr, T **item_ptr, K **key_ptr);
 
 template <typename T>
 arrow::Status initialize_ts_list_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr,
                                          arrow::ListBuilder **builder_ptr, T **item_ptr);
+// appends the cell's timestamp or null if it doesn't exist to `builder`.
+arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
+                                  streaming_sstable_data_t::complex_cell_t *cell);
 
 // appends the cell's timestamp or null if it doesn't exist to `builder`.
 arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,

@@ -296,7 +296,11 @@ arrow::Status process_row(streaming_sstable_data_t::row_t *row, bool is_static,
             //std::cout << "cell number " << cell_idx << "\n";
             //std::cout << "cell exists: " ;
             if(row->cells()->size() > cell_idx)
-                ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), helper, helper->regular_cols[i], pool));
+                ARROW_RETURN_NOT_OK(append_cell((*row->cells())[cell_idx++].get(), 
+                helper, 
+                helper->regular_cols[i], 
+                pool
+            ));
             else{
                 //std::cout << "row size check fails" << "\n";
                 ARROW_RETURN_NOT_OK(helper->regular_cols[i]->append_null());
@@ -317,17 +321,18 @@ arrow::Status append_cell(kaitai::kstruct *cell, const std::unique_ptr<conversio
     if (conversions::is_multi_cell(col->cassandra_type))
         return append_complex(col, helper, dynamic_cast<streaming_sstable_data_t::complex_cell_t *>(cell), pool);
     else
-        //TODO stop here for the bad cell
         return append_simple(col, helper, dynamic_cast<streaming_sstable_data_t::simple_cell_t *>(cell), pool);
 }
 
-template <typename T>
+template <typename T, typename K>
 arrow::Status initialize_ts_map_builder(const std::unique_ptr<arrow::ArrayBuilder> &from_ptr,
-                                        arrow::MapBuilder **builder_ptr, T **item_ptr)
+                                        arrow::MapBuilder **builder_ptr, T **item_ptr,
+                                        K **key_ptr)
 {
     *builder_ptr = dynamic_cast<arrow::MapBuilder *>(from_ptr.get());
     ARROW_RETURN_NOT_OK((*builder_ptr)->Append());
     *item_ptr = dynamic_cast<T *>((*builder_ptr)->item_builder());
+    *key_ptr = dynamic_cast<K *>((*builder_ptr)->key_builder());
     return arrow::Status::OK();
 }
 
@@ -342,7 +347,7 @@ arrow::Status initialize_ts_list_builder(const std::unique_ptr<arrow::ArrayBuild
 }
 
 arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_ptr<conversion_helper_t> &helper,
-                             const streaming_sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
+                             streaming_sstable_data_t::complex_cell_t *cell, arrow::MemoryPool *pool)
 {
     if (conversions::is_map(col->cassandra_type))
     {
@@ -357,16 +362,33 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
         column_t::ts_builder_t *ts_item_builder{nullptr};
         column_t::local_del_time_builder_t *local_del_time_item_builder{nullptr};
         column_t::ttl_builder_t *ttl_item_builder{nullptr};
+        column_t::ts_builder_t *ts_key_builder{nullptr};
+        column_t::local_del_time_builder_t *local_del_time_key_builder{nullptr};
+        column_t::ttl_builder_t *ttl_key_builder{nullptr};
+ 
         if (global_flags.include_metadata)
         {
-            ARROW_RETURN_NOT_OK(initialize_ts_map_builder(col->ts_builder, &ts_builder, &ts_item_builder));
+            ARROW_RETURN_NOT_OK(initialize_ts_map_builder(col->ts_builder, &ts_builder, &ts_item_builder, &ts_key_builder));
             ARROW_RETURN_NOT_OK(initialize_ts_map_builder(col->local_del_time_builder, &local_del_time_builder,
-                                                          &local_del_time_item_builder));
-            ARROW_RETURN_NOT_OK(initialize_ts_map_builder(col->ttl_builder, &ttl_builder, &ttl_item_builder));
+                                                          &local_del_time_item_builder, &local_del_time_key_builder));
+            ARROW_RETURN_NOT_OK(initialize_ts_map_builder(col->ttl_builder, &ttl_builder, &ttl_item_builder, &ttl_key_builder));
         }
 
+
+        //TODO
+        //support tombstones for complex cells
+        /*
+        auto ts_builder = dynamic_cast<column_t::ts_builder_t *>(col->ts_builder.get());
+        auto local_del_time_builder =
+            dynamic_cast<column_t::local_del_time_builder_t *>(col->local_del_time_builder.get());
+        auto ttl_builder = dynamic_cast<column_t::ttl_builder_t *>(col->ttl_builder.get());
+ 
+        ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_builder, helper, cell));
+        */
+       
+
         std::string_view key_type, value_type;
-        for (const auto &simple_cell : *cell->simple_cells())
+        for (const std::unique_ptr<streaming_sstable_data_t::simple_cell_t> &simple_cell : *cell->simple_cells())
         {
             // map keys are stored in the cell path
             conversions::get_map_child_types(col->cassandra_type, &key_type, &value_type);
@@ -377,18 +399,24 @@ arrow::Status append_complex(std::shared_ptr<column_t> col, const std::unique_pt
 
             if (global_flags.include_metadata)
             {
-                ARROW_RETURN_NOT_OK(
-                    append_scalar(key_type, ts_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
-                ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(
+                //    append_scalar(key_type, ts_key_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
+                //    append_scalar(key_type, ts_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
+                //ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(append_ts_if_exists(ts_builder, helper, simple_cell.get()));
 
-                ARROW_RETURN_NOT_OK(append_scalar(key_type, local_del_time_builder->key_builder(), nullptr,
-                                                  simple_cell->path()->value(), pool));
-                ARROW_RETURN_NOT_OK(
-                    append_local_del_time_if_exists(local_del_time_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(append_scalar(key_type, local_del_time_builder->key_builder(), nullptr,
+                //                                  simple_cell->path()->value(), pool));
+                //ARROW_RETURN_NOT_OK(
+                //    append_local_del_time_if_exists(local_del_time_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(
+                //    append_local_del_time_if_exists(local_del_time_builder, helper, simple_cell.get()));
 
-                ARROW_RETURN_NOT_OK(
-                    append_scalar(key_type, ttl_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
-                ARROW_RETURN_NOT_OK(append_ttl_if_exists(ttl_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(
+                //    append_scalar(key_type, ttl_builder->key_builder(), nullptr, simple_cell->path()->value(), pool));
+                //ARROW_RETURN_NOT_OK(append_ttl_if_exists(ttl_item_builder, helper, simple_cell.get()));
+                //ARROW_RETURN_NOT_OK(append_ttl_if_exists(ttl_builder, helper, simple_cell.get()));
             }
         }
     }
@@ -516,6 +544,29 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     */
 
     auto ks = kaitai::kstream(std::string(bytes));
+
+    if (conversions::is_vector(coltype)){
+
+        int length;
+        conversions::splitTypeAndLength(coltype, length);
+        
+        arrow::ListBuilder* builder = dynamic_cast<arrow::ListBuilder *>(builder_ptr);
+        arrow::FloatBuilder* float_builder_ptr = dynamic_cast<arrow::FloatBuilder*>(builder->value_builder());
+
+
+        std::vector<float> vec(length);
+        ARROW_RETURN_NOT_OK(builder->Append());
+        
+        //TODO consider vectorizing this with simd
+        for(int i = 0; i < length; i++) {
+            auto val = ks.read_f4be();
+            float_builder_ptr->Append(val);
+        }
+     
+        //if (second_ptr)
+        //    ARROW_RETURN_NOT_OK(dynamic_cast<arrow::ArrayVectorBuilder *>(second_ptr)->Append(val));
+        return arrow::Status::OK();
+    }
 
     if (conversions::is_composite(coltype))
     {
@@ -676,6 +727,17 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
     // we also ignore the uuid types handled above
     if (false)
     {
+   }
+    if(coltype == conversions::types::UTF8Type){
+        if(ks.is_eof()){
+            return arrow::Status::OK();
+        }
+        auto val = ks.read_bytes_full();
+        auto builder = dynamic_cast<arrow::LargeStringBuilder *>(builder_ptr);
+        ARROW_RETURN_NOT_OK(builder->Append(val));
+        if (second_ptr)
+            ARROW_RETURN_NOT_OK(dynamic_cast<arrow::LargeStringBuilder *>(second_ptr)->Append(val));
+        return arrow::Status::OK();
     }
     APPEND_TO_BUILDER(Ascii, LargeString, bytes_full)
     APPEND_TO_BUILDER(Boolean, Boolean, u1)
@@ -697,6 +759,23 @@ arrow::Status append_scalar(std::string_view coltype, arrow::ArrayBuilder *build
 }
 } // namespace
 
+/* todo support tombstones for complex cells
+arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
+                                  streaming_sstable_data_t::complex_cell_t *cell)
+{
+    if (cell->_is_null_complex_deletion_time())
+        return builder->AppendNull();
+    else
+    {
+        vint_t* delta_marked_for_delete_at() const { return m_delta_marked_for_delete_at.get(); }
+        vint_t* delta_local_deletion_time()
+        uint64_t marked_for_delete_at= cell->complex_deletion_time()->delta_marked_for_delete_at();
+        uint64_t local_deletion_time= cell->complex_deletion_time()->local_deletion_time();
+        return builder->Append(helper->get_timestamp(delta));
+    }
+}
+*/
+
 arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::unique_ptr<conversion_helper_t> &helper,
                                   streaming_sstable_data_t::simple_cell_t *cell)
 {
@@ -708,6 +787,7 @@ arrow::Status append_ts_if_exists(column_t::ts_builder_t *builder, const std::un
         return builder->Append(helper->get_timestamp(delta));
     }
 }
+
 arrow::Status append_local_del_time_if_exists(column_t::local_del_time_builder_t *builder,
                                               const std::unique_ptr<conversion_helper_t> &helper,
                                               streaming_sstable_data_t::simple_cell_t *cell)

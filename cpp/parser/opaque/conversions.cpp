@@ -8,6 +8,7 @@
 #include <stdexcept>                            // for runtime_error, out_of_range
 #include <string>                               // for operator+, to_string, string, char_traits
 #include <utility>                              // for pair
+#include <arrow/array.h>
 //#include <iostream> 
 
 #include "vint.h" // for vint_t
@@ -49,6 +50,7 @@ DEFINE_TYPE(Timestamp);
 DEFINE_TYPE(UTF8);
 DEFINE_TYPE(UUID);
 DEFINE_TYPE(Composite);
+DEFINE_TYPE(Vector);
 DEFINE_TYPE(List);
 DEFINE_TYPE(Map);
 DEFINE_TYPE(Set);
@@ -113,6 +115,12 @@ size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
         long long len = vint_t(ks).val();
         return len;
     }
+    int dimensions = -1;
+    if (is_vector(coltype)){
+        auto child_type = get_child_type(coltype);
+        splitTypeAndLength(child_type, dimensions);
+        coltype = child_type;
+    }
 
     // check if this data type has a fixed length
     auto it = type_info.find(coltype);
@@ -121,6 +129,9 @@ size_t get_col_size(std::string_view coltype, kaitai::kstream *ks)
     long long len;
     if (it->second.fixed_len != 0)
         len = it->second.fixed_len;
+        if (dimensions > 0){
+            len = len * dimensions;
+        }
     // otherwise read the length as a varint
     else
         len = vint_t(ks).val();
@@ -180,6 +191,10 @@ bool is_composite(std::string_view type)
 {
     return boost::starts_with(type, types::CompositeType);
 }
+bool is_vector(std::string_view type)
+{
+    return boost::starts_with(type, types::VectorType);
+}
 bool is_tuple(std::string_view type)
 {
     return boost::starts_with(type, types::TupleType);
@@ -188,6 +203,11 @@ bool is_uuid(std::string_view type)
 {
     return boost::ends_with(type, "UUIDType");
 }
+bool is_float(std::string_view type)
+{
+    return boost::ends_with(type, "FloatType");
+}
+
 
 arrow::Result<std::shared_ptr<arrow::DataType>> get_arrow_type(std::string_view type,
                                                                const get_arrow_type_options &options,
@@ -249,9 +269,34 @@ arrow::Result<std::shared_ptr<arrow::DataType>> get_arrow_type(std::string_view 
             }
             return arrow::struct_(vec);
         }
+        else if (is_vector(type))
+        {
+            auto child_str = get_child_type(type);
+            if (options.for_cudf && !is_float(child_str))
+                return arrow::Status::NotImplemented("Only Vectors of Floats are supported");
+ 
+            
+            int length;
+            splitTypeAndLength(child_str, length);
+            ARROW_ASSIGN_OR_RAISE(const auto &child_type, get_arrow_type(child_str, options, needs_second));
+
+            return arrow::list(child_type);
+        }
+
     }
 
     return arrow::Status::Invalid("type not found or supported when getting arrow type: " + std::string(type));
+}
+
+void splitTypeAndLength(std::string_view& input, int& number) {
+    size_t pos = input.find_last_of(',');
+
+    std::string_view intPart = input.substr(pos + 1);
+    input = input.substr(0, pos);  // Update the input view directly
+
+    std::stringstream ss;
+    ss << intPart;  // Insert the string_view content into the stringstream
+    ss >> number;
 }
 
 arrow::Result<std::shared_ptr<node>> parse_nested_type(std::string_view cass_type)

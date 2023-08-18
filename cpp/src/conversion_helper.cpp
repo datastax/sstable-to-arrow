@@ -32,6 +32,11 @@ arrow::Status column_t::init(arrow::MemoryPool *pool, bool complex_ts_allowed)
         // TODO currently calling get_arrow_type multiple times, potentially
         // expensive see if there is easier way to replace since we already know
         // base data type
+        
+        // vectors have corresponding arrow Array types but simple partitions (Frozen) so we force simple ts
+        if(conversions::is_vector(cassandra_type)){
+            complex_ts_allowed = false;
+        }
         auto micro = arrow::timestamp(arrow::TimeUnit::MICRO);
         conversions::get_arrow_type_options options;
         options.replace_with = micro;
@@ -69,6 +74,29 @@ arrow::Status column_t::reserve(uint32_t nrows)
 arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
 {
     uint8_t n_cols_finished = 0;
+
+    ARROW_RETURN_NOT_OK(builder->Finish(ptr + n_cols_finished++));
+
+    if (has_second) {
+        ARROW_RETURN_NOT_OK(second->Finish(ptr + n_cols_finished++));
+    }
+
+    if (has_metadata()) {
+        std::cout << "capacity " << ts_builder->capacity() << "\n";
+        std::cout << "length " << ts_builder->length() << "\n";
+        std::cout << "type " << ts_builder->type()->ToString() << "\n";
+
+        ARROW_RETURN_NOT_OK(ts_builder->Finish(ptr + n_cols_finished++));
+        ARROW_RETURN_NOT_OK(local_del_time_builder->Finish(ptr + n_cols_finished++));
+        ARROW_RETURN_NOT_OK(ttl_builder->Finish(ptr + n_cols_finished++));
+    }
+
+    return n_cols_finished;
+}
+/*
+arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
+{
+    uint8_t n_cols_finished = 0;
 #define NEXT_ITEM (ptr + n_cols_finished++)
     ARROW_RETURN_NOT_OK(builder->Finish(NEXT_ITEM));
     if (has_second)
@@ -83,6 +111,7 @@ arrow::Result<uint8_t> column_t::finish(std::shared_ptr<arrow::Array> *ptr)
 #undef NEXT_ITEM
     return n_cols_finished;
 }
+*/
 
 uint8_t column_t::append_to_schema(std::shared_ptr<arrow::Field> *schema) const
 {
@@ -351,6 +380,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> conversion_helper_t::to_table() con
     {
         for (auto &col : group)
         {
+            std::cout << "col type " << col->cassandra_type << "\n";
             ARROW_ASSIGN_OR_RAISE(uint8_t n, col->finish(&finished_arrays[i]));
             i += n;
         }

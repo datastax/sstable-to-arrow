@@ -62,6 +62,7 @@ extern const std::vector<std::string_view> multi_cell_types;
 
 size_t get_col_size(std::string_view coltype, kaitai::kstream *ks);
 bool is_multi_cell(std::string_view coltype);
+bool is_vector(std::string_view coltype);
 std::string_view get_child_type(std::string_view type);
 void get_map_child_types(std::string_view type, std::string_view *key_type, std::string_view *value_type);
 
@@ -72,12 +73,15 @@ bool is_map(std::string_view type);
 bool is_set(std::string_view type);
 bool is_tuple(std::string_view type);
 bool is_uuid(std::string_view type);
+bool is_float(std::string_view type);
 
 struct get_arrow_type_options
 {
     std::shared_ptr<arrow::DataType> replace_with{nullptr};
     bool for_cudf{false};
 };
+
+void splitTypeAndLength(std::string_view& input, int& number);
 
 /**
  * @brief Transform the given Cassandra type string into an arrow DataType
